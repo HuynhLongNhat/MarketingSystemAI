@@ -22,7 +22,7 @@ export const getMany = query({
 
     const conversations = await ctx.db
       .query("conversations")
-      .withIndex("by_contact_session_id", (q) => 
+      .withIndex("by_contact_session_id", (q) =>
         q.eq("contactSessionId", args.contactSessionId),
       )
       .order("desc")
@@ -49,7 +49,7 @@ export const getMany = query({
           threadId: conversation.threadId,
           lastMessage,
         };
-      })
+      }),
     );
 
     return {
@@ -113,6 +113,13 @@ export const create = mutation({
       });
     }
 
+    if (session.organizationId !== args.organizationId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Session does not belong to this organization",
+      });
+    }
+
     // This refreshes the user's session if they are within the threshold
     await ctx.runMutation(internal.system.contactSessions.refresh, {
       contactSessionId: args.contactSessionId,
@@ -120,7 +127,7 @@ export const create = mutation({
 
     const widgetSettings = await ctx.db
       .query("widgetSettings")
-      .withIndex("by_organization_id", (q) => 
+      .withIndex("by_organization_id", (q) =>
         q.eq("organizationId", args.organizationId),
       )
       .unique();
@@ -133,7 +140,8 @@ export const create = mutation({
       threadId,
       message: {
         role: "assistant",
-        content: widgetSettings?.greetMessage || "Hello, how can I help you today?",
+        content:
+          widgetSettings?.greetMessage || "Hello, how can I help you today?",
       },
     });
 
