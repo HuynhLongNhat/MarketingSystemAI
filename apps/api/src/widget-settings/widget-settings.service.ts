@@ -1,6 +1,6 @@
 
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq } from "@workspace/db/node";
 import { db, widgetSettings } from '@workspace/db/node';
 
 @Injectable()

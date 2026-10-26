@@ -1,11 +1,33 @@
-export { db, pool } from "./client.js";
+
+export { db, pool } from './client.js';
 
 export {
   widgetSettings,
-} from "./schema.js";
-
+  user,
+  session,
+  account,
+  verification,
+  organization,
+  member,
+  invitation,
+} from './schema.js';
+export { eq, sql } from "drizzle-orm";
 export type {
   DefaultSuggestions,
   WidgetSettings,
   NewWidgetSettings,
-} from "./schema.js";
+  User,
+  NewUser,
+  Session,
+  NewSession,
+  Account,
+  NewAccount,
+  Verification,
+  NewVerification,
+  Organization,
+  NewOrganization,
+  Member,
+  NewMember,
+  Invitation,
+  NewInvitation,
+} from './schema.js';

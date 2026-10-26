@@ -3,7 +3,7 @@ import {
   Injectable,
   OnApplicationShutdown,
 } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
+import { sql } from "@workspace/db/node";
 import { db, pool } from '@workspace/db/node';
 
 @Injectable()
