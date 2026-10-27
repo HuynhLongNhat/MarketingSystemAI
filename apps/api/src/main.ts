@@ -71,14 +71,23 @@ async function bootstrap(): Promise<void> {
     (!process.env.APP_ENV && process.env.NODE_ENV !== "production")
   ) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle("MarketingSystemAI API")
-      .setDescription("Marketing Automation API")
-      .setVersion("1.0")
+      .setTitle("CompanyMarketingSystem API")
+      .setDescription(
+        "REST API for the CompanyMarketingSystem marketing automation platform.",
+      )
+      .setVersion("1.0.0")
+      .addTag("Health", "API and database health checks")
+      .addTag("Widget Settings", "Widget configuration management")
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-    SwaggerModule.setup("docs", app, document);
+    SwaggerModule.setup("docs", app, document, {
+      jsonDocumentUrl: "/docs/openapi.json",
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
   }
 
   const port = Number(process.env.PORT ?? 3002);
