@@ -5,7 +5,8 @@ import { validateServerEnvironment } from "./env.js";
 validateServerEnvironment();
 import { randomUUID } from "node:crypto";
 import { NestFactory } from "@nestjs/core";
-import { Logger, ValidationPipe } from "@nestjs/common";
+import { BadRequestException, Logger, ValidationPipe } from "@nestjs/common";
+import type { ValidationError } from "class-validator";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { toNodeHandler } from "better-auth/node";
 import type { Request, Response, NextFunction } from "express";
@@ -60,6 +61,17 @@ async function bootstrap(): Promise<void> {
         enableImplicitConversion: false,
       },
       stopAtFirstError: false,
+      exceptionFactory: (errors: ValidationError[]) => {
+        const messages = errors.flatMap((error) =>
+          Object.values(error.constraints ?? {}),
+        );
+
+        return new BadRequestException({
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed",
+          details: messages,
+        });
+      },
     }),
   );
 

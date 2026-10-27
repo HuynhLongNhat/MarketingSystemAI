@@ -6,8 +6,8 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import type { Request, Response } from 'express';
+} from "@nestjs/common";
+import type { Request, Response } from "express";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -30,37 +30,68 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ? exception.getResponse()
       : null;
 
-    const message =
-      typeof errorResponse === 'string'
+    // Extract error message
+    const rawMessage =
+      typeof errorResponse === "string"
         ? errorResponse
         : errorResponse &&
-            typeof errorResponse === 'object' &&
-            'message' in errorResponse
+            typeof errorResponse === "object" &&
+            "message" in errorResponse
           ? errorResponse.message
           : isHttpException
             ? exception.message
-            : 'Internal server error';
+            : "Internal server error";
 
-    const requestId = response.getHeader('x-request-id');
+    // Prevent internal server error details from leaking
+    const message =
+      statusCode >= 500
+        ? "Internal server error"
+        : rawMessage;
 
+    // Extract error code
+    const code =
+      errorResponse &&
+      typeof errorResponse === "object" &&
+      "code" in errorResponse &&
+      typeof errorResponse.code === "string"
+        ? errorResponse.code
+        : statusCode >= 500
+          ? "INTERNAL_SERVER_ERROR"
+          : "HTTP_ERROR";
+
+    // Extract validation details
+    const details =
+      statusCode < 500 &&
+      errorResponse &&
+      typeof errorResponse === "object" &&
+      "details" in errorResponse
+        ? errorResponse.details
+        : undefined;
+
+    const requestId = response.getHeader("x-request-id");
+
+    // Log internal server errors
     if (statusCode >= 500) {
       this.logger.error(
-        `${request.method} ${request.originalUrl}`,
+        `${request.method} ${request.path}`,
         exception instanceof Error
           ? exception.stack
           : String(exception),
       );
     }
 
+    // Standard API error response
     response.status(statusCode).json({
       success: false,
       error: {
         statusCode,
+        code: statusCode >= 500 ? "INTERNAL_SERVER_ERROR" : code,
         message,
+        ...(details !== undefined ? { details } : {}),
       },
       requestId,
       timestamp: new Date().toISOString(),
-      path: request.originalUrl,
+      path: request.path,
     });
   }
 }

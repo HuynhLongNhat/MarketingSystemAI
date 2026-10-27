@@ -5,9 +5,9 @@ import {
   ExecutionContext,
   CallHandler,
   Logger,
-} from '@nestjs/common';
-import { Observable, finalize } from 'rxjs';
-import type { Request, Response } from 'express';
+} from "@nestjs/common";
+import { Observable, finalize } from "rxjs";
+import type { Request, Response } from "express";
 
 @Injectable()
 export class RequestLoggingInterceptor
@@ -33,17 +33,29 @@ export class RequestLoggingInterceptor
 
     return next.handle().pipe(
       finalize(() => {
-        const duration = Date.now() - startedAt;
+        const durationMs = Date.now() - startedAt;
 
-        this.logger.log(
-          JSON.stringify({
-            method: request.method,
-            path: request.originalUrl,
-            statusCode: response.statusCode,
-            durationMs: duration,
-            requestId: response.getHeader('x-request-id'),
-          }),
-        );
+        // Exclude query parameters from logs.
+        const path = request.path;
+
+        const logEntry = {
+          event: "http_request",
+          method: request.method,
+          path,
+          statusCode: response.statusCode,
+          durationMs,
+          requestId: response.getHeader("x-request-id"),
+        };
+
+        const message = JSON.stringify(logEntry);
+
+        if (response.statusCode >= 500) {
+          this.logger.error(message);
+        } else if (response.statusCode >= 400) {
+          this.logger.warn(message);
+        } else {
+          this.logger.log(message);
+        }
       }),
     );
   }
