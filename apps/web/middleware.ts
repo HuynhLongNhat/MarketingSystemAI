@@ -1,17 +1,21 @@
-import { NextResponse } from 'next/server';
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from "next/server";
+import {
+  clerkMiddleware,
+  createRouteMatcher,
+} from "@clerk/nextjs/server";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/auth-test(.*)",
 ]);
 
 const isOrgFreeRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/org-selection(.*)"
+  "/org-selection(.*)",
+  "/auth-test(.*)",
 ]);
-
 export default clerkMiddleware(async (auth, req) => {
   const { userId, orgId } = await auth();
 
