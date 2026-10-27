@@ -9,10 +9,10 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
-     "start:worker": "node dist/worker.js",
-  "start:worker:dev": "nest start --entryFile worker --watch",
-  "test:queue": "node dist/jobs/test-enqueue.js"
+    "lint": "eslint src",
+    "start:worker": "node dist/worker.js",
+    "start:worker:dev": "nest start --entryFile worker --watch",
+    "test:queue": "node dist/jobs/test-enqueue.js"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.13",
@@ -37,6 +37,8 @@
     "@nestjs/cli": "^11.0.0",
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
+    "@workspace/eslint-config": "workspace:^",
+    "eslint": "^9",
     "typescript": "^5.7.3"
   }
 }

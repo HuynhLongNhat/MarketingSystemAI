@@ -25,7 +25,7 @@ if (!secret || secret.length < 32) {
 export const auth = betterAuth({
   appName: "MarketingSystemAI",
 
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3001",
+  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3002",
 
   secret,
 

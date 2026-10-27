@@ -7,9 +7,9 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "lint:fix": "next lint --fix",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.27.1",
@@ -19,6 +19,7 @@
     "@workspace/backend": "workspace:*",
     "@workspace/math": "workspace:*",
     "@workspace/ui": "workspace:*",
+    "better-auth": "1.7.13",
     "bowser": "^2.12.0",
     "convex": "^1.25.4",
     "countries-and-timezones": "^3.8.0",
@@ -31,8 +32,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.61.1",
     "sonner": "^2.0.6",
-    "zod": "3.25.67",
-    "better-auth": "1.7.13"
+    "zod": "3.25.67"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -40,6 +40,7 @@
     "@types/react-dom": "^19",
     "@workspace/eslint-config": "workspace:^",
     "@workspace/typescript-config": "workspace:*",
+    "eslint": "^9",
     "typescript": "^5.7.3"
   }
 }

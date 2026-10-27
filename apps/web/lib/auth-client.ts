@@ -1,7 +1,7 @@
 import { createAuthClient } from "better-auth/react";
 
 const baseURL = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002"
 ).replace(/\/+$/, "");
 
 export const authClient = createAuthClient({
