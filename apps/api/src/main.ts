@@ -2,35 +2,101 @@
 import 'reflect-metadata';
 import './env.js';
 
+import { randomUUID } from 'node:crypto';
 import { NestFactory } from '@nestjs/core';
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { toNodeHandler } from 'better-auth/node';
+import type { Request, Response, NextFunction } from 'express';
 
 import { AppModule } from './app.module.js';
 import { auth } from './auth.js';
+import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
+import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
 
-  app.setGlobalPrefix('v1');
+  app.useLogger(['log', 'error', 'warn', 'debug']);
+
   app.enableShutdownHooks();
 
+  app.setGlobalPrefix('v1');
+
   app.enableCors({
-    origin: process.env.WEB_URL ?? 'http://localhost:3000',
+    origin: (
+      process.env.WEB_URL ?? 'http://localhost:3000'
+    ).split(',').map((origin) => origin.trim()),
     credentials: true,
   });
 
-  // Better Auth handles its own /api/auth/* routes.
+  app.use(
+    (req: Request, res: Response, next: NextFunction) => {
+      const incomingId = req.headers['x-request-id'];
+
+      const requestId =
+        typeof incomingId === 'string' &&
+        incomingId.length > 0 &&
+        incomingId.length <= 128
+          ? incomingId
+          : randomUUID();
+
+      res.setHeader('x-request-id', requestId);
+      next();
+    },
+  );
+
+  // Better Auth giữ endpoint riêng ngoài /v1.
   app.use('/api/auth', toNodeHandler(auth));
 
-  const port = Number(process.env.PORT ?? 3001);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: false,
+      },
+      stopAtFirstError: false,
+    }),
+  );
+
+  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalInterceptors(
+    new RequestLoggingInterceptor(),
+  );
+
+  if (process.env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('MarketingSystemAI API')
+      .setDescription('Marketing Automation API')
+      .setVersion('1.0')
+      .build();
+
+    const document = SwaggerModule.createDocument(
+      app,
+      swaggerConfig,
+    );
+
+    SwaggerModule.setup('docs', app, document);
+  }
+
+  const port = Number(process.env.PORT ?? 3002);
 
   await app.listen(port);
 
-  console.log(`NestJS API: http://localhost:${port}/v1`);
-  console.log(`Better Auth: http://localhost:${port}/api/auth`);
+  logger.log(`API: http://localhost:${port}/v1`);
+  logger.log(`Auth: http://localhost:${port}/api/auth`);
+
+  if (process.env.NODE_ENV !== 'production') {
+    logger.log(`Swagger: http://localhost:${port}/docs`);
+  }
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('[BOOT] Failed to start NestJS API:', error);
+  console.error('Failed to start API:', error);
   process.exitCode = 1;
 });
