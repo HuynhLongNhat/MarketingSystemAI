@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import "./env.js";
-import { validateServerEnvironment } from "./env.js";
+import { environment, validateServerEnvironment } from "./env.js";
 
 validateServerEnvironment();
 import { randomUUID } from "node:crypto";
@@ -79,7 +79,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new RequestLoggingInterceptor());
 
   if (
-    process.env.APP_ENV === "development" ||
+    environment === "development" ||
     (!process.env.APP_ENV && process.env.NODE_ENV !== "production")
   ) {
     const swaggerConfig = new DocumentBuilder()
@@ -110,7 +110,7 @@ async function bootstrap(): Promise<void> {
   logger.log(`Auth: http://localhost:${port}/api/auth`);
 
   if (
-    process.env.APP_ENV === "development" ||
+    environment === "development" ||
     (!process.env.APP_ENV && process.env.NODE_ENV !== "production")
   ) {
     logger.log(`Swagger: http://localhost:${port}/docs`);

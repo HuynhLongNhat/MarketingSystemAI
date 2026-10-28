@@ -1,14 +1,21 @@
 
-import 'reflect-metadata';
-import './env.js';
+import "reflect-metadata";
+import "./env.js";
 
-import { Logger } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { Logger } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
 
-import { WorkerModule } from './worker.module.js';
+import {
+  environment,
+  validateServerEnvironment,
+} from "./env.js";
+import { WorkerModule } from "./worker.module.js";
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('WorkerBootstrap');
+  // Validate environment before starting the Worker.
+  validateServerEnvironment();
+
+  const logger = new Logger("WorkerBootstrap");
 
   const app = await NestFactory.createApplicationContext(
     WorkerModule,
@@ -17,13 +24,15 @@ async function bootstrap(): Promise<void> {
     },
   );
 
-  app.useLogger(['log', 'error', 'warn', 'debug']);
+  app.useLogger(["log", "error", "warn", "debug"]);
   app.enableShutdownHooks();
 
-  logger.log('MarketingSystemAI Worker started');
+  logger.log(
+    `CompanyMarketingSystem Worker started (${environment})`,
+  );
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('Failed to start Worker:', error);
+  console.error("Failed to start Worker:", error);
   process.exitCode = 1;
 });
