@@ -3,6 +3,10 @@ import "./env.js";
 import { environment, validateServerEnvironment } from "./env.js";
 
 validateServerEnvironment();
+import {
+  pool,
+  verifyDatabaseEnvironment,
+} from "@workspace/db/node";
 import { randomUUID } from "node:crypto";
 import { NestFactory } from "@nestjs/core";
 import { BadRequestException, Logger, ValidationPipe } from "@nestjs/common";
@@ -17,6 +21,7 @@ import { AllExceptionsFilter } from "./common/all-exceptions.filter.js";
 import { RequestLoggingInterceptor } from "./common/interceptors/request-logging.interceptor.js";
 
 async function bootstrap(): Promise<void> {
+  await verifyDatabaseEnvironment(pool, environment);
   const logger = new Logger("Bootstrap");
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,

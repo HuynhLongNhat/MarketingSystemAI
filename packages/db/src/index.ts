@@ -1,5 +1,4 @@
-
-export { db, pool } from './client.js';
+export { db, pool } from "./client.js";
 
 export {
   widgetSettings,
@@ -10,7 +9,7 @@ export {
   organization,
   member,
   invitation,
-} from './schema.js';
+} from "./schema.js";
 export { eq, sql } from "drizzle-orm";
 export type {
   DefaultSuggestions,
@@ -30,4 +29,7 @@ export type {
   NewMember,
   Invitation,
   NewInvitation,
-} from './schema.js';
+} from "./schema.js";
+export { verifyDatabaseEnvironment } from "./environment-guard.js";
+
+export type { DatabaseEnvironment } from "./environment-guard.js";
