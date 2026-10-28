@@ -6,7 +6,7 @@ import { HealthController } from './health.controller.js';
 import { DatabaseModule } from './database/database.module.js';
 import { WidgetSettingsModule } from './widget-settings/widget-settings.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
-
+import { OrganizationsModule } from "./organizations/organizations.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -19,6 +19,7 @@ import { JobsModule } from './jobs/jobs.module.js';
       },
     }),
     JobsModule,
+    OrganizationsModule
   ],
   controllers: [HealthController],
 })

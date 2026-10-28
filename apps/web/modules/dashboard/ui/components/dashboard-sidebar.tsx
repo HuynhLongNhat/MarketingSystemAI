@@ -25,7 +25,7 @@ import {
   SidebarRail,
 } from "@workspace/ui/components/sidebar";
 import { cn } from "@workspace/ui/lib/utils";
-
+import { UsersIcon } from "lucide-react";
 const customerSupportItems = [
   {
     title: "Conversations",
@@ -62,6 +62,11 @@ const accountItems = [
     title: "Plans & Billing",
     url: "/billing",
     icon: CreditCardIcon,
+  },
+  {
+    title: "Team Members",
+    url: "/settings/members",
+    icon: UsersIcon,
   },
 ];
 

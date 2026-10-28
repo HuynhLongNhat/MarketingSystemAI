@@ -1,4 +1,3 @@
-
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { organization } from "better-auth/plugins";
@@ -13,7 +12,7 @@ import {
   member,
   invitation,
 } from "@workspace/db/node";
-
+import { sendInvitationEmail } from "./common/email/invitation-email.js";
 const secret = process.env.BETTER_AUTH_SECRET;
 
 if (!secret || secret.length < 32) {
@@ -47,6 +46,19 @@ export const auth = betterAuth({
   },
 
   plugins: [
-    organization(),
+    organization({
+      allowUserToCreateOrganization: true,
+      membershipLimit: 100,
+      invitationExpiresIn: 60 * 60 * 48,
+
+      async sendInvitationEmail(data) {
+        await sendInvitationEmail({
+          to: data.email,
+          organizationName: data.organization.name,
+          inviterName: data.inviter.user.name,
+          invitationId: data.id,
+        });
+      },
+    }),
   ],
 });

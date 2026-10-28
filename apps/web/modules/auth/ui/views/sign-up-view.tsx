@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 
@@ -15,7 +14,16 @@ export const SignUpView = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
 
+  const requestedCallback = searchParams.get("callbackURL");
+
+  const callbackURL =
+    requestedCallback?.startsWith("/") &&
+    !requestedCallback.startsWith("//") &&
+    !requestedCallback.includes("\\")
+      ? requestedCallback
+      : "/org-selection";
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -33,7 +41,7 @@ export const SignUpView = () => {
         return;
       }
 
-      router.replace("/org-selection");
+      router.replace(callbackURL);
       router.refresh();
     } catch {
       setError("Không thể kết nối đến máy chủ.");
@@ -103,7 +111,10 @@ export const SignUpView = () => {
 
       <p className="text-center text-sm">
         Đã có tài khoản?{" "}
-        <Link href="/sign-in" className="text-blue-600">
+        <Link
+          href={`/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`}
+          className="text-blue-600"
+        >
           Đăng nhập
         </Link>
       </p>

@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 
@@ -14,7 +13,15 @@ export const SignInView = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const requestedCallback = searchParams.get("callbackURL");
 
+  const callbackURL =
+    requestedCallback?.startsWith("/") &&
+    !requestedCallback.startsWith("//") &&
+    !requestedCallback.includes("\\")
+      ? requestedCallback
+      : "/org-selection";
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -31,7 +38,7 @@ export const SignInView = () => {
         return;
       }
 
-      router.replace("/org-selection");
+      router.replace(callbackURL);
       router.refresh();
     } catch {
       setError("Không thể kết nối đến máy chủ.");
@@ -44,9 +51,7 @@ export const SignInView = () => {
     <div className="w-full max-w-md space-y-6 rounded-xl border bg-white p-6 text-gray-900 shadow-sm">
       <div>
         <h1 className="text-2xl font-semibold">Đăng nhập</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          CompanyMarketingSystem
-        </p>
+        <p className="mt-1 text-sm text-gray-500">CompanyMarketingSystem</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -97,7 +102,10 @@ export const SignInView = () => {
 
       <p className="text-center text-sm">
         Chưa có tài khoản?{" "}
-        <Link href="/sign-up" className="text-blue-600">
+        <Link
+          href={`/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`}
+          className="text-blue-600"
+        >
           Đăng ký
         </Link>
       </p>

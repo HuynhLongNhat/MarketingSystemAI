@@ -1,6 +1,6 @@
 "use client";
 
-import { useOrganization } from "@clerk/nextjs";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -22,7 +22,7 @@ import { createScript } from "../../utils";
 export const IntegrationsView = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSnippet, setSelectedSnippet] = useState("");
-  const { organization } = useOrganization();
+ const { data: organization } = authClient.useActiveOrganization();
 
   const handleIntegrationClick = (integrationId: IntegrationId) => {
     if (!organization) {
