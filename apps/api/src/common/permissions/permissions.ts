@@ -1,5 +1,4 @@
-import { OrganizationRole } from "src/auth/request-context.js";
-
+import type { OrganizationRole } from "../../auth/request-context.js";
 
 export const PERMISSIONS = {
   ORGANIZATION_READ: "organization:read",

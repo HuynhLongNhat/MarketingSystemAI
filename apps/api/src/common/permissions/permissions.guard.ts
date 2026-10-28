@@ -12,8 +12,7 @@ import {
   type Permission,
 } from "./permissions.js";
 import { PERMISSIONS_KEY } from "./permissions.decorator.js";
-import { AuthenticatedRequest } from "src/auth/request-context.js";
-
+import type { AuthenticatedRequest } from "../../auth/request-context.js";
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}

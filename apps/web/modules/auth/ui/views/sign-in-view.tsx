@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
-
+import { safeAuthRedirect } from "@/lib/auth-redirect";
 export const SignInView = () => {
   const router = useRouter();
 
@@ -14,14 +14,8 @@ export const SignInView = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
-  const requestedCallback = searchParams.get("callbackURL");
 
-  const callbackURL =
-    requestedCallback?.startsWith("/") &&
-    !requestedCallback.startsWith("//") &&
-    !requestedCallback.includes("\\")
-      ? requestedCallback
-      : "/org-selection";
+  const callbackURL = safeAuthRedirect(searchParams.get("callbackURL"));
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);

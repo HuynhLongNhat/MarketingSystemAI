@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { organization } from "better-auth/plugins";
-
+import { sendVerificationEmail } from "./common/email/verification-email.js";
 import {
   db,
   user,
@@ -41,15 +41,28 @@ export const auth = betterAuth({
     },
   }),
 
-  emailAndPassword: {
-    enabled: true,
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: false,
+
+    async sendVerificationEmail({ user, url }) {
+      await sendVerificationEmail({
+        to: user.email,
+        verificationUrl: url,
+      });
+    },
   },
 
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+  },
   plugins: [
     organization({
       allowUserToCreateOrganization: true,
       membershipLimit: 100,
       invitationExpiresIn: 60 * 60 * 48,
+      requireEmailVerificationOnInvitation: true,
 
       async sendInvitationEmail(data) {
         await sendInvitationEmail({

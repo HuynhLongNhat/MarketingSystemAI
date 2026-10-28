@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
-
+import { safeAuthRedirect } from "@/lib/auth-redirect";
 export const SignUpView = () => {
   const router = useRouter();
 
@@ -16,33 +16,38 @@ export const SignUpView = () => {
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
 
-  const requestedCallback = searchParams.get("callbackURL");
-
-  const callbackURL =
-    requestedCallback?.startsWith("/") &&
-    !requestedCallback.startsWith("//") &&
-    !requestedCallback.includes("\\")
-      ? requestedCallback
-      : "/org-selection";
+  const callbackURL = safeAuthRedirect(searchParams.get("callbackURL"));
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      const result = await authClient.signUp.email({
+      const verificationCallback = new URL(
+        "/verify-email",
+        window.location.origin,
+      );
+
+      verificationCallback.searchParams.set("callbackURL", callbackURL);
+
+      const { error } = await authClient.signUp.email({
         name: name.trim(),
         email: email.trim(),
         password,
+        callbackURL: verificationCallback.toString(),
       });
 
-      if (result.error) {
-        setError(result.error.message ?? "Đăng ký thất bại.");
+      if (error) {
+        setError(error.message ?? "Đăng ký thất bại.");
         return;
       }
 
-      router.replace(callbackURL);
-      router.refresh();
+      const pendingParams = new URLSearchParams({
+        email: email.trim(),
+        callbackURL,
+      });
+
+      router.replace(`/verification-pending?${pendingParams.toString()}`);
     } catch {
       setError("Không thể kết nối đến máy chủ.");
     } finally {
