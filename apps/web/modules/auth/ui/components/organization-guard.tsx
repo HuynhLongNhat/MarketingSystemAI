@@ -1,23 +1,36 @@
+
 "use client";
 
-import { useOrganization } from "@clerk/nextjs";
-import { AuthLayout } from "@/modules/auth/ui/layouts/auth-layout";
-import { OrgSelectionView } from "@/modules/auth/ui/views/org-selection-view";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export const OrganizationGuard = ({ children }: { children: React.ReactNode; }) => {
-  const { organization } = useOrganization();
+import { authClient } from "@/lib/auth-client";
 
-  if (!organization) {
-    return (
-      <AuthLayout>
-        <OrgSelectionView />
-      </AuthLayout>
-    );
+export const OrganizationGuard = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const router = useRouter();
+
+  const {
+    data: organization,
+    isPending,
+  } = authClient.useActiveOrganization();
+
+  useEffect(() => {
+    if (!isPending && !organization) {
+      router.replace("/org-selection");
+    }
+  }, [isPending, organization, router]);
+
+  if (isPending) {
+    return <p>Đang kiểm tra Organization...</p>;
   }
 
-  return (
-    <>
-      {children}
-    </>
-  );
+  if (!organization) {
+    return null;
+  }
+
+  return <>{children}</>;
 };

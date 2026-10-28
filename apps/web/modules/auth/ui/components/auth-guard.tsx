@@ -1,25 +1,32 @@
+
 "use client";
 
-import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
-import { AuthLayout } from "../layouts/auth-layout";
-import { SignInView } from "../views/sign-in-view";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <>
-      <AuthLoading>
-        <AuthLayout>
-          <p>Loading...</p>
-        </AuthLayout>
-      </AuthLoading>
-      <Authenticated>
-        {children}
-      </Authenticated>
-      <Unauthenticated>
-        <AuthLayout>
-          <SignInView />
-        </AuthLayout>
-      </Unauthenticated>
-    </>
-  );
+import { authClient } from "@/lib/auth-client";
+
+export const AuthGuard = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const router = useRouter();
+  const { data: session, isPending } = authClient.useSession();
+
+  useEffect(() => {
+    if (!isPending && !session) {
+      router.replace("/sign-in");
+    }
+  }, [isPending, session, router]);
+
+  if (isPending) {
+    return <p>Đang kiểm tra đăng nhập...</p>;
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  return <>{children}</>;
 };
