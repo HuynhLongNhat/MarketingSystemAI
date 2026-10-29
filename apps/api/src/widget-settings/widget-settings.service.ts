@@ -1,17 +1,15 @@
 
 import { Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
 
 import { db, widgetSettings } from "@workspace/db/node";
 
 import type { RequestContext } from "../auth/request-context.js";
 import { assertTenantAccess } from "../common/tenant/tenant-access.js";
+import { tenantWhere } from "../common/tenant/tenant-query.js";
 
 @Injectable()
 export class WidgetSettingsService {
-  async getCurrent(
-    context: RequestContext,
-  ) {
+  async getCurrent(context: RequestContext) {
     return this.getByOrganizationId(
       context,
       context.organizationId,
@@ -22,15 +20,16 @@ export class WidgetSettingsService {
     context: RequestContext,
     organizationId: string,
   ) {
+    // Giữ nguyên bảo vệ cho legacy endpoint.
     assertTenantAccess(context, organizationId);
 
     const [settings] = await db
       .select()
       .from(widgetSettings)
       .where(
-        eq(
+        tenantWhere(
+          context,
           widgetSettings.organizationId,
-          context.organizationId,
         ),
       )
       .limit(1);

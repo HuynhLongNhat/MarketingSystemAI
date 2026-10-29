@@ -9,7 +9,6 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 
-
 import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
 import { RequirePermissions } from "../common/permissions/permissions.decorator.js";
 import { PERMISSIONS } from "../common/permissions/permissions.js";
@@ -35,9 +34,7 @@ export class OrganizationsController {
   getCurrentOrganization(
     @CurrentContext() ctx: RequestContext,
   ) {
-    return this.organizationsService.getOrganization(
-      ctx.organizationId,
-    );
+    return this.organizationsService.getOrganization(ctx);
   }
 
   @Get("current/members")
@@ -48,8 +45,6 @@ export class OrganizationsController {
   listMembers(
     @CurrentContext() ctx: RequestContext,
   ) {
-    return this.organizationsService.listMembers(
-      ctx.organizationId,
-    );
+    return this.organizationsService.listMembers(ctx);
   }
 }

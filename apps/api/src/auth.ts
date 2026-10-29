@@ -13,6 +13,9 @@ import {
   invitation,
 } from "@workspace/db/node";
 import { sendInvitationEmail } from "./common/email/invitation-email.js";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { and, eq } from "drizzle-orm";
+
 const secret = process.env.BETTER_AUTH_SECRET;
 
 if (!secret || secret.length < 32) {
@@ -26,7 +29,53 @@ export const auth = betterAuth({
 
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3002",
 
+  trustedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+
   secret,
+
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/organization/set-active" || ctx.method !== "POST") {
+        return;
+      }
+
+      const body = ctx.body as { organizationId?: unknown } | undefined;
+
+      const organizationId = body?.organizationId;
+
+      // Chỉ xử lý trường hợp chọn Organization bằng ID.
+      // Những trường hợp khác tiếp tục để Better Auth kiểm tra.
+      if (typeof organizationId !== "string" || organizationId.length === 0) {
+        return;
+      }
+
+      const currentSession = await auth.api.getSession({
+        headers: ctx.headers ?? new Headers(),
+      });
+      if (!currentSession) {
+        throw new APIError("UNAUTHORIZED", {
+          message: "Authentication required",
+        });
+      }
+
+      const [membership] = await db
+        .select({ organizationId: member.organizationId })
+        .from(member)
+        .where(
+          and(
+            eq(member.organizationId, organizationId),
+            eq(member.userId, currentSession.user.id),
+          ),
+        )
+        .limit(1);
+
+      if (!membership) {
+        throw new APIError("FORBIDDEN", {
+          message: "Organization membership required",
+        });
+      }
+    }),
+  },
 
   database: drizzleAdapter(db, {
     provider: "pg",

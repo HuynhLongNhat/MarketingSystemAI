@@ -17,9 +17,20 @@ export const OrgSelectionView = () => {
   } = authClient.useListOrganizations();
 
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function generateSlug(name: string): string {
+    return name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
 
   async function selectOrganization(organizationId: string) {
     if (busy) return;
@@ -47,7 +58,7 @@ export const OrgSelectionView = () => {
     try {
       const result = await authClient.organization.create({
         name: name.trim(),
-        slug: slug.trim().toLowerCase(),
+        slug: generateSlug(name),
       });
 
       if (result.error || !result.data) {
@@ -113,15 +124,6 @@ export const OrgSelectionView = () => {
           placeholder="Tên Organization"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-md border p-2"
-        />
-
-        <input
-          required
-          pattern="[a-z0-9-]+"
-          placeholder="Slug (ví dụ: my-company)"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
           className="w-full rounded-md border p-2"
         />
 

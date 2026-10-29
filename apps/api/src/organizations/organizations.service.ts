@@ -3,17 +3,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+
+import { db, organization, member, user } from "@workspace/db/node";
 import { eq } from "drizzle-orm";
-import {
-  db,
-  organization,
-  member,
-  user,
-} from "@workspace/db/node";
+
+import type { RequestContext } from "../auth/request-context.js";
+import { tenantWhere } from "../common/tenant/tenant-query.js";
 
 @Injectable()
 export class OrganizationsService {
-  async getOrganization(organizationId: string) {
+  async getOrganization(context: RequestContext) {
     const [result] = await db
       .select({
         id: organization.id,
@@ -23,17 +22,21 @@ export class OrganizationsService {
         createdAt: organization.createdAt,
       })
       .from(organization)
-      .where(eq(organization.id, organizationId))
+      .where(
+        tenantWhere(context, organization.id),
+      )
       .limit(1);
 
     if (!result) {
-      throw new NotFoundException("Organization not found");
+      throw new NotFoundException(
+        "Organization not found",
+      );
     }
 
     return result;
   }
 
-  async listMembers(organizationId: string) {
+  async listMembers(context: RequestContext) {
     return db
       .select({
         id: member.id,
@@ -44,7 +47,15 @@ export class OrganizationsService {
         joinedAt: member.createdAt,
       })
       .from(member)
-      .innerJoin(user, eq(member.userId, user.id))
-      .where(eq(member.organizationId, organizationId));
+      .innerJoin(
+        user,
+        eq(member.userId, user.id),
+      )
+      .where(
+        tenantWhere(
+          context,
+          member.organizationId,
+        ),
+      );
   }
 }
