@@ -1,15 +1,7 @@
-
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Loader2,
-  MailPlus,
-  RefreshCw,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { Loader2, MailPlus, RefreshCw, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
@@ -35,9 +27,8 @@ type Invitation = {
 
 export function MembersView() {
   const router = useRouter();
-
-  const { data: session, isPending: sessionPending } =
-    authClient.useSession();
+  const requestVersion = useRef(0);
+  const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const { data: organization, isPending: orgPending } =
     authClient.useActiveOrganization();
@@ -45,8 +36,7 @@ export function MembersView() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState("");
-  const [inviteRole, setInviteRole] =
-    useState<"admin" | "member">("member");
+  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -56,13 +46,16 @@ export function MembersView() {
   );
 
   const currentRole = currentMember?.role;
-  const canManage =
-    currentRole === "owner" || currentRole === "admin";
+  const canManage = currentRole === "owner" || currentRole === "admin";
 
   const loadData = useCallback(async () => {
-    if (!organization?.id) {
-      setMembers([]);
-      setInvitations([]);
+    const version = ++requestVersion.current;
+    const organizationId = organization?.id;
+
+    setMembers([]);
+    setInvitations([]);
+
+    if (!organizationId) {
       setLoading(false);
       return;
     }
@@ -72,12 +65,17 @@ export function MembersView() {
     try {
       const [membersResult, invitationsResult] = await Promise.all([
         authClient.organization.listMembers({
-          query: { organizationId: organization.id },
+          query: { organizationId },
         }),
         authClient.organization.listInvitations({
-          query: { organizationId: organization.id },
+          query: { organizationId },
         }),
       ]);
+
+      // Ignore responses from an older organization/request.
+      if (version !== requestVersion.current) {
+        return;
+      }
 
       if (membersResult.error) {
         throw new Error(
@@ -92,18 +90,25 @@ export function MembersView() {
       }
 
       setMembers((membersResult.data?.members ?? []) as Member[]);
-      setInvitations(
-        (invitationsResult.data ?? []) as Invitation[],
-      );
+
+      setInvitations((invitationsResult.data ?? []) as Invitation[]);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Có lỗi xảy ra",
-      );
+      if (version === requestVersion.current) {
+        toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
+      }
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) {
+        setLoading(false);
+      }
     }
   }, [organization?.id]);
 
+  useEffect(() => {
+  return () => {
+    requestVersion.current += 1;
+  };
+  }, [organization?.id]);
+  
   useEffect(() => {
     void loadData();
   }, [loadData]);
@@ -133,29 +138,23 @@ export function MembersView() {
       setEmail("");
       await loadData();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Có lỗi xảy ra",
-      );
+      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
     } finally {
       setBusy(false);
     }
   }
 
-  async function changeRole(
-    memberId: string,
-    role: "admin" | "member",
-  ) {
+  async function changeRole(memberId: string, role: "admin" | "member") {
     if (!canManage || !organization?.id || busy) return;
 
     setBusy(true);
 
     try {
-      const result =
-        await authClient.organization.updateMemberRole({
-          organizationId: organization.id,
-          memberId,
-          role,
-        });
+      const result = await authClient.organization.updateMemberRole({
+        organizationId: organization.id,
+        memberId,
+        role,
+      });
 
       if (result.error) {
         throw new Error(result.error.message ?? "Đổi role thất bại");
@@ -164,9 +163,7 @@ export function MembersView() {
       toast.success("Đã cập nhật vai trò");
       await loadData();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Có lỗi xảy ra",
-      );
+      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
     } finally {
       setBusy(false);
     }
@@ -194,9 +191,7 @@ export function MembersView() {
       toast.success("Đã xóa thành viên");
       await loadData();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Có lỗi xảy ra",
-      );
+      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
     } finally {
       setBusy(false);
     }
@@ -208,10 +203,9 @@ export function MembersView() {
     setBusy(true);
 
     try {
-      const result =
-        await authClient.organization.cancelInvitation({
-          invitationId,
-        });
+      const result = await authClient.organization.cancelInvitation({
+        invitationId,
+      });
 
       if (result.error) {
         throw new Error(result.error.message ?? "Hủy lời mời thất bại");
@@ -220,9 +214,7 @@ export function MembersView() {
       toast.success("Đã hủy lời mời");
       await loadData();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Có lỗi xảy ra",
-      );
+      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
     } finally {
       setBusy(false);
     }
@@ -272,9 +264,7 @@ export function MembersView() {
             <Users className="size-6" />
             Organization Members
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {organization.name}
-          </p>
+          <p className="text-sm text-muted-foreground">{organization.name}</p>
         </div>
 
         <button
@@ -311,9 +301,7 @@ export function MembersView() {
             <select
               value={inviteRole}
               onChange={(event) =>
-                setInviteRole(
-                  event.target.value as "admin" | "member",
-                )
+                setInviteRole(event.target.value as "admin" | "member")
               }
               className="rounded-md border bg-background p-2"
             >
@@ -333,9 +321,7 @@ export function MembersView() {
       )}
 
       <section className="space-y-3">
-        <h2 className="font-semibold">
-          Members ({members.length})
-        </h2>
+        <h2 className="font-semibold">Members ({members.length})</h2>
 
         <div className="divide-y rounded-lg border">
           {members.map((member) => {
@@ -374,9 +360,7 @@ export function MembersView() {
                       <option value="admin">Admin</option>
                     </select>
                   ) : (
-                    <span className="text-sm capitalize">
-                      {member.role}
-                    </span>
+                    <span className="text-sm capitalize">{member.role}</span>
                   )}
 
                   {canManage && !isOwner && !isSelf && (
@@ -399,9 +383,7 @@ export function MembersView() {
 
       {canManage && (
         <section className="space-y-3">
-          <h2 className="font-semibold">
-            Pending Invitations
-          </h2>
+          <h2 className="font-semibold">Pending Invitations</h2>
 
           <div className="divide-y rounded-lg border">
             {invitations
@@ -421,9 +403,7 @@ export function MembersView() {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() =>
-                      void cancelInvitation(invitation.id)
-                    }
+                    onClick={() => void cancelInvitation(invitation.id)}
                     className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
                   >
                     Cancel

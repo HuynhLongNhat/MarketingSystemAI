@@ -1,16 +1,14 @@
-
 "use client";
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
-
+import { activateOrganization } from "@/lib/organization-navigation";
 export const OrgSelectionView = () => {
   const router = useRouter();
 
-  const { data: session, isPending: sessionPending } =
-    authClient.useSession();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const {
     data: organizations,
@@ -24,22 +22,19 @@ export const OrgSelectionView = () => {
   const [busy, setBusy] = useState(false);
 
   async function selectOrganization(organizationId: string) {
+    if (busy) return;
+
     setBusy(true);
     setError("");
 
     try {
-      const result = await authClient.organization.setActive({
-        organizationId,
-      });
-
-      if (result.error) {
-        setError(result.error.message ?? "Không thể chọn Organization.");
-        return;
-      }
-
-      router.replace("/conversations");
-      router.refresh();
-    } finally {
+      await activateOrganization(organizationId);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Không thể chuyển Organization.",
+      );
       setBusy(false);
     }
   }
@@ -60,20 +55,18 @@ export const OrgSelectionView = () => {
         return;
       }
 
-      const activation = await authClient.organization.setActive({
-        organizationId: result.data.id,
-      });
-
-      if (activation.error) {
+      try {
+        await activateOrganization(result.data.id);
+      } catch (error) {
         setError(
-          activation.error.message ?? "Không thể kích hoạt Organization.",
+          error instanceof Error
+            ? error.message
+            : "Không thể kích hoạt Organization.",
         );
         await refetch();
         return;
       }
 
-      router.replace("/conversations");
-      router.refresh();
     } finally {
       setBusy(false);
     }
@@ -85,10 +78,7 @@ export const OrgSelectionView = () => {
 
   if (!session) {
     return (
-      <button
-        type="button"
-        onClick={() => router.replace("/sign-in")}
-      >
+      <button type="button" onClick={() => router.replace("/sign-in")}>
         Vui lòng đăng nhập
       </button>
     );
