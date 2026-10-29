@@ -12,7 +12,9 @@
     "lint": "eslint src",
     "start:worker": "node dist/worker.js",
     "start:worker:dev": "nest start --entryFile worker --watch",
-    "test:queue": "node dist/jobs/test-enqueue.js"
+    "test:queue": "node dist/jobs/test-enqueue.js",
+    "test:security": "tsc -p tsconfig.security-test.json && node --test dist-security-test/security/security.spec.js",
+    "test:security:http": "tsc -p tsconfig.security-test.json && node --test dist-security-test/security/security-http.spec.js"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.13",

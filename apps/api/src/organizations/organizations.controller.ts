@@ -15,9 +15,9 @@ import { RequirePermissions } from "../common/permissions/permissions.decorator.
 import { PERMISSIONS } from "../common/permissions/permissions.js";
 
 import { OrganizationsService } from "./organizations.service.js";
-import { AuthGuard } from "src/auth/auth.guard.js";
-import { CurrentContext } from "src/auth/current-context.decorator.js";
-import { RequestContext } from "src/auth/request-context.js";
+import { AuthGuard } from "../auth/auth.guard.js";
+import { CurrentContext } from "../auth/current-context.decorator.js";
+import type { RequestContext } from "../auth/request-context.js";
 
 @ApiTags("Organizations")
 @Controller("organizations")

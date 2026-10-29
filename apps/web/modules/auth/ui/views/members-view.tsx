@@ -6,8 +6,6 @@ import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 
-type MemberRole = "owner" | "admin" | "member";
-
 type Member = {
   id: string;
   userId: string;

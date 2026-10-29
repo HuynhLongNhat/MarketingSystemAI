@@ -66,7 +66,10 @@ export const OrgSelectionView = () => {
         await refetch();
         return;
       }
-
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Không thể tạo Organization.",
+      );
     } finally {
       setBusy(false);
     }
