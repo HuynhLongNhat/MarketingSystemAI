@@ -11,45 +11,15 @@ import {
   JOB_NAMES,
 } from "./jobs.constants.js";
 
+import {
+  assertTenantJobData,
+  type TenantJobData,
+} from "./tenant-job.js";
+
 import { TenantJobAuthorization } from "./tenant-job-authorization.js";
 
-interface TenantTaskData {
-  organizationId: string;
-  requestedBy: string;
-  createdAt: string;
-  payload: {
-    message: string;
-  };
-}
-
-function parseTenantTaskData(
-  value: unknown,
-): TenantTaskData {
-  if (!value || typeof value !== "object") {
-    throw new UnrecoverableError(
-      "Invalid tenant job data",
-    );
-  }
-
-  const data = value as Record<string, unknown>;
-  const payload = data.payload;
-
-  if (
-    typeof data.organizationId !== "string" ||
-    !data.organizationId ||
-    typeof data.requestedBy !== "string" ||
-    !data.requestedBy ||
-    typeof data.createdAt !== "string" ||
-    !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as Record<string, unknown>).message !== "string"
-  ) {
-    throw new UnrecoverableError(
-      "Invalid tenant job data",
-    );
-  }
-
-  return data as unknown as TenantTaskData;
+interface TenantTaskPayload {
+  message: string;
 }
 
 @Processor(DEFAULT_QUEUE)
@@ -69,7 +39,7 @@ export class JobsProcessor extends WorkerHost {
       case JOB_NAMES.HEALTH_CHECK:
         return this.handleHealthCheck(job);
 
-      case "tenant.task":
+      case JOB_NAMES.TENANT_TASK:
         return this.handleTenantTask(job);
 
       default:
@@ -100,7 +70,25 @@ export class JobsProcessor extends WorkerHost {
   }
 
   private async handleTenantTask(job: Job) {
-    const data = parseTenantTaskData(job.data);
+    try {
+      assertTenantJobData(job.data);
+    } catch {
+      throw new UnrecoverableError(
+        "Invalid tenant job data",
+      );
+    }
+
+    const data = job.data as TenantJobData<TenantTaskPayload>;
+
+    if (
+      !data.payload ||
+      typeof data.payload !== "object" ||
+      typeof data.payload.message !== "string"
+    ) {
+      throw new UnrecoverableError(
+        "Invalid tenant task payload",
+      );
+    }
 
     const role = await this.authorization.authorize(
       data.organizationId,
@@ -118,8 +106,8 @@ export class JobsProcessor extends WorkerHost {
       }),
     );
 
-    // Chỉ chạy logic nghiệp vụ sau khi authorize.
-    // Chưa có truy vấn dữ liệu tenant ở job mẫu này.
+    // Logic nghiệp vụ sẽ được triển khai
+    // khi có tác vụ AI Agent thực tế.
 
     return {
       success: true,
