@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { WidgetSettingsModule } from './widget-settings/widget-settings.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { OrganizationsModule } from "./organizations/organizations.module.js";
+import { ConversationsModule } from "./conversations/conversations.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -19,7 +20,8 @@ import { OrganizationsModule } from "./organizations/organizations.module.js";
       },
     }),
     JobsModule,
-    OrganizationsModule
+    OrganizationsModule,
+    ConversationsModule
   ],
   controllers: [HealthController],
 })

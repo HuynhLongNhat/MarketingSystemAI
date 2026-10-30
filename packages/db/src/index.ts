@@ -9,6 +9,9 @@ export {
   organization,
   member,
   invitation,
+  contactSessions,
+  conversations,
+  CONVERSATION_STATUSES,
 } from "./schema.js";
 export { eq, sql } from "drizzle-orm";
 export type {
@@ -29,6 +32,12 @@ export type {
   NewMember,
   Invitation,
   NewInvitation,
+  ContactSessionMetadata,
+  ContactSession,
+  NewContactSession,
+  ConversationStatus,
+  Conversation,
+  NewConversation,
 } from "./schema.js";
 export { verifyDatabaseEnvironment } from "./environment-guard.js";
 
