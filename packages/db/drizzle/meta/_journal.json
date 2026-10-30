@@ -36,6 +36,20 @@
       "when": 1793368317971,
       "tag": "0004_restore-conversation-fks",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793373304172,
+      "tag": "0005_mute_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793378692444,
+      "tag": "0006_parched_the_renegades",
+      "breakpoints": true
     }
   ]
 }

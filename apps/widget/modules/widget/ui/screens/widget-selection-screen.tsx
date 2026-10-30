@@ -5,10 +5,9 @@ import { Button } from "@workspace/ui/components/button";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronRightIcon, MessageSquareTextIcon, MicIcon, PhoneIcon } from "lucide-react";
 import { contactSessionIdAtomFamily, conversationIdAtom, errorMessageAtom, hasVapiSecretsAtom, organizationIdAtom, screenAtom, widgetSettingsAtom } from "../../atoms/widget-atoms";
-import { useMutation } from "convex/react";
-import { api } from "@workspace/backend/_generated/api";
 import { useState } from "react";
 import { WidgetFooter } from "../components/widget-footer";
+import { widgetApi, widgetSession } from "@/lib/widget-api";
 
 export const WidgetSelectionScreen = () => {
   const setScreen = useSetAtom(screenAtom);
@@ -22,36 +21,39 @@ export const WidgetSelectionScreen = () => {
     contactSessionIdAtomFamily(organizationId || "")
   );
 
-  const createConversation = useMutation(api.public.conversations.create);
   const [isPending, setIsPending] = useState(false);
+
 
   const handleNewConversation = async () => {
     if (!organizationId) {
-      setScreen("error");
       setErrorMessage("Missing Organization ID");
+      setScreen("error");
       return;
     }
-    
-    if (!contactSessionId) {
-      setScreen("auth");
-      return;
-    }
-    
-    setIsPending(true);
-    try {
-      const conversationId = await createConversation({
-        contactSessionId,
-        organizationId,
-      });
 
-      setConversationId(conversationId);
-      setScreen("chat");
-    } catch {
+    const token = widgetSession.get(organizationId);
+
+    if (!contactSessionId || !token) {
       setScreen("auth");
+      return;
+    }
+
+    setIsPending(true);
+
+    try {
+      const conversation = await widgetApi.createConversation(token);
+
+      setConversationId(conversation.id);
+      setScreen("chat");
+    } catch (error) {
+      console.error("Failed to create conversation:", error);
+      setErrorMessage("Unable to start conversation");
+      setScreen("error");
     } finally {
       setIsPending(false);
     }
   };
+
 
   return (
     <>

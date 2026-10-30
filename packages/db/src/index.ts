@@ -1,3 +1,4 @@
+
 export { db, pool } from "./client.js";
 
 export {
@@ -11,9 +12,13 @@ export {
   invitation,
   contactSessions,
   conversations,
+  conversationMessages,
   CONVERSATION_STATUSES,
+  MESSAGE_ROLES,
 } from "./schema.js";
+
 export { eq, sql } from "drizzle-orm";
+
 export type {
   DefaultSuggestions,
   WidgetSettings,
@@ -38,7 +43,13 @@ export type {
   ConversationStatus,
   Conversation,
   NewConversation,
+  MessageRole,
+  ConversationMessage,
+  NewConversationMessage,
 } from "./schema.js";
+
 export { verifyDatabaseEnvironment } from "./environment-guard.js";
 
-export type { DatabaseEnvironment } from "./environment-guard.js";
+export type {
+  DatabaseEnvironment,
+} from "./environment-guard.js";

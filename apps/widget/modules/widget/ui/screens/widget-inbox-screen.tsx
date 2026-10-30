@@ -1,44 +1,72 @@
+
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { formatDistanceToNow } from "date-fns";
 import { ArrowLeftIcon } from "lucide-react";
-import { contactSessionIdAtomFamily, conversationIdAtom, organizationIdAtom, screenAtom } from "@/modules/widget/atoms/widget-atoms";
-import { ConversationStatusIcon } from "@workspace/ui/components/conversation-status-icon";
-import { WidgetHeader } from "@/modules/widget/ui/components/widget-header";
-import { WidgetFooter } from "../components/widget-footer";
+
 import { Button } from "@workspace/ui/components/button";
-import { usePaginatedQuery } from "convex/react";
-import { api } from "@workspace/backend/_generated/api";
-import { useInfiniteScroll } from "@workspace/ui/hooks/use-infinite-scroll";
-import { InfiniteScrollTrigger } from "@workspace/ui/components/infinite-scroll-trigger";
+import { ConversationStatusIcon } from "@workspace/ui/components/conversation-status-icon";
+import { WidgetHeader } from "../components/widget-header";
+import { WidgetFooter } from "../components/widget-footer";
+
+import {
+  conversationIdAtom,
+  organizationIdAtom,
+  screenAtom,
+} from "../../atoms/widget-atoms";
+
+import {
+  widgetApi,
+  widgetSession,
+  type WidgetConversation,
+} from "@/lib/widget-api";
 
 export const WidgetInboxScreen = () => {
   const setScreen = useSetAtom(screenAtom);
   const setConversationId = useSetAtom(conversationIdAtom);
-
   const organizationId = useAtomValue(organizationIdAtom);
-  const contactSessionId = useAtomValue(
-    contactSessionIdAtomFamily(organizationId || "")
-  );
 
-  const conversations = usePaginatedQuery(
-    api.public.conversations.getMany,
-    contactSessionId
-      ? {
-          contactSessionId,
-        }
-      : "skip",
-    {
-      initialNumItems: 10,
-    },
-  );
+  const [conversations, setConversations] =
+    useState<WidgetConversation[]>([]);
 
-  const { topElementRef, handleLoadMore, canLoadMore, isLoadingMore } = useInfiniteScroll({
-    status: conversations.status,
-    loadMore: conversations.loadMore,
-    loadSize: 10,
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const token = widgetSession.get(organizationId);
+
+    if (!token) {
+      setScreen("auth");
+      return;
+    }
+
+    let cancelled = false;
+
+    widgetApi.listConversations(token)
+      .then((result) => {
+        if (cancelled) return;
+        setConversations(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error(err);
+        setError("Unable to load conversations");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId, setScreen]);
 
   return (
     <>
@@ -54,42 +82,63 @@ export const WidgetInboxScreen = () => {
           <p>Inbox</p>
         </div>
       </WidgetHeader>
-      <div className="flex flex-1 flex-col gap-y-2 p-4 overflow-y-auto">
-        {conversations?.results.length > 0 && 
-          conversations?.results.map((conversation) => (
-            <Button
-              className="h-20 w-full justify-between"
-              key={conversation._id}
-              onClick={() => {
-                setConversationId(conversation._id);
-                setScreen("chat");
-              }}
-              variant="outline"
-            >
-              <div className="flex w-full flex-col gap-4 overflow-hidden text-start">
-                <div className="flex w-full items-center justify-between gap-x-2">
-                  <p className="text-muted-foreground text-xs">Chat</p>
-                  <p className="text-muted-foreground text-xs">
-                    {formatDistanceToNow(new Date(conversation._creationTime))}
-                  </p>
-                </div>
-                <div className="flex w-full items-center justify-between gap-x-2">
-                  <p className="truncate text-sm">
-                    {conversation.lastMessage?.text}
-                  </p>
-                  <ConversationStatusIcon status={conversation.status} className="shrink-0" />
-                </div>
+
+      <div className="flex flex-1 flex-col gap-y-2 overflow-y-auto p-4">
+        {isLoading && (
+          <p className="text-center text-sm text-muted-foreground">
+            Loading...
+          </p>
+        )}
+
+        {error && (
+          <p className="text-center text-sm text-destructive">
+            {error}
+          </p>
+        )}
+
+        {!isLoading && !error && conversations.length === 0 && (
+          <p className="text-center text-sm text-muted-foreground">
+            No conversations yet
+          </p>
+        )}
+
+        {conversations.map((conversation) => (
+          <Button
+            className="h-20 w-full justify-between"
+            key={conversation.id}
+            variant="outline"
+            onClick={() => {
+              setConversationId(conversation.id);
+              setScreen("chat");
+            }}
+          >
+            <div className="flex w-full flex-col gap-4 overflow-hidden text-start">
+              <div className="flex w-full items-center justify-between gap-x-2">
+                <p className="text-xs text-muted-foreground">
+                  Chat
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDistanceToNow(
+                    new Date(conversation.createdAt),
+                    { addSuffix: true },
+                  )}
+                </p>
               </div>
-            </Button>
-          ))
-        }
-        <InfiniteScrollTrigger
-          canLoadMore={canLoadMore}
-          isLoadingMore={isLoadingMore}
-          onLoadMore={handleLoadMore}
-          ref={topElementRef}
-        />
+
+              <div className="flex w-full items-center justify-between gap-x-2">
+                <p className="truncate text-sm">
+                  Conversation
+                </p>
+                <ConversationStatusIcon
+                  status={conversation.status}
+                  className="shrink-0"
+                />
+              </div>
+            </div>
+          </Button>
+        ))}
       </div>
+
       <WidgetFooter />
     </>
   );

@@ -3,10 +3,7 @@ import "./env.js";
 import { environment, validateServerEnvironment } from "./env.js";
 
 validateServerEnvironment();
-import {
-  pool,
-  verifyDatabaseEnvironment,
-} from "@workspace/db/node";
+import { pool, verifyDatabaseEnvironment } from "@workspace/db/node";
 import { randomUUID } from "node:crypto";
 import { NestFactory } from "@nestjs/core";
 import { BadRequestException, Logger, ValidationPipe } from "@nestjs/common";
@@ -34,7 +31,9 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix("v1");
 
   app.enableCors({
-    origin: (process.env.WEB_URL ?? "http://localhost:3000")
+    origin: (
+      process.env.WEB_URL ?? "http://localhost:3000,http://localhost:3001"
+    )
       .split(",")
       .map((origin) => origin.trim()),
     credentials: true,

@@ -7,7 +7,7 @@ import { contactSessionIdAtomFamily, errorMessageAtom, loadingMessageAtom, organ
 import { WidgetHeader } from "@/modules/widget/ui/components/widget-header";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@workspace/backend/_generated/api";
-
+import { widgetApi, widgetSession } from "@/lib/widget-api";
 type InitStep = "org" | "session" | "settings" | "vapi" | "done";
 
 export const WidgetLoadingScreen = ({ organizationId }: { organizationId: string | null }) => {
@@ -67,32 +67,59 @@ export const WidgetLoadingScreen = ({ organizationId }: { organizationId: string
   ]);
 
   // Step 2: Validate session (if exists)
-  const validateContactSession = useMutation(api.public.contactSessions.validate);
+
   useEffect(() => {
     if (step !== "session") {
       return;
     }
 
-    setLoadingMessage("Finding contact session ID...");
-
-    if (!contactSessionId) {
+    if (!organizationId || !contactSessionId) {
       setSessionValid(false);
       setStep("settings");
       return;
     }
 
+    const token = widgetSession.get(organizationId);
+
+    if (!token) {
+      setSessionValid(false);
+      setStep("settings");
+      return;
+    }
+
+    let cancelled = false;
+
     setLoadingMessage("Validating session...");
 
-    validateContactSession({ contactSessionId })
+    widgetApi.validateSession(token)
       .then((result) => {
-        setSessionValid(result.valid);
+        if (cancelled) return;
+
+        setSessionValid(
+          result.valid &&
+          result.organizationId === organizationId &&
+          result.contactSessionId === contactSessionId,
+        );
         setStep("settings");
       })
       .catch(() => {
+        if (cancelled) return;
+
+        widgetSession.clear(organizationId);
         setSessionValid(false);
         setStep("settings");
-      })
-  }, [step, contactSessionId, validateContactSession, setLoadingMessage]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    step,
+    organizationId,
+    contactSessionId,
+    setLoadingMessage,
+  ]);
+
 
   // Step 3: Load Widget Settings
   const widgetSettings = useQuery(api.public.widgetSettings.getByOrganizationId, 

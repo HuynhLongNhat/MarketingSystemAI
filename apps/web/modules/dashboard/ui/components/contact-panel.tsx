@@ -1,26 +1,40 @@
+
 "use client";
 
 import Bowser from "bowser";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import {
+  ClockIcon,
+  GlobeIcon,
+  MailIcon,
+  MonitorIcon,
+} from "lucide-react";
+
+import {
+  conversationsApi,
+  type ContactSession,
+} from "@/lib/conversations-api";
+
+import {
+  getCountryFlagUrl,
+  getCountryFromTimezone,
+} from "@/lib/country-utils";
+
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@workspace/ui/components/accordion";
-import { getCountryFlagUrl, getCountryFromTimezone } from "@/lib/country-utils";
-import { api } from "@workspace/backend/_generated/api";
-import { Id } from "@workspace/backend/_generated/dataModel";
+
 import { Button } from "@workspace/ui/components/button";
 import { DicebearAvatar } from "@workspace/ui/components/dicebear-avatar";
-import { useQuery } from "convex/react";
-import { ClockIcon, GlobeIcon, MailIcon, MonitorIcon } from "lucide-react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useMemo } from "react";
 
 type InfoItem = {
   label: string;
-  value: string | React.ReactNode;
+  value: React.ReactNode;
   className?: string;
 };
 
@@ -33,47 +47,98 @@ type InfoSection = {
 
 export const ContactPanel = () => {
   const params = useParams();
-  const conversationId = params.conversationId as (Id<"conversations"> | null);
+  const conversationId =
+    typeof params.conversationId === "string"
+      ? params.conversationId
+      : null;
 
-  const contactSession = useQuery(api.private.contactSessions.getOneByConversationId, 
-    conversationId ? {
-      conversationId,
-    } : "skip",
-  );
+  const [contactSession, setContactSession] =
+    useState<ContactSession | null>(null);
 
-  const parseUserAgent = useMemo(() => {
-    return (userAgent?: string) => {
-      if (!userAgent) {
-        return { browser: "Unknown", os: "Unknown", device: "Unknown" };
-      }
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-      const browser = Bowser.getParser(userAgent);
-      const result = browser.getResult();
+  useEffect(() => {
+    let active = true;
 
-      return {
-        browser: result.browser.name || "Unknown",
-        browserVersion: result.browser.version || "",
-        os: result.os.name || "Unknown",
-        osVersion: result.os.version || "",
-        device: result.platform.type || "desktop",
-        deviceVendor: result.platform.vendor || "",
-        deviceModel: result.platform.model || "",
+    setContactSession(null);
+    setError(null);
+    setLoading(true);
+
+    if (!conversationId) {
+      setLoading(false);
+      return () => {
+        active = false;
       };
+    }
+
+    conversationsApi
+      .getContactSessionByConversation(conversationId)
+      .then((result) => {
+        if (active) {
+          setContactSession(result);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load contact",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
     };
-  }, []);
+  }, [conversationId]);
 
-  const userAgentInfo = useMemo(() => 
-    parseUserAgent(contactSession?.metadata?.userAgent), 
-  [contactSession?.metadata?.userAgent, parseUserAgent]);
+  const userAgentInfo = useMemo(() => {
+    const userAgent = contactSession?.metadata?.userAgent;
 
-  const countryInfo = useMemo(() => {
-    return getCountryFromTimezone(contactSession?.metadata?.timezone);
-  }, [contactSession?.metadata?.timezone]);
+    if (!userAgent) {
+      return {
+        browser: "Unknown",
+        browserVersion: "",
+        os: "Unknown",
+        osVersion: "",
+        device: "Unknown",
+        deviceModel: "",
+      };
+    }
+
+    const result = Bowser.getParser(userAgent).getResult();
+
+    return {
+      browser: result.browser.name ?? "Unknown",
+      browserVersion: result.browser.version ?? "",
+      os: result.os.name ?? "Unknown",
+      osVersion: result.os.version ?? "",
+      device: result.platform.type ?? "desktop",
+      deviceModel: result.platform.model ?? "",
+    };
+  }, [contactSession?.metadata?.userAgent]);
+
+  const countryInfo = useMemo(
+    () =>
+      getCountryFromTimezone(
+        contactSession?.metadata?.timezone,
+      ),
+    [contactSession?.metadata?.timezone],
+  );
 
   const accordionSections = useMemo<InfoSection[]>(() => {
     if (!contactSession?.metadata) {
       return [];
     }
+
+    const metadata = contactSession.metadata;
 
     return [
       {
@@ -83,41 +148,48 @@ export const ContactPanel = () => {
         items: [
           {
             label: "Browser",
-            value:
-              userAgentInfo.browser + 
-                (userAgentInfo.browserVersion
-                  ? ` ${userAgentInfo.browserVersion}`
-                  : ""
-                ),
+            value: [
+              userAgentInfo.browser,
+              userAgentInfo.browserVersion,
+            ]
+              .filter(Boolean)
+              .join(" "),
           },
           {
             label: "OS",
-            value:
-              userAgentInfo.os +
-                (userAgentInfo.osVersion ? ` ${userAgentInfo.osVersion}` : ""),
+            value: [
+              userAgentInfo.os,
+              userAgentInfo.osVersion,
+            ]
+              .filter(Boolean)
+              .join(" "),
           },
           {
             label: "Device",
-            value:
-              userAgentInfo.device +
-                (
-                  userAgentInfo.deviceModel
-                    ? ` - ${userAgentInfo.deviceModel}`
-                    : ""
-                ),
-              className: "capitalize"
+            value: [
+              userAgentInfo.device,
+              userAgentInfo.deviceModel,
+            ]
+              .filter(Boolean)
+              .join(" - "),
+            className: "capitalize",
           },
           {
             label: "Screen",
-            value: contactSession.metadata.screenResolution,
+            value: metadata.screenResolution ?? "Unknown",
           },
           {
             label: "Viewport",
-            value: contactSession.metadata.viewportSize,
+            value: metadata.viewportSize ?? "Unknown",
           },
           {
             label: "Cookies",
-            value: contactSession.metadata.cookieEnabled ? "Enabled" : "Disabled"
+            value:
+              metadata.cookieEnabled === undefined
+                ? "Unknown"
+                : metadata.cookieEnabled
+                  ? "Enabled"
+                  : "Disabled",
           },
         ],
       },
@@ -128,48 +200,68 @@ export const ContactPanel = () => {
         items: [
           ...(countryInfo
             ? [
-              {
-                label: "Country",
-                value: (
-                  <span>
-                    {countryInfo.name}
-                  </span>
-                )
-              }
-            ]
-            : []
-          ),
+                {
+                  label: "Country",
+                  value: countryInfo.name,
+                },
+              ]
+            : []),
           {
             label: "Language",
-            value: contactSession.metadata.language,
+            value: metadata.language ?? "Unknown",
           },
           {
             label: "Timezone",
-            value: contactSession.metadata.timezone,
+            value: metadata.timezone ?? "Unknown",
           },
           {
             label: "UTC Offset",
-            value: contactSession.metadata.timezoneOffset,
-          }
-        ]
+            value:
+              metadata.timezoneOffset === undefined
+                ? "Unknown"
+                : String(metadata.timezoneOffset),
+          },
+        ],
       },
       {
-        id: "section-details",
-        title: "Section details",
+        id: "session-details",
         icon: ClockIcon,
+        title: "Session Details",
         items: [
           {
             label: "Session Started",
             value: new Date(
-              contactSession._creationTime
+              contactSession.createdAt,
             ).toLocaleString(),
-          }
+          },
+          {
+            label: "Session Expires",
+            value: new Date(
+              contactSession.expiresAt,
+            ).toLocaleString(),
+          },
         ],
-      }
+      },
     ];
   }, [contactSession, userAgentInfo, countryInfo]);
 
-  if (contactSession === undefined || contactSession === null) {
+  if (loading) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        Loading contact...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-destructive">
+        {error}
+      </div>
+    );
+  }
+
+  if (!contactSession) {
     return null;
   }
 
@@ -183,20 +275,21 @@ export const ContactPanel = () => {
                 ? getCountryFlagUrl(countryInfo.code)
                 : undefined
             }
-            seed={contactSession._id}
+            seed={contactSession.id}
             size={42}
           />
+
           <div className="flex-1 overflow-hidden">
-            <div className="flex items-center gap-x-2">
-              <h4 className="line-clamp-1">
-                {contactSession.name}
-              </h4>
-            </div>
-            <p className="line-clamp-1 text-muted-foreground text-sm">
+            <h4 className="line-clamp-1">
+              {contactSession.name}
+            </h4>
+
+            <p className="line-clamp-1 text-sm text-muted-foreground">
               {contactSession.email}
             </p>
           </div>
         </div>
+
         <Button asChild className="w-full" size="lg">
           <Link href={`mailto:${contactSession.email}`}>
             <MailIcon />
@@ -205,44 +298,49 @@ export const ContactPanel = () => {
         </Button>
       </div>
 
-      <div>
-        {contactSession.metadata && (
-          <Accordion
-            className="w-full rounded-none border-y"
-            collapsible
-            type="single"
-          >
-            {accordionSections.map((section) => (
-              <AccordionItem
-                className="rounded-none outline-none has-focus-visible:z-10 has-focus-visible:border-ring has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50"
-                key={section.id}
-                value={section.id}
-              >
-                <AccordionTrigger
-                  className="flex w-full flex-1 items-start justify-between gap-4 rounded-none bg-accent px-5 py-4 text-left font-medium text-sm outline-none transition-all hover:no-underline disabled:pointer-events-none disabled:opacity-50"
-                >
-                  <div className="flex items-center gap-4">
-                    <section.icon className="size-4 shrink-0" />
-                    <span>{section.title}</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-5 py-4">
-                  <div className="space-y-2 text-sm">
-                    {section.items.map((item) => (
-                      <div className="flex justify-between" key={`${section.id}-${item.label}`}>
-                        <span className="text-muted-foreground">
-                          {item.label}:
-                        </span>
-                        <span className={item.className}>{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        )}
-      </div>
+      {contactSession.metadata && (
+        <Accordion
+          className="w-full rounded-none border-y"
+          collapsible
+          type="single"
+        >
+          {accordionSections.map((section) => (
+            <AccordionItem
+              key={section.id}
+              value={section.id}
+              className="rounded-none outline-none has-focus-visible:z-10 has-focus-visible:border-ring has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50"
+            >
+              <AccordionTrigger className="flex w-full flex-1 items-start justify-between gap-4 rounded-none bg-accent px-5 py-4 text-left font-medium text-sm outline-none transition-all hover:no-underline">
+                <div className="flex items-center gap-4">
+                  <section.icon className="size-4 shrink-0" />
+                  <span>{section.title}</span>
+                </div>
+              </AccordionTrigger>
+
+              <AccordionContent className="px-5 py-4">
+                <div className="space-y-2 text-sm">
+                  {section.items.map((item) => (
+                    <div
+                      key={`${section.id}-${item.label}`}
+                      className="flex justify-between gap-3"
+                    >
+                      <span className="shrink-0 text-muted-foreground">
+                        {item.label}:
+                      </span>
+
+                      <span
+                        className={`min-w-0 break-words text-right ${item.className ?? ""}`}
+                      >
+                        {item.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
     </div>
   );
 };

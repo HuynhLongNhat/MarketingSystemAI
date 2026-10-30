@@ -1,12 +1,37 @@
+
 "use client";
 
-import { useInfiniteScroll } from "@workspace/ui/hooks/use-infinite-scroll";
-import { InfiniteScrollTrigger } from "@workspace/ui/components/infinite-scroll-trigger";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { getCountryFlagUrl, getCountryFromTimezone } from "@/lib/country-utils";
-import { api } from "@workspace/backend/_generated/api";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAtomValue, useSetAtom } from "jotai/react";
+
+import {
+  ArrowRightIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ListIcon,
+} from "lucide-react";
+
+import {
+  conversationsApi,
+  type ConversationWithContact,
+  type ConversationStatus,
+} from "@/lib/conversations-api";
+
+import {
+  getCountryFlagUrl,
+  getCountryFromTimezone,
+} from "@/lib/country-utils";
+
 import { DicebearAvatar } from "@workspace/ui/components/dicebear-avatar";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
+import { Button } from "@workspace/ui/components/button";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { ConversationStatusIcon } from "@workspace/ui/components/conversation-status-icon";
+import { cn } from "@workspace/ui/lib/utils";
+
 import {
   Select,
   SelectContent,
@@ -14,15 +39,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import { cn } from "@workspace/ui/lib/utils";
-import { usePaginatedQuery } from "convex/react";
-import { ListIcon, ArrowRightIcon, ArrowUpIcon, CheckIcon, CornerUpLeftIcon } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ConversationStatusIcon } from "@workspace/ui/components/conversation-status-icon";
-import { useAtomValue, useSetAtom } from "jotai/react";
+
 import { statusFilterAtom } from "../../atoms";
-import { Skeleton } from "@workspace/ui/components/skeleton";
+
+const PAGE_SIZE = 10;
 
 export const ConversationsPanel = () => {
   const pathname = usePathname();
@@ -30,46 +50,137 @@ export const ConversationsPanel = () => {
   const statusFilter = useAtomValue(statusFilterAtom);
   const setStatusFilter = useSetAtom(statusFilterAtom);
 
-  const conversations = usePaginatedQuery(
-    api.private.conversations.getMany,
-    {
-      status: 
-        statusFilter === "all"
-          ? undefined
-          : statusFilter,
-    },
-    {
-      initialNumItems: 10,
-    },
-  );
+  const [items, setItems] = useState<ConversationWithContact[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const {
-    topElementRef,
-    handleLoadMore,
-    canLoadMore,
-    isLoadingMore,
-    isLoadingFirstPage,
-  } = useInfiniteScroll({
-    status: conversations.status,
-    loadMore: conversations.loadMore,
-    loadSize: 10,
-  });
+  const requestVersion = useRef(0);
+  const loadingMoreRef = useRef(false);
+
+  const status =
+    statusFilter === "all"
+      ? undefined
+      : (statusFilter as ConversationStatus);
+
+  const loadFirstPage = useCallback(async () => {
+    const version = ++requestVersion.current;
+
+    setLoading(true);
+    setError(null);
+    setItems([]);
+    setCursor(null);
+    setHasMore(false);
+
+    try {
+      const result = await conversationsApi.listPage({
+        status,
+        limit: PAGE_SIZE,
+      });
+
+      if (version !== requestVersion.current) return;
+
+      setItems(result.items);
+      setCursor(result.nextCursor);
+      setHasMore(result.hasMore);
+    } catch (err) {
+      if (version !== requestVersion.current) return;
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load conversations",
+      );
+    } finally {
+      if (version === requestVersion.current) {
+        setLoading(false);
+      }
+    }
+  }, [status]);
+
+  useEffect(() => {
+    void loadFirstPage();
+
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [loadFirstPage]);
+
+  const loadMore = useCallback(async () => {
+    if (
+      loading ||
+      loadingMoreRef.current ||
+      !hasMore ||
+      !cursor
+    ) {
+      return;
+    }
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setError(null);
+
+    const version = requestVersion.current;
+
+    try {
+      const result = await conversationsApi.listPage({
+        status,
+        cursor,
+        limit: PAGE_SIZE,
+      });
+
+      if (version !== requestVersion.current) return;
+
+      setItems((current) => {
+        const existingIds = new Set(
+          current.map((item) => item.id),
+        );
+
+        return [
+          ...current,
+          ...result.items.filter(
+            (item) => !existingIds.has(item.id),
+          ),
+        ];
+      });
+
+      setCursor(result.nextCursor);
+      setHasMore(result.hasMore);
+    } catch (err) {
+      if (version !== requestVersion.current) return;
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load more conversations",
+      );
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [loading, hasMore, cursor, status]);
 
   return (
     <div className="flex h-full w-full flex-col bg-background text-sidebar-foreground">
       <div className="flex flex-col gap-3.5 border-b p-2">
         <Select
-          defaultValue="all"
-          onValueChange={(value) => setStatusFilter(
-            value as "unresolved" | "escalated" | "resolved" | "all"
-          )}
           value={statusFilter}
+          onValueChange={(value) =>
+            setStatusFilter(
+              value as
+                | "all"
+                | "unresolved"
+                | "escalated"
+                | "resolved",
+            )
+          }
         >
-          <SelectTrigger
-            className="h-8 border-none px-1.5 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0"
-          >
+          <SelectTrigger className="h-8 border-none px-1.5 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
             <SelectValue placeholder="Filter" />
           </SelectTrigger>
+
           <SelectContent>
             <SelectItem value="all">
               <div className="flex items-center gap-2">
@@ -77,18 +188,21 @@ export const ConversationsPanel = () => {
                 <span>All</span>
               </div>
             </SelectItem>
+
             <SelectItem value="unresolved">
               <div className="flex items-center gap-2">
                 <ArrowRightIcon className="size-4" />
                 <span>Unresolved</span>
               </div>
             </SelectItem>
+
             <SelectItem value="escalated">
               <div className="flex items-center gap-2">
                 <ArrowUpIcon className="size-4" />
                 <span>Escalated</span>
               </div>
             </SelectItem>
+
             <SelectItem value="resolved">
               <div className="flex items-center gap-2">
                 <CheckIcon className="size-4" />
@@ -98,86 +212,125 @@ export const ConversationsPanel = () => {
           </SelectContent>
         </Select>
       </div>
-      {isLoadingFirstPage ? (
+
+      {loading ? (
         <SkeletonConversations />
       ) : (
         <ScrollArea className="max-h-[calc(100vh-53px)]">
-          <div className="flex w-full flex-1 flex-col text-sm">
-            {conversations.results.map((conversation) => {
-              const isLastMessageFromOperator =
-                conversation.lastMessage?.message?.role !== "user";
+          <div className="flex w-full flex-col text-sm">
+            {items.map((conversation) => {
+              const contact = conversation.contactSession;
 
               const country = getCountryFromTimezone(
-                conversation.contactSession.metadata?.timezone
+                contact.metadata?.timezone,
               );
 
-              const countryFlagUrl = country?.code
+              const flagUrl = country?.code
                 ? getCountryFlagUrl(country.code)
                 : undefined;
 
+              const active =
+                pathname ===
+                `/conversations/${conversation.id}`;
+
               return (
                 <Link
-                  key={conversation._id}
+                  key={conversation.id}
+                  href={`/conversations/${conversation.id}`}
                   className={cn(
                     "relative flex cursor-pointer items-start gap-3 border-b p-4 py-5 text-sm leading-tight hover:bg-accent hover:text-accent-foreground",
-                    pathname === `/conversations/${conversation._id}` &&
-                      "bg-accent text-accent-foreground"
+                    active &&
+                      "bg-accent text-accent-foreground",
                   )}
-                  href={`/conversations/${conversation._id}`}
                 >
-                  <div className={cn(
-                    "-translate-y-1/2 absolute top-1/2 left-0 h-[64%] w-1 rounded-r-full bg-neutral-300 opacity-0 transition-opacity",
-                    pathname === `/conversations/${conversation._id}` &&
-                      "opacity-100"
-                  )} />
+                  <div
+                    className={cn(
+                      "absolute left-0 top-1/2 h-[64%] w-1 -translate-y-1/2 rounded-r-full bg-neutral-300 opacity-0 transition-opacity",
+                      active && "opacity-100",
+                    )}
+                  />
 
                   <DicebearAvatar
-                    seed={conversation.contactSession._id}
-                    badgeImageUrl={countryFlagUrl}
+                    seed={contact.id}
+                    badgeImageUrl={flagUrl}
                     size={40}
                     className="shrink-0"
                   />
-                  <div className="flex-1">
-                    <div className="flex w-full items-center gap-2">
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
                       <span className="truncate font-bold">
-                        {conversation.contactSession.name}
+                        {contact.name}
                       </span>
-                      <span className="ml-auto shrink-0 text-muted-foreground text-xs">
-                        {formatDistanceToNow(conversation._creationTime)}
+
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                        {formatDistanceToNow(
+                          new Date(conversation.createdAt),
+                        )}
                       </span>
                     </div>
+
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <div className="flex w-0 grow items-center gap-1">
-                        {isLastMessageFromOperator && (
-                          <CornerUpLeftIcon className="size-3 shrink-0 text-muted-foreground" />
-                        )}
-                        <span
-                          className={cn(
-                            "line-clamp-1 text-muted-foreground text-xs",
-                            !isLastMessageFromOperator && "font-bold text-black"
-                          )}
-                        >
-                          {conversation.lastMessage?.text}
-                        </span>
-                      </div>
-                      <ConversationStatusIcon status={conversation.status} />
+                      <span className="truncate text-xs text-muted-foreground">
+                        {conversation.status}
+                      </span>
+
+                      <ConversationStatusIcon
+                        status={conversation.status}
+                      />
                     </div>
                   </div>
                 </Link>
-              )
+              );
             })}
-            <InfiniteScrollTrigger
-              canLoadMore={canLoadMore}
-              isLoadingMore={isLoadingMore}
-              onLoadMore={handleLoadMore}
-              ref={topElementRef}
-            />
+
+            {items.length === 0 && !error && (
+              <p className="p-6 text-center text-sm text-muted-foreground">
+                No conversations found.
+              </p>
+            )}
+
+            {error && (
+              <div className="space-y-2 p-4">
+                <p className="text-sm text-destructive">
+                  {error}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    void (
+                      items.length > 0
+                        ? loadMore()
+                        : loadFirstPage()
+                    )
+                  }
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+
+            {hasMore && !error && (
+              <div className="p-4 text-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingMore}
+                  onClick={() => void loadMore()}
+                >
+                  {loadingMore
+                    ? "Loading..."
+                    : "Load more"}
+                </Button>
+              </div>
+            )}
           </div>
         </ScrollArea>
       )}
     </div>
-  )
-}
+  );
+};
 
 export const SkeletonConversations = () => {
   return (
@@ -190,11 +343,13 @@ export const SkeletonConversations = () => {
               key={index}
             >
               <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+
               <div className="min-w-0 flex-1">
-                <div className="flex w-full items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="ml-auto h-3 w-12 shrink-0" />
                 </div>
+
                 <div className="mt-2">
                   <Skeleton className="h-3 w-full" />
                 </div>
@@ -204,5 +359,5 @@ export const SkeletonConversations = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};

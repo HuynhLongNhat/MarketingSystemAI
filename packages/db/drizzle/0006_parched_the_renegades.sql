@@ -1,0 +1,2 @@
+ALTER TABLE "contact_sessions" ADD COLUMN "session_token_hash" text;--> statement-breakpoint
+ALTER TABLE "contact_sessions" ADD CONSTRAINT "contact_sessions_session_token_hash_unique" UNIQUE("session_token_hash");

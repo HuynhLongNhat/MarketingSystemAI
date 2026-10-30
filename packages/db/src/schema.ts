@@ -227,6 +227,8 @@ export const contactSessions = pgTable(
   {
     id: text("id").primaryKey(),
 
+    sessionTokenHash: text("session_token_hash").unique(),
+
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, {
@@ -240,26 +242,29 @@ export const contactSessions = pgTable(
       withTimezone: true,
     }).notNull(),
 
-    metadata: jsonb("metadata")
-      .$type<ContactSessionMetadata>(),
+    metadata: jsonb("metadata").$type<ContactSessionMetadata>(),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,
-    }).notNull().defaultNow(),
+    })
+      .notNull()
+      .defaultNow(),
 
     updatedAt: timestamp("updated_at", {
       withTimezone: true,
-    }).notNull().defaultNow(),
+    })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
-    index("contact_sessions_org_idx")
-      .on(table.organizationId),
+    index("contact_sessions_org_idx").on(table.organizationId),
 
-    index("contact_sessions_expires_idx")
-      .on(table.expiresAt),
+    index("contact_sessions_expires_idx").on(table.expiresAt),
 
-    uniqueIndex("contact_sessions_id_org_unique")
-      .on(table.id, table.organizationId),
+    uniqueIndex("contact_sessions_id_org_unique").on(
+      table.id,
+      table.organizationId,
+    ),
   ],
 );
 
@@ -273,8 +278,7 @@ export const CONVERSATION_STATUSES = [
   "resolved",
 ] as const;
 
-export type ConversationStatus =
-  (typeof CONVERSATION_STATUSES)[number];
+export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
 
 export const conversations = pgTable(
   "conversations",
@@ -287,56 +291,107 @@ export const conversations = pgTable(
         onDelete: "cascade",
       }),
 
-    contactSessionId: text("contact_session_id")
-      .notNull(),
+    contactSessionId: text("contact_session_id").notNull(),
 
     // Nullable until the new AI runtime is integrated.
     threadId: text("thread_id").unique(),
 
     status: text("status", {
       enum: CONVERSATION_STATUSES,
-    }).notNull().default("unresolved"),
+    })
+      .notNull()
+      .default("unresolved"),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,
-    }).notNull().defaultNow(),
+    })
+      .notNull()
+      .defaultNow(),
 
     updatedAt: timestamp("updated_at", {
       withTimezone: true,
-    }).notNull().defaultNow(),
+    })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     foreignKey({
       name: "conversations_session_org_fk",
-      columns: [
-        table.contactSessionId,
-        table.organizationId,
-      ],
-      foreignColumns: [
-        contactSessions.id,
-        contactSessions.organizationId,
-      ],
+      columns: [table.contactSessionId, table.organizationId],
+      foreignColumns: [contactSessions.id, contactSessions.organizationId],
     }).onDelete("cascade"),
+    uniqueIndex("conversations_id_org_unique").on(
+      table.id,
+      table.organizationId,
+    ),
+    index("conversations_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
 
-    index("conversations_org_status_idx")
-      .on(table.organizationId, table.status),
+    index("conversations_session_idx").on(table.contactSessionId),
 
-    index("conversations_session_idx")
-      .on(table.contactSessionId),
-
-    index("conversations_org_created_idx")
-      .on(table.organizationId, table.createdAt),
+    index("conversations_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
   ],
 );
 
-export type ContactSession =
-  typeof contactSessions.$inferSelect;
+export type ContactSession = typeof contactSessions.$inferSelect;
 
-export type NewContactSession =
-  typeof contactSessions.$inferInsert;
+export type NewContactSession = typeof contactSessions.$inferInsert;
 
-export type Conversation =
-  typeof conversations.$inferSelect;
+export type Conversation = typeof conversations.$inferSelect;
 
-export type NewConversation =
-  typeof conversations.$inferInsert;
+export type NewConversation = typeof conversations.$inferInsert;
+
+export const MESSAGE_ROLES = ["user", "assistant", "system", "tool"] as const;
+
+export type MessageRole = (typeof MESSAGE_ROLES)[number];
+
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    id: text("id").primaryKey(),
+
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+
+    conversationId: text("conversation_id").notNull(),
+
+    role: text("role", {
+      enum: MESSAGE_ROLES,
+    }).notNull(),
+
+    content: text("content").notNull(),
+
+    senderId: text("sender_id"),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "conversation_messages_conversation_org_fk",
+      columns: [table.conversationId, table.organizationId],
+      foreignColumns: [conversations.id, conversations.organizationId],
+    }).onDelete("cascade"),
+
+    index("conversation_messages_org_conversation_created_idx").on(
+      table.organizationId,
+      table.conversationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export type ConversationMessage = typeof conversationMessages.$inferSelect;
+
+export type NewConversationMessage = typeof conversationMessages.$inferInsert;

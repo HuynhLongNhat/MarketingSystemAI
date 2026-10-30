@@ -1,26 +1,27 @@
+
 "use client";
 
-import { AISuggestion, AISuggestions } from "@workspace/ui/components/ai/suggestion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { useThreadMessages, toUIMessages } from "@convex-dev/agent/react";
-import { WidgetHeader } from "@/modules/widget/ui/components/widget-header";
-import { Button } from "@workspace/ui/components/button";
-import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowLeftIcon, MenuIcon } from "lucide-react";
+
+import {
+  AISuggestion,
+  AISuggestions,
+} from "@workspace/ui/components/ai/suggestion";
+import { Button } from "@workspace/ui/components/button";
 import { DicebearAvatar } from "@workspace/ui/components/dicebear-avatar";
-import { useInfiniteScroll } from "@workspace/ui/hooks/use-infinite-scroll";
-import { InfiniteScrollTrigger } from "@workspace/ui/components/infinite-scroll-trigger";
-import { contactSessionIdAtomFamily, conversationIdAtom, organizationIdAtom, screenAtom, widgetSettingsAtom } from "../../atoms/widget-atoms";
-import { useAction, useQuery } from "convex/react";
-import { api } from "@workspace/backend/_generated/api";
 import { Form, FormField } from "@workspace/ui/components/form";
+
 import {
   AIConversation,
   AIConversationContent,
   AIConversationScrollButton,
 } from "@workspace/ui/components/ai/conversation";
+
 import {
   AIInput,
   AIInputSubmit,
@@ -28,93 +29,234 @@ import {
   AIInputToolbar,
   AIInputTools,
 } from "@workspace/ui/components/ai/input";
+
 import {
   AIMessage,
   AIMessageContent,
 } from "@workspace/ui/components/ai/message";
 import { AIResponse } from "@workspace/ui/components/ai/response";
-import { useMemo } from "react";
+
+import { WidgetHeader } from "../components/widget-header";
+import {
+  conversationIdAtom,
+  organizationIdAtom,
+  screenAtom,
+  widgetSettingsAtom,
+} from "../../atoms/widget-atoms";
+import {
+  widgetApi,
+  widgetSession,
+  type WidgetConversation,
+  type WidgetMessage,
+} from "@/lib/widget-api";
 
 const formSchema = z.object({
-  message: z.string().min(1, "Message is required"),
+  message: z.string().trim().min(1, "Message is required"),
 });
+
+type FormValues = z.infer<typeof formSchema>;
 
 export const WidgetChatScreen = () => {
   const setScreen = useSetAtom(screenAtom);
   const setConversationId = useSetAtom(conversationIdAtom);
 
-  const widgetSettings = useAtomValue(widgetSettingsAtom);
   const conversationId = useAtomValue(conversationIdAtom);
   const organizationId = useAtomValue(organizationIdAtom);
-  const contactSessionId = useAtomValue(
-    contactSessionIdAtomFamily(organizationId || "")
-  );
+  const settings = useAtomValue(widgetSettingsAtom);
+
+  const [conversation, setConversation] =
+    useState<WidgetConversation | null>(null);
+
+  const [messages, setMessages] = useState<WidgetMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    mode: "onChange",
+    defaultValues: { message: "" },
+  });
+
+  const suggestions = useMemo(() => {
+    if (!settings) return [];
+
+    return Object.values(settings.defaultSuggestions).filter(
+      (value): value is string =>
+        typeof value === "string" && value.length > 0,
+    );
+  }, [settings]);
+
+  const loadConversation = useCallback(async () => {
+    if (!organizationId || !conversationId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const token = widgetSession.get(organizationId);
+
+    if (!token) {
+      setScreen("auth");
+      return;
+    }
+
+    try {
+      const [details, page] = await Promise.all([
+        widgetApi.getConversation(token, conversationId),
+        widgetApi.listMessages(token, conversationId),
+      ]);
+
+      setConversation(details);
+      setMessages(page.items);
+      setNextBefore(page.nextBefore);
+      setHasMore(page.hasMore);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError("Unable to load chat");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [organizationId, conversationId, setScreen]);
+
+  useEffect(() => {
+    void loadConversation();
+  }, [loadConversation]);
+
+  const refreshMessages = useCallback(async () => {
+    if (!organizationId || !conversationId) return;
+
+    const token = widgetSession.get(organizationId);
+    if (!token) return;
+
+    try {
+      const [details, page] = await Promise.all([
+        widgetApi.getConversation(token, conversationId),
+        widgetApi.listMessages(token, conversationId),
+      ]);
+
+      setConversation(details);
+
+      setMessages((current) => {
+        const map = new Map(
+          current.map((message) => [message.id, message]),
+        );
+
+        for (const message of page.items) {
+          map.set(message.id, message);
+        }
+
+        return Array.from(map.values()).sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() -
+            new Date(b.createdAt).getTime() ||
+            a.id.localeCompare(b.id),
+        );
+      });
+    } catch (err) {
+      console.error("Message refresh failed", err);
+    }
+  }, [organizationId, conversationId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshMessages();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [refreshMessages]);
+
+  const loadMore = async () => {
+    if (
+      !organizationId ||
+      !conversationId ||
+      !nextBefore ||
+      !hasMore ||
+      isLoadingMore
+    ) {
+      return;
+    }
+
+    const token = widgetSession.get(organizationId);
+    if (!token) return;
+
+    setIsLoadingMore(true);
+
+    try {
+      const page = await widgetApi.listMessages(
+        token,
+        conversationId,
+        nextBefore,
+      );
+
+      setMessages((current) => {
+        const map = new Map(
+          [...page.items, ...current].map(
+            (message) => [message.id, message],
+          ),
+        );
+
+        return Array.from(map.values()).sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() -
+            new Date(b.createdAt).getTime() ||
+            a.id.localeCompare(b.id),
+        );
+      });
+
+      setHasMore(page.hasMore);
+      setNextBefore(page.nextBefore);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const onSubmit = async (values: FormValues) => {
+    if (
+      !organizationId ||
+      !conversationId ||
+      conversation?.status === "resolved" ||
+      isSending
+    ) {
+      return;
+    }
+
+    const token = widgetSession.get(organizationId);
+    if (!token) return;
+
+    setIsSending(true);
+
+    try {
+      const message = await widgetApi.sendMessage(
+        token,
+        conversationId,
+        values.message.trim(),
+      );
+
+      setMessages((current) => [...current, message]);
+      form.reset({ message: "" });
+      await refreshMessages();
+    } catch (err) {
+      console.error(err);
+      setError("Unable to send message");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const onBack = () => {
     setConversationId(null);
     setScreen("selection");
   };
 
-  const suggestions = useMemo(() => {
-    if (!widgetSettings) {
-      return [];
-    }
-
-    return Object.keys(widgetSettings.defaultSuggestions).map((key) => {
-      return widgetSettings.defaultSuggestions[
-        key as keyof typeof widgetSettings.defaultSuggestions
-      ];
-    });
-  }, [widgetSettings]);
-
-  const conversation = useQuery(
-    api.public.conversations.getOne,
-    conversationId && contactSessionId
-      ? {
-          conversationId,
-          contactSessionId,
-        } 
-      : "skip"
-  );
-
-  const messages = useThreadMessages(
-    api.public.messages.getMany,
-    conversation?.threadId && contactSessionId
-      ? {
-          threadId: conversation.threadId,
-          contactSessionId,
-        }
-      : "skip",
-    { initialNumItems: 10 },
-  );
-
-  const { topElementRef, handleLoadMore, canLoadMore, isLoadingMore } = useInfiniteScroll({
-    status: messages.status,
-    loadMore: messages.loadMore,
-    loadSize: 10,
-  });
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      message: "",
-    },
-  });
-
-  const createMessage = useAction(api.public.messages.create);
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!conversation || !contactSessionId) {
-      return;
-    }
-
-    form.reset();
-
-    await createMessage({
-      threadId: conversation.threadId,
-      prompt: values.message,
-      contactSessionId,
-    });
-  };
+  const isResolved = conversation?.status === "resolved";
 
   return (
     <>
@@ -129,103 +271,127 @@ export const WidgetChatScreen = () => {
           </Button>
           <p>Chat</p>
         </div>
-        <Button
-          size="icon"
-          variant="transparent"
-        >
+
+        <Button size="icon" variant="transparent">
           <MenuIcon />
         </Button>
       </WidgetHeader>
+
       <AIConversation>
         <AIConversationContent>
-          <InfiniteScrollTrigger
-            canLoadMore={canLoadMore}
-            isLoadingMore={isLoadingMore}
-            onLoadMore={handleLoadMore}
-            ref={topElementRef}
-          />
-          {toUIMessages(messages.results ?? [])?.map((message) => {
-            return (
-              <AIMessage
-                from={message.role === "user" ? "user" : "assistant"}
-                key={message.id}
-              >
-                <AIMessageContent>
-                  <AIResponse>{message.content}</AIResponse>
-                </AIMessageContent>
-                {message.role === "assistant" && (
-                  <DicebearAvatar
-                    imageUrl="/logo.svg"
-                    seed="assistant"
-                    size={32}
-                  />
-                )}
-              </AIMessage>
-            )
-          })}
-        </AIConversationContent>
-      </AIConversation>
-      {toUIMessages(messages.results ?? [])?.length === 1 && (
-        <AISuggestions className="flex w-full flex-col items-end p-2">
-          {suggestions.map((suggestion) => {
-            if (!suggestion) {
-              return null;
-            }
+          {isLoading && (
+            <p className="p-4 text-center text-sm text-muted-foreground">
+              Loading conversation...
+            </p>
+          )}
 
-            return (
-              <AISuggestion
-                key={suggestion}
-                onClick={() => {
-                  form.setValue("message", suggestion, {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                    shouldTouch: true,
-                  });
-                  form.handleSubmit(onSubmit)();
-                }}
-                suggestion={suggestion}
-              />
-            )
-          })}
-        </AISuggestions>
-      )}
-      <Form {...form}>
-          <AIInput
-            className="rounded-none border-x-0 border-b-0"
-            onSubmit={form.handleSubmit(onSubmit)}
-          >
-            <FormField
-              control={form.control}
-              disabled={conversation?.status === "resolved"}
-              name="message"
-              render={({ field }) => (
-                <AIInputTextarea
-                  disabled={conversation?.status === "resolved"}
-                  onChange={field.onChange}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      form.handleSubmit(onSubmit)();
-                    }
-                  }}
-                  placeholder={
-                    conversation?.status === "resolved"
-                      ? "This conversation has been resolved."
-                      : "Type your message..."
-                  }
-                  value={field.value}
+          {error && (
+            <p className="p-2 text-center text-sm text-destructive">
+              {error}
+            </p>
+          )}
+
+          {hasMore && (
+            <div className="flex justify-center py-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isLoadingMore}
+                onClick={() => void loadMore()}
+              >
+                {isLoadingMore ? "Loading..." : "Load older messages"}
+              </Button>
+            </div>
+          )}
+
+          {messages.map((message) => (
+            <AIMessage
+              from={message.role === "user" ? "user" : "assistant"}
+              key={message.id}
+            >
+              <AIMessageContent>
+                <AIResponse>{message.content}</AIResponse>
+              </AIMessageContent>
+
+              {message.role === "assistant" && (
+                <DicebearAvatar
+                  imageUrl="/logo.svg"
+                  seed="assistant"
+                  size={32}
                 />
               )}
+            </AIMessage>
+          ))}
+        </AIConversationContent>
+
+        <AIConversationScrollButton />
+      </AIConversation>
+
+      {messages.length === 1 && suggestions.length > 0 && (
+        <AISuggestions className="flex w-full flex-col items-end p-2">
+          {suggestions.map((suggestion) => (
+            <AISuggestion
+              key={suggestion}
+              suggestion={suggestion}
+              onClick={() => {
+                form.setValue("message", suggestion, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                  shouldTouch: true,
+                });
+                void form.handleSubmit(onSubmit)();
+              }}
             />
-            <AIInputToolbar>
-              <AIInputTools />
-              <AIInputSubmit
-                disabled={conversation?.status === "resolved" || !form.formState.isValid}
-                status="ready"
-                type="submit"
+          ))}
+        </AISuggestions>
+      )}
+
+      <Form {...form}>
+        <AIInput
+          className="rounded-none border-x-0 border-b-0"
+          onSubmit={form.handleSubmit(onSubmit)}
+        >
+          <FormField
+            control={form.control}
+            name="message"
+            render={({ field }) => (
+              <AIInputTextarea
+                disabled={isResolved || isSending || isLoading}
+                onChange={field.onChange}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    void form.handleSubmit(onSubmit)();
+                  }
+                }}
+                placeholder={
+                  isResolved
+                    ? "This conversation has been resolved."
+                    : "Type your message..."
+                }
+                value={field.value}
               />
-            </AIInputToolbar>
-          </AIInput>
+            )}
+          />
+
+          <AIInputToolbar>
+            <AIInputTools />
+            <AIInputSubmit
+              disabled={
+                isResolved ||
+                isLoading ||
+                isSending ||
+                !form.formState.isValid
+              }
+              status="ready"
+              type="submit"
+            />
+          </AIInputToolbar>
+        </AIInput>
       </Form>
     </>
   );

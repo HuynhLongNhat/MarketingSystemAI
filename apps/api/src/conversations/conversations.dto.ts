@@ -11,10 +11,8 @@ import {
   Max,
 } from "class-validator";
 import { Type } from "class-transformer";
-import {
-} from "@workspace/db/node";
-import { CONVERSATION_STATUSES } from "node_modules/@workspace/db/dist/schema.js";
 
+import { CONVERSATION_STATUSES } from "@workspace/db/node";
 export class CreateContactSessionDto {
   @IsString()
   @IsNotEmpty()
