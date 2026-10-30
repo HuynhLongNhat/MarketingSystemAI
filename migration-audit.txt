@@ -1,0 +1,237 @@
+﻿D:\EchoChatBot\apps\api\src\common\permissions\permissions.ts:19: BILLING_READ: "billing:read",
+D:\EchoChatBot\apps\api\src\common\permissions\permissions.ts:20: BILLING_MANAGE: "billing:manage",
+D:\EchoChatBot\apps\api\src\common\permissions\permissions.ts:37: permission !== PERMISSIONS.BILLING_MANAGE,
+D:\EchoChatBot\apps\api\src\security\security.spec.ts:23: it("owner can manage billing", () => {
+D:\EchoChatBot\apps\api\src\security\security.spec.ts:25: hasPermission("owner", PERMISSIONS.BILLING_MANAGE),
+D:\EchoChatBot\apps\api\src\security\security.test.ts:25: it("owner can manage billing", () => {
+D:\EchoChatBot\apps\api\src\security\security.test.ts:27: hasPermission("owner", PERMISSIONS.BILLING_MANAGE),
+D:\EchoChatBot\apps\web\package.json:15: "@clerk/nextjs": "^6.27.1",
+D:\EchoChatBot\apps\web\package.json:16: "@convex-dev/agent": "^0.1.16",
+D:\EchoChatBot\apps\web\package.json:24: "convex": "^1.25.4",
+D:\EchoChatBot\apps\web\tsconfig.json:7: "@workspace/backend/*": ["../../packages/backend/convex/*"]
+D:\EchoChatBot\apps\web\.clerk\.tmp\keyless.json:1: {"publishableKey":"pk_test_Y2xldmVyLW9zdHJpY2gtMzM2MS5jbGVyay5hY2NvdW50cy5kZXYk","secretKey":"sk_test_e7mn5EBzOhYl34zn2pLUpFRuDernpV2FjTPeDcYFYA","claimUrl":"https://dashboard.clerk.com/apps/claim?token=ph02cj7hxj8wjmxtj23q1z4q53l1iqxuxoz6bs3e","apiKeysUrl":"https://dashboard.clerk.com/apps/app_3L92yWjzlbSuOrGjUyG0SeopfNC/instances/ins_3L92yW7ZXJKpdhm0WBWxkQSZXmF/api-keys"}
+D:\EchoChatBot\apps\web\app\(dashboard)\page.tsx:3: import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
+D:\EchoChatBot\apps\web\app\(dashboard)\page.tsx:4: import { useMutation } from "convex/react";
+D:\EchoChatBot\apps\web\app\(dashboard)\billing\page.tsx:1: import { BillingView } from "@/modules/billing/ui/views/billing-view";
+D:\EchoChatBot\apps\web\app\(dashboard)\billing\page.tsx:4: return <BillingView />
+D:\EchoChatBot\apps\web\app\(dashboard)\customization\page.tsx:1: import { Protect } from "@clerk/nextjs";
+D:\EchoChatBot\apps\web\app\(dashboard)\customization\page.tsx:3: import { PremiumFeatureOverlay } from "@/modules/billing/ui/components/premium-feature-overlay";
+D:\EchoChatBot\apps\web\app\(dashboard)\files\page.tsx:1: import { Protect } from "@clerk/nextjs";
+D:\EchoChatBot\apps\web\app\(dashboard)\files\page.tsx:3: import { PremiumFeatureOverlay } from "@/modules/billing/ui/components/premium-feature-overlay";
+D:\EchoChatBot\apps\web\app\(dashboard)\plugins\vapi\page.tsx:1: import { PremiumFeatureOverlay } from "@/modules/billing/ui/components/premium-feature-overlay";
+D:\EchoChatBot\apps\web\app\(dashboard)\plugins\vapi\page.tsx:3: import { Protect } from "@clerk/nextjs";
+D:\EchoChatBot\apps\web\app\auth-test\page.tsx:109: Trang thử nghiệm độc lập, chưa thay thế Clerk.
+D:\EchoChatBot\apps\web\components\providers.tsx:5: import { ConvexProvider, ConvexReactClient } from "convex/react";
+D:\EchoChatBot\apps\web\components\providers.tsx:7: const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+D:\EchoChatBot\apps\web\components\providers.tsx:9: const convex = convexUrl
+D:\EchoChatBot\apps\web\components\providers.tsx:10: ? new ConvexReactClient(convexUrl)
+D:\EchoChatBot\apps\web\components\providers.tsx:18: if (!convex) {
+D:\EchoChatBot\apps\web\components\providers.tsx:23: <ConvexProvider client={convex}>
+D:\EchoChatBot\apps\web\components\providers.tsx:25: </ConvexProvider>
+D:\EchoChatBot\apps\web\modules\billing\ui\components\premium-feature-overlay.tsx:92: This feature requires a Pro subscription
+D:\EchoChatBot\apps\web\modules\billing\ui\components\premium-feature-overlay.tsx:113: onClick={() => router.push("/billing")}
+D:\EchoChatBot\apps\web\modules\billing\ui\components\pricing-table.tsx:14: Billing & Subscription
+D:\EchoChatBot\apps\web\modules\billing\ui\components\pricing-table.tsx:26: Billing đang được chuyển đổi
+D:\EchoChatBot\apps\web\modules\billing\ui\components\pricing-table.tsx:31: Hệ thống đang thay thế Clerk Billing bằng
+D:\EchoChatBot\apps\web\modules\billing\ui\components\pricing-table.tsx:32: cơ chế subscription và entitlement riêng.
+D:\EchoChatBot\apps\web\modules\billing\ui\views\billing-view.tsx:5: export const BillingView = () => {
+D:\EchoChatBot\apps\web\modules\billing\ui\views\billing-view.tsx:10: <h1 className="text-2xl md:text-4xl">Plans & Billing</h1>
+D:\EchoChatBot\apps\web\modules\customization\ui\components\customization-form.tsx:26: import { useMutation } from "convex/react";
+D:\EchoChatBot\apps\web\modules\customization\ui\views\customization-view.tsx:4: import { useQuery } from "convex/react";
+D:\EchoChatBot\apps\web\modules\dashboard\ui\components\contact-panel.tsx:15: import { useQuery } from "convex/react";
+D:\EchoChatBot\apps\web\modules\dashboard\ui\components\conversations-panel.tsx:18: import { usePaginatedQuery } from "convex/react";
+D:\EchoChatBot\apps\web\modules\dashboard\ui\components\dashboard-sidebar.tsx:62: title: "Plans & Billing",
+D:\EchoChatBot\apps\web\modules\dashboard\ui\components\dashboard-sidebar.tsx:63: url: "/billing",
+D:\EchoChatBot\apps\web\modules\dashboard\ui\views\conversation-id-view.tsx:5: import { toUIMessages, useThreadMessages } from "@convex-dev/agent/react";
+D:\EchoChatBot\apps\web\modules\dashboard\ui\views\conversation-id-view.tsx:9: import { useAction, useMutation, useQuery } from "convex/react";
+D:\EchoChatBot\apps\web\modules\files\ui\components\delete-file-dialog.tsx:3: import { useMutation } from "convex/react";
+D:\EchoChatBot\apps\web\modules\files\ui\components\upload-dialog.tsx:3: import { useAction } from "convex/react";
+D:\EchoChatBot\apps\web\modules\files\ui\views\files-view.tsx:20: import { usePaginatedQuery } from "convex/react";
+D:\EchoChatBot\apps\web\modules\plugins\hooks\use-vapi-data.ts:1: import { useAction } from "convex/react";
+D:\EchoChatBot\apps\web\modules\plugins\ui\views\vapi-view.tsx:10: import { useMutation, useQuery } from "convex/react";
+D:\EchoChatBot\apps\widget\package.json:15: "@convex-dev/agent": "^0.1.16",
+D:\EchoChatBot\apps\widget\package.json:21: "convex": "^1.25.4",
+D:\EchoChatBot\apps\widget\tsconfig.json:8: "@workspace/backend/*": ["../../packages/backend/convex/*"],
+D:\EchoChatBot\apps\widget\components\providers.tsx:5: import { ConvexProvider, ConvexReactClient } from "convex/react";
+D:\EchoChatBot\apps\widget\components\providers.tsx:7: const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL || "");
+D:\EchoChatBot\apps\widget\components\providers.tsx:11: <ConvexProvider client={convex}>
+D:\EchoChatBot\apps\widget\components\providers.tsx:15: </ConvexProvider>
+D:\EchoChatBot\apps\widget\modules\widget\ui\screens\widget-auth-screen.tsx:14: import { useMutation } from "convex/react";
+D:\EchoChatBot\apps\widget\modules\widget\ui\screens\widget-chat-screen.tsx:7: import { useThreadMessages, toUIMessages } from "@convex-dev/agent/react";
+D:\EchoChatBot\apps\widget\modules\widget\ui\screens\widget-chat-screen.tsx:16: import { useAction, useQuery } from "convex/react";
+D:\EchoChatBot\apps\widget\modules\widget\ui\screens\widget-inbox-screen.tsx:11: import { usePaginatedQuery } from "convex/react";
+D:\EchoChatBot\apps\widget\modules\widget\ui\screens\widget-loading-screen.tsx:8: import { useAction, useMutation, useQuery } from "convex/react";
+D:\EchoChatBot\apps\widget\modules\widget\ui\screens\widget-selection-screen.tsx:8: import { useMutation } from "convex/react";
+D:\EchoChatBot\packages\backend\package.json:5: "dev": "convex dev",
+D:\EchoChatBot\packages\backend\package.json:6: "setup": "convex dev --until-success"
+D:\EchoChatBot\packages\backend\package.json:9: "./convex": "./convex/*.ts"
+D:\EchoChatBot\packages\backend\package.json:19: "@clerk/backend": "^2.6.1",
+D:\EchoChatBot\packages\backend\package.json:20: "@convex-dev/agent": "^0.1.16",
+D:\EchoChatBot\packages\backend\package.json:21: "@convex-dev/agent-playground": "^0.0.17",
+D:\EchoChatBot\packages\backend\package.json:22: "@convex-dev/rag": "^0.3.3",
+D:\EchoChatBot\packages\backend\package.json:25: "convex": "^1.25.4",
+D:\EchoChatBot\packages\backend\package.json:26: "convex-helpers": "^0.1.100",
+D:\EchoChatBot\packages\backend\tsconfig.json:6: "@workspace/backend/*": ["./convex/*"],
+D:\EchoChatBot\packages\backend\convex\auth.config.ts:4: // Replace with your own Clerk Issuer URL from your "convex" JWT template
+D:\EchoChatBot\packages\backend\convex\auth.config.ts:5: // or with `process.env.CLERK_JWT_ISSUER_DOMAIN`
+D:\EchoChatBot\packages\backend\convex\auth.config.ts:6: // and configure CLERK_JWT_ISSUER_DOMAIN on the Convex Dashboard
+D:\EchoChatBot\packages\backend\convex\auth.config.ts:7: // See https://docs.convex.dev/auth/clerk#configuring-dev-and-prod-instances
+D:\EchoChatBot\packages\backend\convex\auth.config.ts:8: domain: process.env.CLERK_JWT_ISSUER_DOMAIN,
+D:\EchoChatBot\packages\backend\convex\auth.config.ts:9: applicationID: "convex",
+D:\EchoChatBot\packages\backend\convex\convex.config.ts:1: import { defineApp } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\convex.config.ts:2: import rag from "@convex-dev/rag/convex.config";
+D:\EchoChatBot\packages\backend\convex\convex.config.ts:3: import agent from "@convex-dev/agent/convex.config";
+D:\EchoChatBot\packages\backend\convex\http.ts:2: import { createClerkClient } from "@clerk/backend";
+D:\EchoChatBot\packages\backend\convex\http.ts:3: import type { WebhookEvent } from "@clerk/backend";
+D:\EchoChatBot\packages\backend\convex\http.ts:4: import { httpRouter } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\http.ts:8: const clerkClient = createClerkClient({
+D:\EchoChatBot\packages\backend\convex\http.ts:9: secretKey: process.env.CLERK_SECRET_KEY || "",
+D:\EchoChatBot\packages\backend\convex\http.ts:15: path: "/clerk-webhook",
+D:\EchoChatBot\packages\backend\convex\http.ts:25: case "subscription.updated": {
+D:\EchoChatBot\packages\backend\convex\http.ts:26: const subscription = event.data as {
+D:\EchoChatBot\packages\backend\convex\http.ts:33: const organizationId = subscription.payer?.organization_id;
+D:\EchoChatBot\packages\backend\convex\http.ts:39: const newMaxAllowedMemberships = subscription.status === "active" ? 5 : 1;
+D:\EchoChatBot\packages\backend\convex\http.ts:41: await clerkClient.organizations.updateOrganization(organizationId, {
+D:\EchoChatBot\packages\backend\convex\http.ts:45: await ctx.runMutation(internal.system.subscriptions.upsert, {
+D:\EchoChatBot\packages\backend\convex\http.ts:47: status: subscription.status,
+D:\EchoChatBot\packages\backend\convex\http.ts:53: console.log("Ignored Clerk webhook event", event.type);
+D:\EchoChatBot\packages\backend\convex\http.ts:68: const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET || "");
+D:\EchoChatBot\packages\backend\convex\playground.ts:1: import { definePlaygroundAPI } from "@convex-dev/agent-playground";
+D:\EchoChatBot\packages\backend\convex\playground.ts:9: * npx convex run --component agent apiKeys:issue
+D:\EchoChatBot\packages\backend\convex\schema.ts:1: import { defineSchema, defineTable } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\schema.ts:2: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\schema.ts:5: subscriptions: defineTable({
+D:\EchoChatBot\packages\backend\convex\tsconfig.json:3: * Convex functions run in and is used to typecheck them.
+D:\EchoChatBot\packages\backend\convex\tsconfig.json:4: * You can modify it, but some settings are required to use Convex.
+D:\EchoChatBot\packages\backend\convex\tsconfig.json:7: /* These settings are not required by Convex and can be modified. */
+D:\EchoChatBot\packages\backend\convex\tsconfig.json:15: /* These compiler options are required by Convex */
+D:\EchoChatBot\packages\backend\convex\lib\extractTextContent.ts:3: import type { StorageActionWriter } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\lib\extractTextContent.ts:4: import { assert } from "convex-helpers";
+D:\EchoChatBot\packages\backend\convex\private\contactSessions.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\contactSessions.ts:12: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\contactSessions.ts:21: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\contactSessions.ts:30: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\contactSessions.ts:37: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:2: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:4: import { MessageDoc } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:5: import { paginationOptsValidator, PaginationResult } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:21: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:30: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:39: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:46: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:66: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:75: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:84: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:91: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:100: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:128: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\conversations.ts:137: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\files.ts:9: } from "@convex-dev/rag";
+D:\EchoChatBot\packages\backend\convex\private\files.ts:14: import { paginationOptsValidator } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\private\files.ts:33: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:42: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:53: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:64: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:71: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:98: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:107: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:113: const subscription = await ctx.runQuery(
+D:\EchoChatBot\packages\backend\convex\private\files.ts:114: internal.system.subscriptions.getByOrganizationId,
+D:\EchoChatBot\packages\backend\convex\private\files.ts:120: if (subscription?.status !== "active") {
+D:\EchoChatBot\packages\backend\convex\private\files.ts:121: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:123: message: "Missing subscription"
+D:\EchoChatBot\packages\backend\convex\private\files.ts:178: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\files.ts:187: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:6: import { paginationOptsValidator } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:7: import { saveMessage } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:19: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:28: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:34: const subscription = await ctx.runQuery(
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:35: internal.system.subscriptions.getByOrganizationId,
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:41: if (subscription?.status !== "active") {
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:42: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:44: message: "Missing subscription"
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:75: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:84: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:93: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:100: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:107: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:140: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:149: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:161: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\messages.ts:168: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\plugins.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\plugins.ts:12: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\plugins.ts:21: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\plugins.ts:35: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\plugins.ts:53: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\plugins.ts:62: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\secrets.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\secrets.ts:14: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\secrets.ts:23: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\secrets.ts:29: // TODO: Check for subscription
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:5: import { ConvexError } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:13: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:22: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:37: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:51: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:58: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:80: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:89: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:104: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:118: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\vapi.ts:125: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\widgetSettings.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\private\widgetSettings.ts:21: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\widgetSettings.ts:30: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\widgetSettings.ts:65: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\private\widgetSettings.ts:74: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\contactSessions.ts:1: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:3: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:5: import { MessageDoc, saveMessage } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:6: import { paginationOptsValidator } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:17: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:71: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:80: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:87: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:110: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\conversations.ts:117: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:5: import { paginationOptsValidator } from "convex/server";
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:8: import { saveMessage } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:26: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:40: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:47: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:58: const subscription = await ctx.runQuery(
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:59: internal.system.subscriptions.getByOrganizationId,
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:66: conversation.status === "unresolved" && subscription?.status === "active"
+D:\EchoChatBot\packages\backend\convex\public\messages.ts:100: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\public\organizations.ts:1: import { createClerkClient } from "@clerk/backend";
+D:\EchoChatBot\packages\backend\convex\public\organizations.ts:2: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\public\organizations.ts:5: const clerkClient = createClerkClient({
+D:\EchoChatBot\packages\backend\convex\public\organizations.ts:6: secretKey: process.env.CLERK_SECRET_KEY || "",
+D:\EchoChatBot\packages\backend\convex\public\organizations.ts:14: const organization = await clerkClient.organizations.getOrganization({
+D:\EchoChatBot\packages\backend\convex\public\secrets.ts:1: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\public\widgetSettings.ts:1: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\system\contactSessions.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\system\contactSessions.ts:15: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\system\contactSessions.ts:22: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\system\conversations.ts:1: import { ConvexError, v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\system\conversations.ts:15: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\system\conversations.ts:36: throw new ConvexError({
+D:\EchoChatBot\packages\backend\convex\system\plugins.ts:1: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\system\secrets.ts:1: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:1: import { v } from "convex/values";
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:10: const existingSubscription = await ctx.db
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:11: .query("subscriptions")
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:17: if (existingSubscription) {
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:18: await ctx.db.patch(existingSubscription._id, {
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:22: await ctx.db.insert("subscriptions", {
+D:\EchoChatBot\packages\backend\convex\system\subscriptions.ts:36: .query("subscriptions")
+D:\EchoChatBot\packages\backend\convex\system\ai\rag.ts:2: import { RAG } from "@convex-dev/rag";
+D:\EchoChatBot\packages\backend\convex\system\ai\agents\supportAgent.ts:2: import { Agent } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\system\ai\tools\escalateConversation.ts:1: import { createTool } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\system\ai\tools\resolveConversation.ts:1: import { createTool } from "@convex-dev/agent";
+D:\EchoChatBot\packages\backend\convex\system\ai\tools\search.ts:2: import { createTool } from "@convex-dev/agent";

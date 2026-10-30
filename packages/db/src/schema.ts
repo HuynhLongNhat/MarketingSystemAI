@@ -1,5 +1,6 @@
 import {
   boolean,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -205,3 +206,137 @@ export type NewMember = typeof member.$inferInsert;
 
 export type Invitation = typeof invitation.$inferSelect;
 export type NewInvitation = typeof invitation.$inferInsert;
+
+export type ContactSessionMetadata = {
+  userAgent?: string;
+  language?: string;
+  languages?: string;
+  platform?: string;
+  vendor?: string;
+  screenResolution?: string;
+  viewportSize?: string;
+  timezone?: string;
+  timezoneOffset?: number;
+  cookieEnabled?: boolean;
+  referrer?: string;
+  currentUrl?: string;
+};
+
+export const contactSessions = pgTable(
+  "contact_sessions",
+  {
+    id: text("id").primaryKey(),
+
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+    }).notNull(),
+
+    metadata: jsonb("metadata")
+      .$type<ContactSessionMetadata>(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("contact_sessions_org_idx")
+      .on(table.organizationId),
+
+    index("contact_sessions_expires_idx")
+      .on(table.expiresAt),
+
+    uniqueIndex("contact_sessions_id_org_unique")
+      .on(table.id, table.organizationId),
+  ],
+);
+
+//
+// Conversations
+//
+
+export const CONVERSATION_STATUSES = [
+  "unresolved",
+  "escalated",
+  "resolved",
+] as const;
+
+export type ConversationStatus =
+  (typeof CONVERSATION_STATUSES)[number];
+
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: text("id").primaryKey(),
+
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+
+    contactSessionId: text("contact_session_id")
+      .notNull(),
+
+    // Nullable until the new AI runtime is integrated.
+    threadId: text("thread_id").unique(),
+
+    status: text("status", {
+      enum: CONVERSATION_STATUSES,
+    }).notNull().default("unresolved"),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "conversations_session_org_fk",
+      columns: [
+        table.contactSessionId,
+        table.organizationId,
+      ],
+      foreignColumns: [
+        contactSessions.id,
+        contactSessions.organizationId,
+      ],
+    }).onDelete("cascade"),
+
+    index("conversations_org_status_idx")
+      .on(table.organizationId, table.status),
+
+    index("conversations_session_idx")
+      .on(table.contactSessionId),
+
+    index("conversations_org_created_idx")
+      .on(table.organizationId, table.createdAt),
+  ],
+);
+
+export type ContactSession =
+  typeof contactSessions.$inferSelect;
+
+export type NewContactSession =
+  typeof contactSessions.$inferInsert;
+
+export type Conversation =
+  typeof conversations.$inferSelect;
+
+export type NewConversation =
+  typeof conversations.$inferInsert;
