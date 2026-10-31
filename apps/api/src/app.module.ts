@@ -9,11 +9,13 @@ import { JobsModule } from "./jobs/jobs.module.js";
 import { OrganizationsModule } from "./organizations/organizations.module.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
 import { KnowledgeModule } from "./knowledge/knowledge.module.js";
+import { AiProvidersModule } from "./ai-providers/ai-providers.module.js";
 
 @Module({
   imports: [
     DatabaseModule,
     WidgetSettingsModule,
+
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST ?? "127.0.0.1",
@@ -21,10 +23,12 @@ import { KnowledgeModule } from "./knowledge/knowledge.module.js";
         maxRetriesPerRequest: null,
       },
     }),
+
     JobsModule,
     OrganizationsModule,
     ConversationsModule,
     KnowledgeModule,
+    AiProvidersModule,
   ],
   controllers: [HealthController],
 })

@@ -20,6 +20,9 @@ export const PERMISSIONS = {
   KNOWLEDGE_READ: "knowledge:read",
   KNOWLEDGE_UPDATE: "knowledge:update",
 
+  AI_PROVIDER_READ: "ai_provider:read",
+  AI_PROVIDER_MANAGE: "ai_provider:manage",
+
   BILLING_READ: "billing:read",
   BILLING_MANAGE: "billing:manage",
 } as const;
