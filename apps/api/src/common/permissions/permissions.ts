@@ -1,3 +1,4 @@
+
 import type { OrganizationRole } from "../../auth/request-context.js";
 
 export const PERMISSIONS = {
@@ -15,6 +16,9 @@ export const PERMISSIONS = {
 
   CONVERSATION_READ: "conversation:read",
   CONVERSATION_UPDATE: "conversation:update",
+
+  KNOWLEDGE_READ: "knowledge:read",
+  KNOWLEDGE_UPDATE: "knowledge:update",
 
   BILLING_READ: "billing:read",
   BILLING_MANAGE: "billing:manage",
@@ -41,6 +45,7 @@ export const ROLE_PERMISSIONS: Record<
     PERMISSIONS.ORGANIZATION_READ,
     PERMISSIONS.WIDGET_READ,
     PERMISSIONS.CONVERSATION_READ,
+    PERMISSIONS.KNOWLEDGE_READ,
   ],
 };
 
