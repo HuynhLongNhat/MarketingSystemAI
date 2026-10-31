@@ -10,11 +10,13 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import {
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
 
@@ -34,6 +36,7 @@ import {
 } from "./ai-providers.dto.js";
 
 import { AiProvidersService } from "./ai-providers.service.js";
+import { ModelCatalogService } from "./model-catalog.service.js";
 
 @ApiTags("AI Providers")
 @Controller("ai-providers")
@@ -41,11 +44,14 @@ import { AiProvidersService } from "./ai-providers.service.js";
 export class AiProvidersController {
   constructor(
     private readonly service: AiProvidersService,
+    private readonly modelCatalog: ModelCatalogService,
   ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
-  @ApiOperation({ summary: "List AI provider connections" })
+  @ApiOperation({
+    summary: "List AI provider connections",
+  })
   listConnections(
     @CurrentContext() ctx: RequestContext,
   ) {
@@ -54,7 +60,9 @@ export class AiProvidersController {
 
   @Post()
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
-  @ApiOperation({ summary: "Create AI provider connection" })
+  @ApiOperation({
+    summary: "Create AI provider connection",
+  })
   createConnection(
     @CurrentContext() ctx: RequestContext,
     @Body() dto: CreateAiProviderDto,
@@ -62,11 +70,36 @@ export class AiProvidersController {
     return this.service.createConnection(ctx, dto);
   }
 
-  // Static routes are declared before /:id routes.
+  @Get("catalog/providers")
+  @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
+  @ApiOperation({
+    summary: "List supported AI provider definitions",
+  })
+  listCatalogProviders() {
+    return this.modelCatalog.listProviders();
+  }
+
+  @Get("catalog/models")
+  @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
+  @ApiOperation({
+    summary: "List AI models from external catalog",
+  })
+  @ApiQuery({
+    name: "provider",
+    required: true,
+    type: String,
+  })
+  listCatalogModels(
+    @Query("provider") provider: string,
+  ) {
+    return this.modelCatalog.listModels(provider);
+  }
 
   @Get("model-defaults")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
-  @ApiOperation({ summary: "List default AI models" })
+  @ApiOperation({
+    summary: "List default AI models",
+  })
   listModelDefaults(
     @CurrentContext() ctx: RequestContext,
   ) {
@@ -75,7 +108,9 @@ export class AiProvidersController {
 
   @Put("model-defaults/:purpose")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
-  @ApiOperation({ summary: "Set default AI model" })
+  @ApiOperation({
+    summary: "Set default AI model",
+  })
   @ApiParam({
     name: "purpose",
     enum: AI_MODEL_PURPOSES,
@@ -95,7 +130,9 @@ export class AiProvidersController {
   @Delete("model-defaults/:purpose")
   @HttpCode(HttpStatus.OK)
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
-  @ApiOperation({ summary: "Delete default AI model" })
+  @ApiOperation({
+    summary: "Delete default AI model",
+  })
   @ApiParam({
     name: "purpose",
     enum: AI_MODEL_PURPOSES,
@@ -104,12 +141,17 @@ export class AiProvidersController {
     @CurrentContext() ctx: RequestContext,
     @Param("purpose") purpose: string,
   ) {
-    return this.service.deleteModelDefault(ctx, purpose);
+    return this.service.deleteModelDefault(
+      ctx,
+      purpose,
+    );
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
-  @ApiOperation({ summary: "Get AI provider metadata" })
+  @ApiOperation({
+    summary: "Get AI provider metadata",
+  })
   getConnection(
     @CurrentContext() ctx: RequestContext,
     @Param("id") id: string,
@@ -119,23 +161,34 @@ export class AiProvidersController {
 
   @Patch(":id")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
-  @ApiOperation({ summary: "Update AI provider connection" })
+  @ApiOperation({
+    summary: "Update AI provider connection",
+  })
   updateConnection(
     @CurrentContext() ctx: RequestContext,
     @Param("id") id: string,
     @Body() dto: UpdateAiProviderDto,
   ) {
-    return this.service.updateConnection(ctx, id, dto);
+    return this.service.updateConnection(
+      ctx,
+      id,
+      dto,
+    );
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.OK)
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
-  @ApiOperation({ summary: "Delete AI provider connection" })
+  @ApiOperation({
+    summary: "Delete AI provider connection",
+  })
   deleteConnection(
     @CurrentContext() ctx: RequestContext,
     @Param("id") id: string,
   ) {
-    return this.service.deleteConnection(ctx, id);
+    return this.service.deleteConnection(
+      ctx,
+      id,
+    );
   }
 }

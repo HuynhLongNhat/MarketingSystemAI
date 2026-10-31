@@ -1,10 +1,10 @@
-
 "use client";
 
 import { OrganizationSwitcher } from "@/modules/auth/ui/components/organization-switcher";
 import { UserMenu } from "@/modules/auth/ui/components/user-menu";
 
 import {
+  BotIcon,
   CreditCardIcon,
   InboxIcon,
   LayoutDashboardIcon,
@@ -75,6 +75,12 @@ const accountItems = [
     url: "/settings/members",
     icon: UsersIcon,
   },
+
+  {
+    title: "AI Providers & Models",
+    url: "/settings/ai-providers",
+    icon: BotIcon,
+  },
 ];
 
 export const DashboardSidebar = () => {
@@ -85,15 +91,10 @@ export const DashboardSidebar = () => {
       return pathname === "/";
     }
 
-    return (
-      pathname === url ||
-      pathname.startsWith(`${url}/`)
-    );
+    return pathname === url || pathname.startsWith(`${url}/`);
   };
 
-  const renderMenuItems = (
-    items: typeof customerSupportItems,
-  ) =>
+  const renderMenuItems = (items: typeof customerSupportItems) =>
     items.map((item) => {
       const active = isActive(item.url);
 
@@ -126,38 +127,26 @@ export const DashboardSidebar = () => {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>
-            Chăm sóc khách hàng
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>Chăm sóc khách hàng</SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
-              {renderMenuItems(customerSupportItems)}
-            </SidebarMenu>
+            <SidebarMenu>{renderMenuItems(customerSupportItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>
-            Cấu hình
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>Cấu hình</SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
-              {renderMenuItems(configurationItems)}
-            </SidebarMenu>
+            <SidebarMenu>{renderMenuItems(configurationItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>
-            Tài khoản
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>Tài khoản</SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
-              {renderMenuItems(accountItems)}
-            </SidebarMenu>
+            <SidebarMenu>{renderMenuItems(accountItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

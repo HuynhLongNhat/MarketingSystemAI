@@ -87,3 +87,4 @@ export class UpsertAiModelDefaultDto {
   @MaxLength(200)
   modelId!: string;
 }
+

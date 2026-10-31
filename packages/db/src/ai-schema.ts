@@ -11,15 +11,26 @@ import {
 
 import { organization } from "./schema.js";
 
+
 export const AI_PROVIDER_TYPES = [
   "openrouter",
   "openai",
   "anthropic",
+  "google",
+  "groq",
+  "deepseek",
+  "mistral",
+  "together",
+  "fireworks",
+  "cerebras",
+  "xai",
+  "ollama",
   "openai_compatible",
 ] as const;
 
 export type AiProviderType =
   (typeof AI_PROVIDER_TYPES)[number];
+
 
 export const aiProviderConnections = pgTable(
   "ai_provider_connections",
