@@ -1,4 +1,3 @@
-
 import {
   Body,
   Controller,
@@ -20,6 +19,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  IsUUID,
 } from "class-validator";
 
 import { PublicWidgetService } from "./public-widget.service.js";
@@ -73,21 +73,20 @@ class SendPublicMessageDto {
   @IsNotEmpty()
   @MaxLength(5000)
   content!: string;
+
+  @IsUUID()
+  clientMessageId!: string;
 }
 
 @ApiTags("Public Widget")
 @Controller("public/widget")
 @UseGuards(PublicWidgetRateLimitGuard)
 export class PublicWidgetController {
-  constructor(
-    private readonly service: PublicWidgetService,
-  ) {}
+  constructor(private readonly service: PublicWidgetService) {}
 
   private token(authorization?: string) {
     if (!authorization?.startsWith("Bearer ")) {
-      throw new UnauthorizedException(
-        "Widget token required",
-      );
+      throw new UnauthorizedException("Widget token required");
     }
 
     return authorization.slice(7);
@@ -115,12 +114,8 @@ export class PublicWidgetController {
   @ApiOperation({
     summary: "Validate current widget session",
   })
-  validateSession(
-    @Headers("authorization") authorization?: string,
-  ) {
-    return this.service.validateSession(
-      this.token(authorization),
-    );
+  validateSession(@Headers("authorization") authorization?: string) {
+    return this.service.validateSession(this.token(authorization));
   }
 
   @Patch("sessions/current")
@@ -131,29 +126,18 @@ export class PublicWidgetController {
     @Headers("authorization") authorization: string,
     @Body() dto: UpdatePublicSessionDto,
   ) {
-    return this.service.updateSession(
-      this.token(authorization),
-      dto,
-    );
+    return this.service.updateSession(this.token(authorization), dto);
   }
 
   @Post("conversations")
   @SetMetadata(WIDGET_RATE_LIMIT_KEY, "create-conversation")
-  createConversation(
-    @Headers("authorization") authorization?: string,
-  ) {
-    return this.service.createConversation(
-      this.token(authorization),
-    );
+  createConversation(@Headers("authorization") authorization?: string) {
+    return this.service.createConversation(this.token(authorization));
   }
 
   @Get("conversations")
-  listConversations(
-    @Headers("authorization") authorization?: string,
-  ) {
-    return this.service.listConversations(
-      this.token(authorization),
-    );
+  listConversations(@Headers("authorization") authorization?: string) {
+    return this.service.listConversations(this.token(authorization));
   }
 
   @Get("conversations/:id")
@@ -161,10 +145,7 @@ export class PublicWidgetController {
     @Headers("authorization") authorization: string,
     @Param("id") id: string,
   ) {
-    return this.service.getConversation(
-      this.token(authorization),
-      id,
-    );
+    return this.service.getConversation(this.token(authorization), id);
   }
 
   @Get("conversations/:id/messages")
@@ -173,11 +154,7 @@ export class PublicWidgetController {
     @Param("id") id: string,
     @Query("before") before?: string,
   ) {
-    return this.service.listMessages(
-      this.token(authorization),
-      id,
-      before,
-    );
+    return this.service.listMessages(this.token(authorization), id, before);
   }
 
   @Post("conversations/:id/messages")
@@ -191,6 +168,7 @@ export class PublicWidgetController {
       this.token(authorization),
       id,
       dto.content,
+      dto.clientMessageId,
     );
   }
 
@@ -198,11 +176,7 @@ export class PublicWidgetController {
   @ApiOperation({
     summary: "Get public widget configuration",
   })
-  getPublicConfiguration(
-    @Param("organizationId") organizationId: string,
-  ) {
-    return this.service.getPublicConfiguration(
-      organizationId,
-    );
+  getPublicConfiguration(@Param("organizationId") organizationId: string) {
+    return this.service.getPublicConfiguration(organizationId);
   }
 }
