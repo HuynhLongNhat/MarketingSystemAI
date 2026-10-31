@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   ForbiddenException,
@@ -31,9 +30,7 @@ export class PublicWidgetService {
     const [session] = await db
       .select()
       .from(contactSessions)
-      .where(
-        eq(contactSessions.sessionTokenHash, this.hashToken(token)),
-      )
+      .where(eq(contactSessions.sessionTokenHash, this.hashToken(token)))
       .limit(1);
 
     if (!session || session.expiresAt <= new Date()) {
@@ -59,9 +56,7 @@ export class PublicWidgetService {
     }
 
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const [session] = await db
       .insert(contactSessions)
@@ -102,15 +97,12 @@ export class PublicWidgetService {
     const [settings] = await db
       .select({ greetMessage: widgetSettings.greetMessage })
       .from(widgetSettings)
-      .where(
-        eq(widgetSettings.organizationId, session.organizationId),
-      )
+      .where(eq(widgetSettings.organizationId, session.organizationId))
       .limit(1);
 
     const conversationId = randomUUID();
     const greeting =
-      settings?.greetMessage?.trim() ||
-      "Hello, how can I help you today?";
+      settings?.greetMessage?.trim() || "Hello, how can I help you today?";
 
     return db.transaction(async (tx) => {
       const [conversation] = await tx
@@ -135,10 +127,7 @@ export class PublicWidgetService {
     });
   }
 
-  private async requireConversation(
-    token: string,
-    conversationId: string,
-  ) {
+  private async requireConversation(token: string, conversationId: string) {
     const session = await this.requireSession(token);
 
     const [conversation] = await db
@@ -180,15 +169,8 @@ export class PublicWidgetService {
     return this.requireConversation(token, conversationId);
   }
 
-  async listMessages(
-    token: string,
-    conversationId: string,
-    before?: string,
-  ) {
-    const conversation = await this.requireConversation(
-      token,
-      conversationId,
-    );
+  async listMessages(token: string, conversationId: string, before?: string) {
+    const conversation = await this.requireConversation(token, conversationId);
 
     const beforeDate = before ? new Date(before) : null;
 
@@ -201,10 +183,7 @@ export class PublicWidgetService {
       .from(conversationMessages)
       .where(
         and(
-          eq(
-            conversationMessages.organizationId,
-            conversation.organizationId,
-          ),
+          eq(conversationMessages.organizationId, conversation.organizationId),
           eq(conversationMessages.conversationId, conversationId),
           beforeDate
             ? lt(conversationMessages.createdAt, beforeDate)
@@ -223,21 +202,12 @@ export class PublicWidgetService {
       items,
       hasMore: rows.length > 50,
       nextBefore:
-        rows.length > 50 && items[0]
-          ? items[0].createdAt.toISOString()
-          : null,
+        rows.length > 50 && items[0] ? items[0].createdAt.toISOString() : null,
     };
   }
 
-  async sendMessage(
-    token: string,
-    conversationId: string,
-    content: string,
-  ) {
-    const conversation = await this.requireConversation(
-      token,
-      conversationId,
-    );
+  async sendMessage(token: string, conversationId: string, content: string) {
+    const conversation = await this.requireConversation(token, conversationId);
 
     if (conversation.status === "resolved") {
       throw new ForbiddenException("Conversation resolved");
@@ -261,5 +231,51 @@ export class PublicWidgetService {
       .returning();
 
     return message;
+  }
+
+  async getPublicConfiguration(organizationId: string) {
+    const [org] = await db
+      .select({
+        id: organization.id,
+        name: organization.name,
+      })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1);
+
+    if (!org) {
+      throw new NotFoundException("Organization not found");
+    }
+
+    const [settings] = await db
+      .select({
+        greetMessage: widgetSettings.greetMessage,
+        defaultSuggestions: widgetSettings.defaultSuggestions,
+        vapiAssistantId: widgetSettings.vapiAssistantId,
+        vapiPhoneNumber: widgetSettings.vapiPhoneNumber,
+      })
+      .from(widgetSettings)
+      .where(eq(widgetSettings.organizationId, organizationId))
+      .limit(1);
+
+    return {
+      organization: org,
+      settings: settings
+        ? {
+            organizationId,
+            greetMessage: settings.greetMessage,
+            defaultSuggestions: settings.defaultSuggestions,
+            vapiSettings: {
+              assistantId: settings.vapiAssistantId ?? undefined,
+              phoneNumber: settings.vapiPhoneNumber ?? undefined,
+            },
+          }
+        : {
+            organizationId,
+            greetMessage: "Hello! How can we help you?",
+            defaultSuggestions: {},
+            vapiSettings: {},
+          },
+    };
   }
 }

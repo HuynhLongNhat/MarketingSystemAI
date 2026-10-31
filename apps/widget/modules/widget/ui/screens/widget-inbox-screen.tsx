@@ -3,13 +3,14 @@
 
 import { useEffect, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import { formatDistanceToNow } from "date-fns";
-import { ArrowLeftIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  LoaderIcon,
+  MessageSquareIcon,
+  PlusIcon,
+} from "lucide-react";
 
 import { Button } from "@workspace/ui/components/button";
-import { ConversationStatusIcon } from "@workspace/ui/components/conversation-status-icon";
-import { WidgetHeader } from "../components/widget-header";
-import { WidgetFooter } from "../components/widget-footer";
 
 import {
   conversationIdAtom,
@@ -20,16 +21,22 @@ import {
 import {
   widgetApi,
   widgetSession,
+  widgetConversationStorage,
   type WidgetConversation,
 } from "@/lib/widget-api";
 
+type ConversationItem = WidgetConversation & {
+  title: string;
+};
+
 export const WidgetInboxScreen = () => {
-  const setScreen = useSetAtom(screenAtom);
-  const setConversationId = useSetAtom(conversationIdAtom);
   const organizationId = useAtomValue(organizationIdAtom);
 
+  const setScreen = useSetAtom(screenAtom);
+  const setConversationId = useSetAtom(conversationIdAtom);
+
   const [conversations, setConversations] =
-    useState<WidgetConversation[]>([]);
+    useState<ConversationItem[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,97 +56,169 @@ export const WidgetInboxScreen = () => {
 
     let cancelled = false;
 
-    widgetApi.listConversations(token)
-      .then((result) => {
+    const load = async () => {
+      try {
+        setIsLoading(true);
+
+        const items =
+          await widgetApi.listConversations(token);
+
+        const enriched = await Promise.all(
+          items.map(async (conversation) => {
+            let title = "Cuộc trò chuyện mới";
+
+            try {
+              const page = await widgetApi.listMessages(
+                token,
+                conversation.id,
+              );
+
+              const firstUserMessage = page.items.find(
+                (message) => message.role === "user",
+              );
+
+              if (firstUserMessage) {
+                title = firstUserMessage.content;
+              }
+            } catch {
+              // Giữ tiêu đề mặc định khi không tải được tin nhắn.
+            }
+
+            return {
+              ...conversation,
+              title,
+            };
+          }),
+        );
+
         if (cancelled) return;
-        setConversations(result);
-      })
-      .catch((err) => {
+
+        setConversations(enriched);
+        setError(null);
+      } catch (err) {
         if (cancelled) return;
-        console.error(err);
-        setError("Unable to load conversations");
-      })
-      .finally(() => {
+
+        console.error("Load conversations failed", err);
+        setError("Không thể tải lịch sử trò chuyện");
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    };
+
+    void load();
 
     return () => {
       cancelled = true;
     };
   }, [organizationId, setScreen]);
 
-  return (
-    <>
-      <WidgetHeader>
-        <div className="flex items-center gap-x-2">
-          <Button
-            variant="transparent"
-            size="icon"
-            onClick={() => setScreen("selection")}
-          >
-            <ArrowLeftIcon />
-          </Button>
-          <p>Inbox</p>
-        </div>
-      </WidgetHeader>
+  const openConversation = (conversationId: string) => {
+    if (!organizationId) return;
 
-      <div className="flex flex-1 flex-col gap-y-2 overflow-y-auto p-4">
+    widgetConversationStorage.set(
+      organizationId,
+      conversationId,
+    );
+
+    setConversationId(conversationId);
+    setScreen("chat");
+  };
+
+  const statusLabel = (status: WidgetConversation["status"]) => {
+    switch (status) {
+      case "resolved":
+        return "Đã giải quyết";
+      case "escalated":
+        return "Đang chuyển nhân viên";
+      default:
+        return "Đang hỗ trợ";
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col bg-background">
+      <header className="flex items-center justify-between border-b px-3 py-3">
+        <div className="flex items-center gap-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setScreen("selection")}
+            aria-label="Quay lại"
+          >
+            <ArrowLeftIcon className="size-4" />
+          </Button>
+
+          <h1 className="font-semibold">
+            Lịch sử trò chuyện
+          </h1>
+        </div>
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => setScreen("selection")}
+          aria-label="Cuộc trò chuyện mới"
+        >
+          <PlusIcon className="size-5" />
+        </Button>
+      </header>
+
+      <main className="flex-1 space-y-1 overflow-y-auto p-3">
         {isLoading && (
-          <p className="text-center text-sm text-muted-foreground">
-            Loading...
-          </p>
+          <div className="flex justify-center py-10">
+            <LoaderIcon className="size-5 animate-spin" />
+          </div>
         )}
 
         {error && (
-          <p className="text-center text-sm text-destructive">
+          <p className="p-4 text-center text-sm text-destructive">
             {error}
           </p>
         )}
 
-        {!isLoading && !error && conversations.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground">
-            No conversations yet
-          </p>
-        )}
+        {!isLoading &&
+          !error &&
+          conversations.length === 0 && (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <MessageSquareIcon className="size-8 text-muted-foreground" />
+
+              <p className="text-sm text-muted-foreground">
+                Bạn chưa có cuộc trò chuyện nào.
+              </p>
+
+              <Button
+                onClick={() => setScreen("selection")}
+              >
+                Bắt đầu trò chuyện
+              </Button>
+            </div>
+          )}
 
         {conversations.map((conversation) => (
-          <Button
-            className="h-20 w-full justify-between"
+          <button
             key={conversation.id}
-            variant="outline"
-            onClick={() => {
-              setConversationId(conversation.id);
-              setScreen("chat");
-            }}
+            type="button"
+            onClick={() => openConversation(conversation.id)}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-muted"
           >
-            <div className="flex w-full flex-col gap-4 overflow-hidden text-start">
-              <div className="flex w-full items-center justify-between gap-x-2">
-                <p className="text-xs text-muted-foreground">
-                  Chat
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(
-                    new Date(conversation.createdAt),
-                    { addSuffix: true },
-                  )}
-                </p>
-              </div>
+            <MessageSquareIcon className="size-4 shrink-0 text-muted-foreground" />
 
-              <div className="flex w-full items-center justify-between gap-x-2">
-                <p className="truncate text-sm">
-                  Conversation
-                </p>
-                <ConversationStatusIcon
-                  status={conversation.status}
-                  className="shrink-0"
-                />
-              </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {conversation.title}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {statusLabel(conversation.status)}
+                {" · "}
+                {new Date(
+                  conversation.createdAt,
+                ).toLocaleDateString("vi-VN")}
+              </p>
             </div>
-          </Button>
+          </button>
         ))}
-      </div>
-
-      <WidgetFooter />
-    </>
+      </main>
+    </div>
   );
 };

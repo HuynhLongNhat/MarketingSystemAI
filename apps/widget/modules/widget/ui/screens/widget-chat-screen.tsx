@@ -1,12 +1,21 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeftIcon, MenuIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  HistoryIcon,
+  PlusIcon,
+} from "lucide-react";
 
 import {
   AISuggestion,
@@ -36,13 +45,13 @@ import {
 } from "@workspace/ui/components/ai/message";
 import { AIResponse } from "@workspace/ui/components/ai/response";
 
-import { WidgetHeader } from "../components/widget-header";
 import {
   conversationIdAtom,
   organizationIdAtom,
   screenAtom,
   widgetSettingsAtom,
 } from "../../atoms/widget-atoms";
+
 import {
   widgetApi,
   widgetSession,
@@ -51,14 +60,13 @@ import {
 } from "@/lib/widget-api";
 
 const formSchema = z.object({
-  message: z.string().trim().min(1, "Message is required"),
+  message: z.string().trim().min(1, "Vui lòng nhập tin nhắn"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 export const WidgetChatScreen = () => {
   const setScreen = useSetAtom(screenAtom);
-  const setConversationId = useSetAtom(conversationIdAtom);
 
   const conversationId = useAtomValue(conversationIdAtom);
   const organizationId = useAtomValue(organizationIdAtom);
@@ -84,7 +92,9 @@ export const WidgetChatScreen = () => {
   const suggestions = useMemo(() => {
     if (!settings) return [];
 
-    return Object.values(settings.defaultSuggestions).filter(
+    return Object.values(
+      settings.defaultSuggestions ?? {},
+    ).filter(
       (value): value is string =>
         typeof value === "string" && value.length > 0,
     );
@@ -103,6 +113,8 @@ export const WidgetChatScreen = () => {
       return;
     }
 
+    setIsLoading(true);
+
     try {
       const [details, page] = await Promise.all([
         widgetApi.getConversation(token, conversationId),
@@ -116,7 +128,7 @@ export const WidgetChatScreen = () => {
       setError(null);
     } catch (err) {
       console.error(err);
-      setError("Unable to load chat");
+      setError("Không thể tải cuộc trò chuyện");
     } finally {
       setIsLoading(false);
     }
@@ -152,7 +164,7 @@ export const WidgetChatScreen = () => {
         return Array.from(map.values()).sort(
           (a, b) =>
             new Date(a.createdAt).getTime() -
-            new Date(b.createdAt).getTime() ||
+              new Date(b.createdAt).getTime() ||
             a.id.localeCompare(b.id),
         );
       });
@@ -204,7 +216,7 @@ export const WidgetChatScreen = () => {
         return Array.from(map.values()).sort(
           (a, b) =>
             new Date(a.createdAt).getTime() -
-            new Date(b.createdAt).getTime() ||
+              new Date(b.createdAt).getTime() ||
             a.id.localeCompare(b.id),
         );
       });
@@ -240,48 +252,80 @@ export const WidgetChatScreen = () => {
         values.message.trim(),
       );
 
-      setMessages((current) => [...current, message]);
+      setMessages((current) => {
+        if (current.some((item) => item.id === message.id)) {
+          return current;
+        }
+
+        return [...current, message];
+      });
+
       form.reset({ message: "" });
+      setError(null);
+
       await refreshMessages();
     } catch (err) {
       console.error(err);
-      setError("Unable to send message");
+      setError("Không thể gửi tin nhắn");
     } finally {
       setIsSending(false);
     }
-  };
-
-  const onBack = () => {
-    setConversationId(null);
-    setScreen("selection");
   };
 
   const isResolved = conversation?.status === "resolved";
 
   return (
     <>
-      <WidgetHeader className="flex items-center justify-between">
-        <div className="flex items-center gap-x-2">
+      <header className="flex items-center justify-between border-b bg-background px-3 py-2">
+        <div className="flex items-center gap-2">
           <Button
-            onClick={onBack}
+            onClick={() => setScreen("inbox")}
             size="icon"
-            variant="transparent"
+            variant="ghost"
+            aria-label="Lịch sử trò chuyện"
           >
-            <ArrowLeftIcon />
+            <ArrowLeftIcon className="size-4" />
           </Button>
-          <p>Chat</p>
+
+          <div>
+            <p className="text-sm font-semibold">
+              Hỗ trợ khách hàng
+            </p>
+
+            <p className="text-xs text-muted-foreground">
+              {isResolved
+                ? "Đã kết thúc"
+                : "Cuộc trò chuyện"}
+            </p>
+          </div>
         </div>
 
-        <Button size="icon" variant="transparent">
-          <MenuIcon />
-        </Button>
-      </WidgetHeader>
+        <div className="flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setScreen("inbox")}
+            aria-label="Xem lịch sử"
+          >
+            <HistoryIcon className="size-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setScreen("selection")}
+            aria-label="Cuộc trò chuyện mới"
+          >
+            <PlusIcon className="size-5" />
+          </Button>
+        </div>
+      </header>
 
       <AIConversation>
         <AIConversationContent>
           {isLoading && (
             <p className="p-4 text-center text-sm text-muted-foreground">
-              Loading conversation...
+              Đang tải cuộc trò chuyện...
             </p>
           )}
 
@@ -299,14 +343,20 @@ export const WidgetChatScreen = () => {
                 disabled={isLoadingMore}
                 onClick={() => void loadMore()}
               >
-                {isLoadingMore ? "Loading..." : "Load older messages"}
+                {isLoadingMore
+                  ? "Đang tải..."
+                  : "Xem tin nhắn cũ hơn"}
               </Button>
             </div>
           )}
 
           {messages.map((message) => (
             <AIMessage
-              from={message.role === "user" ? "user" : "assistant"}
+              from={
+                message.role === "user"
+                  ? "user"
+                  : "assistant"
+              }
               key={message.id}
             >
               <AIMessageContent>
@@ -339,6 +389,7 @@ export const WidgetChatScreen = () => {
                   shouldDirty: true,
                   shouldTouch: true,
                 });
+
                 void form.handleSubmit(onSubmit)();
               }}
             />
@@ -348,7 +399,7 @@ export const WidgetChatScreen = () => {
 
       <Form {...form}>
         <AIInput
-          className="rounded-none border-x-0 border-b-0"
+          className="rounded-none border-x-0 border-b-0 bg-background"
           onSubmit={form.handleSubmit(onSubmit)}
         >
           <FormField
@@ -356,7 +407,9 @@ export const WidgetChatScreen = () => {
             name="message"
             render={({ field }) => (
               <AIInputTextarea
-                disabled={isResolved || isSending || isLoading}
+                disabled={
+                  isResolved || isSending || isLoading
+                }
                 onChange={field.onChange}
                 onKeyDown={(event) => {
                   if (
@@ -370,8 +423,8 @@ export const WidgetChatScreen = () => {
                 }}
                 placeholder={
                   isResolved
-                    ? "This conversation has been resolved."
-                    : "Type your message..."
+                    ? "Cuộc trò chuyện đã kết thúc"
+                    : "Nhập tin nhắn..."
                 }
                 value={field.value}
               />
@@ -380,6 +433,7 @@ export const WidgetChatScreen = () => {
 
           <AIInputToolbar>
             <AIInputTools />
+
             <AIInputSubmit
               disabled={
                 isResolved ||

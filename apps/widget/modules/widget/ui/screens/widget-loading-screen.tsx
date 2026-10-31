@@ -1,210 +1,176 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { LoaderIcon } from "lucide-react";
-import { useAtomValue, useSetAtom } from "jotai";
-import { contactSessionIdAtomFamily, errorMessageAtom, loadingMessageAtom, organizationIdAtom, screenAtom, vapiSecretsAtom, widgetSettingsAtom } from "@/modules/widget/atoms/widget-atoms";
-import { WidgetHeader } from "@/modules/widget/ui/components/widget-header";
-import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@workspace/backend/_generated/api";
-import { widgetApi, widgetSession } from "@/lib/widget-api";
-type InitStep = "org" | "session" | "settings" | "vapi" | "done";
+import { useSetAtom } from "jotai";
 
-export const WidgetLoadingScreen = ({ organizationId }: { organizationId: string | null }) => {
-  const [step, setStep] = useState<InitStep>("org")
-  const [sessionValid, setSessionValid] = useState(false);
+import {
+  contactSessionIdAtomFamily,
+  conversationIdAtom,
+  errorMessageAtom,
+  organizationIdAtom,
+  screenAtom,
+  vapiSecretsAtom,
+  widgetSettingsAtom,
+} from "@/modules/widget/atoms/widget-atoms";
 
-  const loadingMessage = useAtomValue(loadingMessageAtom);
-  const setWidgetSettings = useSetAtom(widgetSettingsAtom);
+import {
+  widgetApi,
+  widgetSession,
+  widgetConversationStorage,
+} from "@/lib/widget-api";
+
+export const WidgetLoadingScreen = ({
+  organizationId,
+}: {
+  organizationId: string | null;
+}) => {
+  const [loadingMessage, setLoadingMessage] =
+    useState("Đang khởi tạo...");
+
   const setOrganizationId = useSetAtom(organizationIdAtom);
-  const setLoadingMessage = useSetAtom(loadingMessageAtom);
+  const setWidgetSettings = useSetAtom(widgetSettingsAtom);
+  const setConversationId = useSetAtom(conversationIdAtom);
   const setErrorMessage = useSetAtom(errorMessageAtom);
   const setScreen = useSetAtom(screenAtom);
   const setVapiSecrets = useSetAtom(vapiSecretsAtom);
 
-  const contactSessionId = useAtomValue(contactSessionIdAtomFamily(organizationId || ""));
-
-  // Step 1: Validate organization
-  const validateOrganization = useAction(api.public.organizations.validate);
-  useEffect(() => {
-    if (step !== "org") {
-      return;
-    }
-
-    setLoadingMessage("Finding organization ID...");
-
-    if (!organizationId) {
-      setErrorMessage("Organization ID is required");
-      setScreen("error");
-      return;
-    }
-
-    setLoadingMessage("Verifying organization...");
-
-    validateOrganization({ organizationId })
-      .then((result) => {
-        if (result.valid) {
-          setOrganizationId(organizationId);
-          setStep("session");
-        } else {
-          setErrorMessage(result.reason || "Invalid configuration");
-          setScreen("error");
-        }
-      })
-      .catch(() => {
-        setErrorMessage("Unable to verify organization");
-        setScreen("error");
-      })
-  }, [
-    step,
-    organizationId,
-    setErrorMessage,
-    setScreen,
-    setOrganizationId,
-    setStep,
-    validateOrganization,
-    setLoadingMessage
-  ]);
-
-  // Step 2: Validate session (if exists)
+  const setContactSessionId = useSetAtom(
+    contactSessionIdAtomFamily(organizationId ?? ""),
+  );
 
   useEffect(() => {
-    if (step !== "session") {
-      return;
-    }
-
-    if (!organizationId || !contactSessionId) {
-      setSessionValid(false);
-      setStep("settings");
-      return;
-    }
-
-    const token = widgetSession.get(organizationId);
-
-    if (!token) {
-      setSessionValid(false);
-      setStep("settings");
-      return;
-    }
-
     let cancelled = false;
 
-    setLoadingMessage("Validating session...");
+    const initialize = async () => {
+      if (!organizationId) {
+        setErrorMessage("Thiếu Organization ID");
+        setScreen("error");
+        return;
+      }
 
-    widgetApi.validateSession(token)
-      .then((result) => {
+      try {
+        setLoadingMessage("Đang tải cấu hình...");
+
+        const configuration =
+          await widgetApi.getPublicConfiguration(organizationId);
+
         if (cancelled) return;
 
-        setSessionValid(
-          result.valid &&
-          result.organizationId === organizationId &&
-          result.contactSessionId === contactSessionId,
+        if (configuration.organization.id !== organizationId) {
+          throw new Error("Organization không hợp lệ");
+        }
+
+        setOrganizationId(organizationId);
+        setWidgetSettings(configuration.settings);
+        setVapiSecrets(null);
+
+        const token = widgetSession.get(organizationId);
+
+        if (!token) {
+          setContactSessionId(null);
+          setConversationId(null);
+          setScreen("auth");
+          return;
+        }
+
+        setLoadingMessage("Đang khôi phục phiên chat...");
+
+        let session;
+
+        try {
+          session = await widgetApi.validateSession(token);
+        } catch {
+          if (cancelled) return;
+
+          widgetSession.clear(organizationId);
+          setContactSessionId(null);
+          setConversationId(null);
+          setScreen("auth");
+          return;
+        }
+
+        if (cancelled) return;
+
+        if (
+          !session.valid ||
+          session.organizationId !== organizationId
+        ) {
+          widgetSession.clear(organizationId);
+          setContactSessionId(null);
+          setConversationId(null);
+          setScreen("auth");
+          return;
+        }
+
+        setContactSessionId(session.contactSessionId);
+
+        setLoadingMessage("Đang tải lịch sử trò chuyện...");
+
+        const conversations =
+          await widgetApi.listConversations(token);
+
+        if (cancelled) return;
+
+        const savedId =
+          widgetConversationStorage.get(organizationId);
+
+        const selected =
+          conversations.find(
+            (conversation) => conversation.id === savedId,
+          ) ?? conversations[0];
+
+        if (!selected) {
+          widgetConversationStorage.clear(organizationId);
+          setConversationId(null);
+          setScreen("selection");
+          return;
+        }
+
+        widgetConversationStorage.set(
+          organizationId,
+          selected.id,
         );
-        setStep("settings");
-      })
-      .catch(() => {
+
+        setConversationId(selected.id);
+        setScreen("chat");
+      } catch (error) {
         if (cancelled) return;
 
-        widgetSession.clear(organizationId);
-        setSessionValid(false);
-        setStep("settings");
-      });
+        console.error("Widget initialization failed", error);
+
+        setErrorMessage(
+          "Không thể khởi tạo Widget. Vui lòng thử lại.",
+        );
+
+        setScreen("error");
+      }
+    };
+
+    void initialize();
 
     return () => {
       cancelled = true;
     };
   }, [
-    step,
     organizationId,
-    contactSessionId,
-    setLoadingMessage,
-  ]);
-
-
-  // Step 3: Load Widget Settings
-  const widgetSettings = useQuery(api.public.widgetSettings.getByOrganizationId, 
-    organizationId ? {
-      organizationId,
-    } : "skip",
-  );
-  useEffect(() => {
-    if (step !== "settings") {
-      return;
-    }
-
-    setLoadingMessage("Loading widget settings...");
-
-    if (widgetSettings !== undefined) {
-      setWidgetSettings(widgetSettings);
-      setStep("vapi");
-    }
-  }, [
-    step,
-    widgetSettings,
-    setStep,
+    setOrganizationId,
     setWidgetSettings,
-    setLoadingMessage,
-  ]);
-
-  // Step 4: Load Vapi secrets (Optional)
-  const getVapiSecrets = useAction(api.public.secrets.getVapiSecrets);
-  useEffect(() => {
-    if (step !== "vapi") {
-      return;
-    }
-
-    if (!organizationId) {
-      setErrorMessage("Organization ID is required");
-      setScreen("error");
-      return;
-    }
-
-    setLoadingMessage("Loading voice features...");
-    getVapiSecrets({ organizationId })
-      .then((secrets) => {
-        setVapiSecrets(secrets);
-        setStep("done");
-      })
-      .catch(() => {
-        setVapiSecrets(null);
-        setStep("done")
-      })
-  }, [
-    step,
-    organizationId,
-    getVapiSecrets,
     setVapiSecrets,
-    setLoadingMessage,
-    setStep,
+    setContactSessionId,
+    setConversationId,
+    setErrorMessage,
+    setScreen,
   ]);
-
-  useEffect(() => {
-    if (step !== "done") {
-      return;
-    }
-
-    const hasValidSession = contactSessionId && sessionValid;
-    setScreen(hasValidSession ? "selection" : "auth");
-  }, [step, contactSessionId, sessionValid, setScreen]);
 
   return (
-    <>
-      <WidgetHeader>
-        <div className="flex flex-col justify-between gap-y-2 px-2 py-6 font-semibold">
-          <p className="text-3xl">
-            Hi there! 👋
-          </p>
-          <p className="text-lg">
-            Let&apos;s get you started
-          </p>
-        </div>
-      </WidgetHeader>
-      <div className="flex flex-1 flex-col items-center justify-center gap-y-4 p-4 text-muted-foreground">
-        <LoaderIcon className="animate-spin" />
-        <p className="text-sm">
-         {loadingMessage || "Loading..."}
-        </p>
-      </div>
-    </>
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-background p-6">
+      <LoaderIcon className="size-6 animate-spin text-primary" />
+
+      <p className="text-center text-sm text-muted-foreground">
+        {loadingMessage}
+      </p>
+    </div>
   );
 };

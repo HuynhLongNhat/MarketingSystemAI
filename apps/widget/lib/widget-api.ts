@@ -2,6 +2,24 @@
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
+export type PublicWidgetSettings = {
+  organizationId: string;
+  greetMessage: string;
+  defaultSuggestions: Record<string, string>;
+  vapiSettings: {
+    assistantId?: string;
+    phoneNumber?: string;
+  };
+};
+
+export type PublicWidgetConfiguration = {
+  organization: {
+    id: string;
+    name: string;
+  };
+  settings: PublicWidgetSettings;
+};
+
 export type WidgetConversation = {
   id: string;
   organizationId: string;
@@ -27,18 +45,44 @@ type MessagePage = {
 const tokenKey = (organizationId: string) =>
   `widget_session_token_${organizationId}`;
 
+const activeConversationKey = (organizationId: string) =>
+  `widget_active_conversation_${organizationId}`;
+
 export const widgetSession = {
-  get(organizationId: string) {
+  get(organizationId: string): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(tokenKey(organizationId));
   },
 
-  set(organizationId: string, token: string) {
+  set(organizationId: string, token: string): void {
+    if (typeof window === "undefined") return;
     localStorage.setItem(tokenKey(organizationId), token);
   },
 
-  clear(organizationId: string) {
+  clear(organizationId: string): void {
+    if (typeof window === "undefined") return;
     localStorage.removeItem(tokenKey(organizationId));
+    localStorage.removeItem(activeConversationKey(organizationId));
+  },
+};
+
+export const widgetConversationStorage = {
+  get(organizationId: string): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(activeConversationKey(organizationId));
+  },
+
+  set(organizationId: string, conversationId: string): void {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(
+      activeConversationKey(organizationId),
+      conversationId,
+    );
+  },
+
+  clear(organizationId: string): void {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem(activeConversationKey(organizationId));
   },
 };
 
@@ -71,6 +115,12 @@ async function request<T>(
 }
 
 export const widgetApi = {
+  getPublicConfiguration(organizationId: string) {
+    return request<PublicWidgetConfiguration>(
+      `/organizations/${encodeURIComponent(organizationId)}`,
+    );
+  },
+
   createSession(input: {
     organizationId: string;
     name: string;
@@ -118,11 +168,7 @@ export const widgetApi = {
     );
   },
 
-  listMessages(
-    token: string,
-    id: string,
-    before?: string,
-  ) {
+  listMessages(token: string, id: string, before?: string) {
     const query = before
       ? `?before=${encodeURIComponent(before)}`
       : "";

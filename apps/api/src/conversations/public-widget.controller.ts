@@ -1,4 +1,3 @@
-
 import {
   Body,
   Controller,
@@ -10,12 +9,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import {
-  IsEmail,
-  IsNotEmpty,
-  IsString,
-  MaxLength,
-} from "class-validator";
+import { IsEmail, IsNotEmpty, IsString, MaxLength } from "class-validator";
 import { PublicWidgetService } from "./public-widget.service.js";
 
 class CreatePublicSessionDto {
@@ -64,16 +58,12 @@ export class PublicWidgetController {
   }
 
   @Post("conversations")
-  createConversation(
-    @Headers("authorization") authorization?: string,
-  ) {
+  createConversation(@Headers("authorization") authorization?: string) {
     return this.service.createConversation(this.token(authorization));
   }
 
   @Get("conversations")
-  listConversations(
-    @Headers("authorization") authorization?: string,
-  ) {
+  listConversations(@Headers("authorization") authorization?: string) {
     return this.service.listConversations(this.token(authorization));
   }
 
@@ -91,11 +81,7 @@ export class PublicWidgetController {
     @Param("id") id: string,
     @Query("before") before?: string,
   ) {
-    return this.service.listMessages(
-      this.token(authorization),
-      id,
-      before,
-    );
+    return this.service.listMessages(this.token(authorization), id, before);
   }
 
   @Post("conversations/:id/messages")
@@ -104,10 +90,14 @@ export class PublicWidgetController {
     @Param("id") id: string,
     @Body() dto: SendPublicMessageDto,
   ) {
-    return this.service.sendMessage(
-      this.token(authorization),
-      id,
-      dto.content,
-    );
+    return this.service.sendMessage(this.token(authorization), id, dto.content);
+  }
+
+  @Get("organizations/:organizationId")
+  @ApiOperation({
+    summary: "Get public widget configuration",
+  })
+  getPublicConfiguration(@Param("organizationId") organizationId: string) {
+    return this.service.getPublicConfiguration(organizationId);
   }
 }
