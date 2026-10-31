@@ -38,6 +38,13 @@ type ChatItem = WidgetConversation & {
   title: string;
 };
 
+type PendingMessage = {
+  organizationId: string;
+  conversationId: string | null;
+  content: string;
+  clientMessageId: string;
+};
+
 const sortMessages = (items: WidgetMessage[]) =>
   [...items].sort(
     (a, b) =>
@@ -90,6 +97,7 @@ export const WidgetChatWorkspace = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
+  const pendingMessageRef = useRef<PendingMessage | null>(null);
 
   const getToken = useCallback(() => {
     return organizationId
@@ -160,6 +168,7 @@ export const WidgetChatWorkspace = () => {
   const openChat = (id: string) => {
     if (!organizationId || sendingRef.current) return;
 
+    pendingMessageRef.current = null;
     widgetConversationStorage.set(organizationId, id);
     setConversationId(id);
     setSidebarOpen(false);
@@ -169,6 +178,7 @@ export const WidgetChatWorkspace = () => {
   const newChat = () => {
     if (sendingRef.current) return;
 
+    pendingMessageRef.current = null;
     setConversationId(null);
     setConversation(null);
     setMessages([]);
@@ -343,6 +353,29 @@ export const WidgetChatWorkspace = () => {
       return;
     }
 
+    const pending = pendingMessageRef.current;
+
+    const canRetry =
+      pending?.organizationId === organizationId &&
+      pending.content === content &&
+      (
+        !conversationId ||
+        pending.conversationId === conversationId
+      );
+
+    const clientMessageId = canRetry
+      ? pending.clientMessageId
+      : crypto.randomUUID();
+
+    pendingMessageRef.current = {
+      organizationId,
+      conversationId: canRetry
+        ? pending.conversationId
+        : conversationId,
+      content,
+      clientMessageId,
+    };
+
     sendingRef.current = true;
     setSending(true);
     setError(null);
@@ -350,8 +383,7 @@ export const WidgetChatWorkspace = () => {
     try {
       let token = getToken();
 
-      // 1. Khách chưa có session:
-      // tạo Guest Session khi gửi tin đầu tiên.
+      // 1. Tạo Guest Session khi khách gửi tin đầu tiên.
       if (!token) {
         const guest =
           await widgetApi.createGuestSession(
@@ -371,7 +403,11 @@ export const WidgetChatWorkspace = () => {
       }
 
       // 2. Tạo conversation nếu chưa có.
-      let id = conversationId;
+      // Giữ ID đã tạo để retry không tạo lại conversation.
+      let id =
+        conversationId ??
+        pendingMessageRef.current?.conversationId ??
+        null;
 
       if (!id) {
         const created =
@@ -395,15 +431,19 @@ export const WidgetChatWorkspace = () => {
         ]);
       }
 
-      // 3. Gửi tin nhắn.
+      if (pendingMessageRef.current) {
+        pendingMessageRef.current.conversationId = id;
+      }
+
+      // 3. Gửi tin nhắn cùng UUID nếu đang retry.
       const message = await widgetApi.sendMessage(
         token,
         id,
         content,
+        clientMessageId,
       );
 
       // 4. Chuyển sang conversation vừa tạo.
-      // Effect sẽ tải cả lời chào và tin nhắn.
       if (conversationId !== id) {
         setConversationId(id);
       } else {
@@ -422,6 +462,7 @@ export const WidgetChatWorkspace = () => {
         ),
       );
 
+      pendingMessageRef.current = null;
       setDraft("");
 
       // 6. Đồng bộ lịch sử.
@@ -433,9 +474,10 @@ export const WidgetChatWorkspace = () => {
         err instanceof WidgetApiError &&
         err.status === 401
       ) {
-        // Backend xác nhận token hết hạn hoặc sai.
-        // Xóa phiên cũ nhưng giữ nội dung đang nhập.
+        // Token không còn hợp lệ.
+        // Xóa phiên cũ và cả pending ID gắn với phiên này.
         widgetSession.clear(organizationId);
+        pendingMessageRef.current = null;
 
         setContactSessionId(null);
         setConversationId(null);

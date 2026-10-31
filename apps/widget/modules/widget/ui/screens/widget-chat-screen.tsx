@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -65,6 +66,12 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+type PendingMessage = {
+  conversationId: string;
+  content: string;
+  clientMessageId: string;
+};
+
 export const WidgetChatScreen = () => {
   const setScreen = useSetAtom(screenAtom);
 
@@ -82,6 +89,9 @@ export const WidgetChatScreen = () => {
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const pendingMessageRef = useRef<PendingMessage | null>(null);
+  const sendingRef = useRef(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -137,6 +147,10 @@ export const WidgetChatScreen = () => {
   useEffect(() => {
     void loadConversation();
   }, [loadConversation]);
+
+  useEffect(() => {
+    pendingMessageRef.current = null;
+  }, [conversationId, organizationId]);
 
   const refreshMessages = useCallback(async () => {
     if (!organizationId || !conversationId) return;
@@ -235,7 +249,7 @@ export const WidgetChatScreen = () => {
       !organizationId ||
       !conversationId ||
       conversation?.status === "resolved" ||
-      isSending
+      sendingRef.current
     ) {
       return;
     }
@@ -243,13 +257,30 @@ export const WidgetChatScreen = () => {
     const token = widgetSession.get(organizationId);
     if (!token) return;
 
+    const content = values.message.trim();
+
+    const pending = pendingMessageRef.current;
+    const clientMessageId =
+      pending?.conversationId === conversationId &&
+      pending.content === content
+        ? pending.clientMessageId
+        : crypto.randomUUID();
+
+    pendingMessageRef.current = {
+      conversationId,
+      content,
+      clientMessageId,
+    };
+
+    sendingRef.current = true;
     setIsSending(true);
 
     try {
       const message = await widgetApi.sendMessage(
         token,
         conversationId,
-        values.message.trim(),
+        content,
+        clientMessageId,
       );
 
       setMessages((current) => {
@@ -260,6 +291,7 @@ export const WidgetChatScreen = () => {
         return [...current, message];
       });
 
+      pendingMessageRef.current = null;
       form.reset({ message: "" });
       setError(null);
 
@@ -268,6 +300,7 @@ export const WidgetChatScreen = () => {
       console.error(err);
       setError("Không thể gửi tin nhắn");
     } finally {
+      sendingRef.current = false;
       setIsSending(false);
     }
   };

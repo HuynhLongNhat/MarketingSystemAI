@@ -44,6 +44,7 @@ export type WidgetMessage = {
   conversationId: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  clientMessageId?: string | null;
   createdAt: string;
 };
 
@@ -236,12 +237,16 @@ export const widgetApi = {
     token: string,
     id: string,
     content: string,
+    clientMessageId: string,
   ) {
     return request<WidgetMessage>(
       `/conversations/${encodeURIComponent(id)}/messages`,
       {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({
+          content,
+          clientMessageId,
+        }),
       },
       token,
     );
