@@ -1,12 +1,12 @@
 
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
-  ConflictException,
-  Logger,
 } from "@nestjs/common";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -17,7 +17,7 @@ import {
   conversationMessages,
   widgetSettings,
 } from "@workspace/db/node";
-import { and, asc, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
 
@@ -371,6 +371,23 @@ export class PublicWidgetService {
     conversationId: string,
   ): Promise<void> {
     try {
+      // Kiểm tra trạng thái trước khi gọi OpenRouter.
+      // Không tốn API call nếu nhân viên đã nhận hội thoại.
+      const [beforeGeneration] = await db
+        .select({ status: conversations.status })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.organizationId, organizationId),
+          ),
+        )
+        .limit(1);
+
+      if (beforeGeneration?.status !== "unresolved") {
+        return;
+      }
+
       const history = await db
         .select({
           role: conversationMessages.role,
@@ -401,7 +418,8 @@ export class PublicWidgetService {
 
       if (!reply) return;
 
-      // Không lưu câu trả lời nếu conversation đã resolved.
+      // Nếu nhân viên nhận hội thoại trong lúc AI đang tạo
+      // câu trả lời thì hủy câu trả lời đó.
       const [currentConversation] = await db
         .select({ status: conversations.status })
         .from(conversations)
@@ -413,10 +431,7 @@ export class PublicWidgetService {
         )
         .limit(1);
 
-      if (
-        !currentConversation ||
-        currentConversation.status !== "unresolved"
-      ) {
+      if (currentConversation?.status !== "unresolved") {
         return;
       }
 
@@ -454,26 +469,26 @@ export class PublicWidgetService {
       );
     }
 
-    // Retry tin nhắn cũ: trả về bản ghi đã lưu.
+    // Idempotency: gửi lại cùng UUID chỉ trả về tin nhắn cũ.
+    const messageIdentity = and(
+      eq(
+        conversationMessages.organizationId,
+        conversation.organizationId,
+      ),
+      eq(
+        conversationMessages.conversationId,
+        conversationId,
+      ),
+      eq(
+        conversationMessages.clientMessageId,
+        clientMessageId,
+      ),
+    );
+
     const [existing] = await db
       .select()
       .from(conversationMessages)
-      .where(
-        and(
-          eq(
-            conversationMessages.organizationId,
-            conversation.organizationId,
-          ),
-          eq(
-            conversationMessages.conversationId,
-            conversationId,
-          ),
-          eq(
-            conversationMessages.clientMessageId,
-            clientMessageId,
-          ),
-        ),
-      )
+      .where(messageIdentity)
       .limit(1);
 
     if (existing) {
@@ -513,36 +528,23 @@ export class PublicWidgetService {
       .returning();
 
     if (inserted) {
-      // MVP: tạo AI reply sau khi lưu tin nhắn.
-      // Lỗi AI không được làm mất tin nhắn của khách.
-      await this.replyWithAi(
-        conversation.organizationId,
-        conversationId,
-      );
+      // Chỉ AI mode (unresolved) mới được tạo câu trả lời.
+      // Human mode (escalated) vẫn lưu tin khách,
+      // nhưng không gọi OpenRouter.
+      if (conversation.status === "unresolved") {
+        await this.replyWithAi(
+          conversation.organizationId,
+          conversationId,
+        );
+      }
 
       return inserted;
     }
 
-    // Request khác đã insert cùng clientMessageId.
     const [saved] = await db
       .select()
       .from(conversationMessages)
-      .where(
-        and(
-          eq(
-            conversationMessages.organizationId,
-            conversation.organizationId,
-          ),
-          eq(
-            conversationMessages.conversationId,
-            conversationId,
-          ),
-          eq(
-            conversationMessages.clientMessageId,
-            clientMessageId,
-          ),
-        ),
-      )
+      .where(messageIdentity)
       .limit(1);
 
     if (!saved) {

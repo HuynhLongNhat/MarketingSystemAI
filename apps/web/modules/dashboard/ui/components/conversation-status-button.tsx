@@ -24,7 +24,7 @@ export const ConversationStatusButton = ({
 }: ConversationStatusButtonProps) => {
   if (status === "resolved") {
     return (
-      <Hint text="Mark as unresolved">
+      <Hint text="Chuyển về chế độ AI hỗ trợ">
         <Button
           disabled={disabled}
           onClick={onClick}
@@ -32,7 +32,7 @@ export const ConversationStatusButton = ({
           variant="tertiary"
         >
           <CheckIcon />
-          Resolved
+          Đã kết thúc
         </Button>
       </Hint>
     );
@@ -40,7 +40,7 @@ export const ConversationStatusButton = ({
 
   if (status === "escalated") {
     return (
-      <Hint text="Mark as resolved">
+      <Hint text="Kết thúc hội thoại">
         <Button
           disabled={disabled}
           onClick={onClick}
@@ -48,14 +48,14 @@ export const ConversationStatusButton = ({
           variant="warning"
         >
           <ArrowUpIcon />
-          Escalated
+          Nhân viên tiếp quản
         </Button>
       </Hint>
     );
   }
 
   return (
-    <Hint text="Mark as escalated">
+    <Hint text="Chuyển hội thoại cho nhân viên">
       <Button
         disabled={disabled}
         onClick={onClick}
@@ -63,7 +63,7 @@ export const ConversationStatusButton = ({
         variant="destructive"
       >
         <ArrowRightIcon />
-        Unresolved
+        AI đang hỗ trợ
       </Button>
     </Hint>
   );

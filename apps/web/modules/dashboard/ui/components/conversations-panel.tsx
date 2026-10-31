@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAtomValue, useSetAtom } from "jotai/react";
@@ -43,6 +44,12 @@ import {
 import { statusFilterAtom } from "../../atoms";
 
 const PAGE_SIZE = 10;
+
+const STATUS_LABELS: Record<ConversationStatus, string> = {
+  unresolved: "AI đang hỗ trợ",
+  escalated: "Nhân viên tiếp quản",
+  resolved: "Đã kết thúc",
+};
 
 export const ConversationsPanel = () => {
   const pathname = usePathname();
@@ -88,11 +95,8 @@ export const ConversationsPanel = () => {
     } catch (err) {
       if (version !== requestVersion.current) return;
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load conversations",
-      );
+      console.error("Failed to load conversations:", err);
+      setError("Không thể tải danh sách hội thoại.");
     } finally {
       if (version === requestVersion.current) {
         setLoading(false);
@@ -151,11 +155,8 @@ export const ConversationsPanel = () => {
     } catch (err) {
       if (version !== requestVersion.current) return;
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load more conversations",
-      );
+      console.error("Failed to load more conversations:", err);
+      setError("Không thể tải thêm hội thoại.");
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
@@ -178,36 +179,35 @@ export const ConversationsPanel = () => {
           }
         >
           <SelectTrigger className="h-8 border-none px-1.5 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
-            <SelectValue placeholder="Filter" />
-
+            <SelectValue placeholder="Lọc hội thoại" />
           </SelectTrigger>
 
           <SelectContent>
             <SelectItem value="all">
               <div className="flex items-center gap-2">
                 <ListIcon className="size-4" />
-                <span>All</span>
+                <span>Tất cả</span>
               </div>
             </SelectItem>
 
             <SelectItem value="unresolved">
               <div className="flex items-center gap-2">
                 <ArrowRightIcon className="size-4" />
-                <span>Unresolved</span>
+                <span>AI đang hỗ trợ</span>
               </div>
             </SelectItem>
 
             <SelectItem value="escalated">
               <div className="flex items-center gap-2">
                 <ArrowUpIcon className="size-4" />
-                <span>Escalated</span>
+                <span>Nhân viên tiếp quản</span>
               </div>
             </SelectItem>
 
             <SelectItem value="resolved">
               <div className="flex items-center gap-2">
                 <CheckIcon className="size-4" />
-                <span>Resolved</span>
+                <span>Đã kết thúc</span>
               </div>
             </SelectItem>
           </SelectContent>
@@ -221,7 +221,8 @@ export const ConversationsPanel = () => {
           <div className="flex w-full flex-col text-sm">
             {items.map((conversation) => {
               const contact = conversation.contactSession;
-              const contactName = contact.name?.trim() || "Khách truy cập";
+              const contactName =
+                contact.name?.trim() || "Khách truy cập";
 
               const country = getCountryFromTimezone(
                 contact.metadata?.timezone,
@@ -268,13 +269,14 @@ export const ConversationsPanel = () => {
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                         {formatDistanceToNow(
                           new Date(conversation.createdAt),
+                          { addSuffix: true, locale: vi },
                         )}
                       </span>
                     </div>
 
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <span className="truncate text-xs text-muted-foreground">
-                        {conversation.status}
+                        {STATUS_LABELS[conversation.status]}
                       </span>
 
                       <ConversationStatusIcon
@@ -288,7 +290,7 @@ export const ConversationsPanel = () => {
 
             {items.length === 0 && !error && (
               <p className="p-6 text-center text-sm text-muted-foreground">
-                No conversations found.
+                Chưa có cuộc trò chuyện nào.
               </p>
             )}
 
@@ -308,7 +310,7 @@ export const ConversationsPanel = () => {
                     )
                   }
                 >
-                  Retry
+                  Thử lại
                 </Button>
               </div>
             )}
@@ -322,8 +324,8 @@ export const ConversationsPanel = () => {
                   onClick={() => void loadMore()}
                 >
                   {loadingMore
-                    ? "Loading..."
-                    : "Load more"}
+                    ? "Đang tải..."
+                    : "Tải thêm"}
                 </Button>
               </div>
             )}
