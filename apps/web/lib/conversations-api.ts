@@ -13,8 +13,8 @@ export type ConversationStatus =
 export interface ContactSession {
   id: string;
   organizationId: string;
-  name: string;
-  email: string;
+  name: string | null;
+  email: string | null;
   expiresAt: string;
 
   metadata: {
@@ -46,8 +46,7 @@ export interface Conversation {
   updatedAt: string;
 }
 
-export interface ConversationWithContact
-  extends Conversation {
+export interface ConversationWithContact extends Conversation {
   contactSession: Pick<
     ContactSession,
     "id" | "name" | "email" | "metadata" | "createdAt"

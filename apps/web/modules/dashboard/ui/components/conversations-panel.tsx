@@ -179,6 +179,7 @@ export const ConversationsPanel = () => {
         >
           <SelectTrigger className="h-8 border-none px-1.5 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
             <SelectValue placeholder="Filter" />
+
           </SelectTrigger>
 
           <SelectContent>
@@ -220,6 +221,7 @@ export const ConversationsPanel = () => {
           <div className="flex w-full flex-col text-sm">
             {items.map((conversation) => {
               const contact = conversation.contactSession;
+              const contactName = contact.name?.trim() || "Khách truy cập";
 
               const country = getCountryFromTimezone(
                 contact.metadata?.timezone,
@@ -260,7 +262,7 @@ export const ConversationsPanel = () => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-bold">
-                        {contact.name}
+                        {contactName}
                       </span>
 
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">

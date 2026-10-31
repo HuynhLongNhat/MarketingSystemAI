@@ -265,6 +265,9 @@ export const ContactPanel = () => {
     return null;
   }
 
+  const contactName = contactSession.name?.trim() || "Khách truy cập";
+  const contactEmail = contactSession.email?.trim() || null;
+
   return (
     <div className="flex h-full w-full flex-col bg-background text-foreground">
       <div className="flex flex-col gap-y-4 p-4">
@@ -281,21 +284,23 @@ export const ContactPanel = () => {
 
           <div className="flex-1 overflow-hidden">
             <h4 className="line-clamp-1">
-              {contactSession.name}
+              {contactName}
             </h4>
 
             <p className="line-clamp-1 text-sm text-muted-foreground">
-              {contactSession.email}
+              {contactEmail ?? "Chưa cung cấp email"}
             </p>
           </div>
         </div>
 
-        <Button asChild className="w-full" size="lg">
-          <Link href={`mailto:${contactSession.email}`}>
-            <MailIcon />
-            <span>Send Email</span>
-          </Link>
-        </Button>
+        {contactEmail && (
+          <Button asChild className="w-full" size="lg">
+            <Link href={`mailto:${contactEmail}`}>
+              <MailIcon />
+              <span>Send Email</span>
+            </Link>
+          </Button>
+        )}
       </div>
 
       {contactSession.metadata && (
