@@ -1,14 +1,18 @@
+
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
+import { CopyIcon, CheckIcon } from "lucide-react";
+import { toast } from "sonner";
+
 import { authClient } from "@/lib/auth-client";
+
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Separator } from "@workspace/ui/components/separator";
-import { CopyIcon } from "lucide-react";
-import { toast } from "sonner";
-import { IntegrationId, INTEGRATIONS } from "../../constants";
-import Image from "next/image";
+
 import {
   Dialog,
   DialogContent,
@@ -16,31 +20,63 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@workspace/ui/components/dialog";
-import { useState } from "react";
+
+import {
+  INTEGRATIONS,
+  WIDGET_BASE_URL,
+  type IntegrationId,
+} from "../../constants";
+
 import { createScript } from "../../utils";
 
-export const IntegrationsView = () => {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedSnippet, setSelectedSnippet] = useState("");
- const { data: organization } = authClient.useActiveOrganization();
+const INSTRUCTIONS: Record<IntegrationId, string> = {
+  html: "Dán mã trước thẻ đóng </body> trong file HTML.",
+  react:
+    "Dán thẻ script vào file index.html của dự án React/Vite, trước thẻ đóng </body>.",
+  nextjs:
+    "Thêm component Script vào app/layout.tsx. Giữ nguyên các provider và thành phần hiện có.",
+  javascript:
+    "Thêm đoạn JavaScript vào file được chạy trên website, sau khi trang đã có phần body.",
+};
 
-  const handleIntegrationClick = (integrationId: IntegrationId) => {
-    if (!organization) {
-      toast.error("Organization ID not found");
+export const IntegrationsView = () => {
+  const { data: organization } =
+    authClient.useActiveOrganization();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedSnippet, setSelectedSnippet] =
+    useState("");
+  const [selectedIntegration, setSelectedIntegration] =
+    useState<IntegrationId>("html");
+
+  const handleIntegrationClick = (
+    integrationId: IntegrationId,
+  ) => {
+    if (!organization?.id) {
+      toast.error("Vui lòng chọn tổ chức.");
       return;
     }
 
-    const snippet = createScript(integrationId, organization.id);
-    setSelectedSnippet(snippet);
+    setSelectedIntegration(integrationId);
+    setSelectedSnippet(
+      createScript(integrationId, organization.id),
+    );
     setDialogOpen(true);
   };
 
-  const handleCopy = async () => {
+  const handleCopyOrganizationId = async () => {
+    if (!organization?.id) {
+      toast.error("Không tìm thấy mã tổ chức.");
+      return;
+    }
+
     try {
-      await navigator.clipboard.writeText(organization?.id ?? "");
-      toast.success("Copied to clipboard");
+      await navigator.clipboard.writeText(
+        organization.id,
+      );
+      toast.success("Đã sao chép mã tổ chức.");
     } catch {
-      toast.error("Failed to copy to clipboard");
+      toast.error("Không thể sao chép.");
     }
   };
 
@@ -50,61 +86,103 @@ export const IntegrationsView = () => {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         snippet={selectedSnippet}
+        integrationId={selectedIntegration}
       />
-      <div className="flex min-h-screen flex-col bg-muted p-8">
+
+      <div className="flex min-h-screen flex-col bg-muted p-4 md:p-8">
         <div className="mx-auto w-full max-w-screen-md">
           <div className="space-y-2">
-            <h1 className="text-2xl md:text-4xl">Setup & Integrations</h1>
-            <p className="text-muted-foreground">
-              Choose the integration that&apos;s right for you
+            <h1 className="text-2xl font-semibold md:text-3xl">
+              Tích hợp Website
+            </h1>
+
+            <p className="text-sm text-muted-foreground">
+              Nhúng chatbot chăm sóc khách hàng vào
+              website của bạn.
             </p>
           </div>
+
           <div className="mt-8 space-y-6">
-            <div className="flex items-center gap-4">
-              <Label className="w-34" htmlFor="organization-id">
-                Organization ID
+            <div className="space-y-2">
+              <Label htmlFor="organization-id">
+                Mã tổ chức (Organization ID)
               </Label>
-              <Input 
-                disabled
-                id="organization-id"
+
+              <div className="flex gap-2">
+                <Input
+                  id="organization-id"
+                  readOnly
+                  value={organization?.id ?? ""}
+                  className="min-w-0 flex-1 bg-background font-mono text-sm"
+                />
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!organization?.id}
+                  onClick={() =>
+                    void handleCopyOrganizationId()
+                  }
+                >
+                  <CopyIcon className="mr-2 size-4" />
+                  Sao chép
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Địa chỉ Widget</Label>
+
+              <Input
                 readOnly
-                value={organization?.id ?? ""}
-                className="flex-1 bg-background font-mono text-sm"
+                value={WIDGET_BASE_URL}
+                className="bg-background font-mono text-sm"
               />
-              <Button
-                className="gap-2"
-                onClick={handleCopy}
-                size="sm"
-              >
-                <CopyIcon className="size-4" />
-                Copy
-              </Button>
+
+              <p className="text-xs text-muted-foreground">
+                Được cấu hình qua NEXT_PUBLIC_WIDGET_URL.
+                Khi triển khai production, hãy sử dụng
+                domain HTTPS của Widget.
+              </p>
             </div>
           </div>
 
           <Separator className="my-8" />
-          <div className="space-y-6">
+
+          <div className="space-y-5">
             <div className="space-y-1">
-              <Label className="text-lg">Integrations</Label>
-              <p className="text-muted-foreground text-sm">
-                Add the following code to your website to enable the chatbox.
+              <h2 className="text-lg font-semibold">
+                Chọn nền tảng website
+              </h2>
+
+              <p className="text-sm text-muted-foreground">
+                Chọn công nghệ website để lấy mã nhúng
+                phù hợp.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {INTEGRATIONS.map((integration) => (
                 <button
                   key={integration.id}
-                  onClick={() => handleIntegrationClick(integration.id)}
                   type="button"
-                  className="flex items-center gap-4 rounded-lg border bg-background p-4 hover:bg-accent"
+                  disabled={!organization?.id}
+                  onClick={() =>
+                    handleIntegrationClick(integration.id)
+                  }
+                  className="flex items-center gap-3 rounded-lg border bg-background p-4 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Image
-                    alt={integration.title}
-                    height={32}
                     src={integration.icon}
-                    width={32}
+                    alt={integration.title}
+                    width={28}
+                    height={28}
                   />
-                  <p>{integration.title}</p>
+
+                  <span className="text-sm font-medium">
+                    {integration.title}
+                  </span>
                 </button>
               ))}
             </div>
@@ -115,60 +193,100 @@ export const IntegrationsView = () => {
   );
 };
 
+interface IntegrationsDialogProps {
+  open: boolean;
+  onOpenChange: (value: boolean) => void;
+  snippet: string;
+  integrationId: IntegrationId;
+}
+
 export const IntegrationsDialog = ({
   open,
   onOpenChange,
   snippet,
-}: {
-  open: boolean;
-  onOpenChange: (value: boolean) => void;
-  snippet: string;
-}) => {
+  integrationId,
+}: IntegrationsDialogProps) => {
+  const [copied, setCopied] = useState(false);
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(snippet);
-      toast.success("Copied to clipboard");
+      setCopied(true);
+      toast.success("Đã sao chép mã nhúng.");
     } catch {
-      toast.error("Failed to copy to clipboard");
+      toast.error("Không thể sao chép mã nhúng.");
     }
   };
 
+  const handleOpenChange = (value: boolean) => {
+    if (!value) {
+      setCopied(false);
+    }
+
+    onOpenChange(value);
+  };
+
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={handleOpenChange}
+    >
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Integrate with your website</DialogTitle>
+          <DialogTitle>
+            Nhúng chatbot vào website
+          </DialogTitle>
+
           <DialogDescription>
-            Follow these steps to add the chatbox to your website
+            Sao chép mã và thêm vào website theo
+            hướng dẫn bên dưới.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div className="space-y-2">
-            <div className="rounded-md bg-accent p-2 text-sm">
-              1. Copy the following code
-            </div>
-            <div className="group relative">
-              <pre className="max-h-[300px] overflow-x-auto overflow-y-auto whitespace-pre-wrap break-all rounded-md bg-foreground p-2 font-mono text-secondary text-sm">
+            <Label>1. Sao chép mã nhúng</Label>
+
+            <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs leading-6 text-zinc-100">
+              <code className="whitespace-pre-wrap break-all">
                 {snippet}
-              </pre>
-              <Button
-                className="absolute top-4 right-6 size-6 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={handleCopy}
-                size="icon"
-                variant="secondary"
-              >
-                <CopyIcon className="size-3" />
-              </Button>
-            </div>
+              </code>
+            </pre>
+
+            <Button
+              type="button"
+              onClick={() => void handleCopy()}
+              className="w-full gap-2"
+            >
+              {copied ? (
+                <CheckIcon className="size-4" />
+              ) : (
+                <CopyIcon className="size-4" />
+              )}
+
+              {copied
+                ? "Đã sao chép"
+                : "Sao chép mã nhúng"}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label>2. Thêm mã vào website</Label>
+
+            <p className="text-sm leading-6 text-muted-foreground">
+              {INSTRUCTIONS[integrationId]}
+            </p>
           </div>
 
           <div className="space-y-2">
-            <div className="rounded-md bg-accent p-2 text-sm">
-              2. Add the code in your page
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Paste the chatbox code above in your page. You can add it in the HTML head section.
+            <Label>3. Kiểm tra chatbot</Label>
+
+            <p className="text-sm leading-6 text-muted-foreground">
+              Mở website, tìm nút hỗ trợ khách hàng
+              ở góc dưới bên phải và thử gửi một
+              tin nhắn.
             </p>
           </div>
         </div>

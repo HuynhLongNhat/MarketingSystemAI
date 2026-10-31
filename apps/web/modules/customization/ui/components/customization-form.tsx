@@ -1,7 +1,16 @@
+
+"use client";
+
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { Loader2Icon } from "lucide-react";
+
+import {
+  widgetSettingsApi,
+  type WidgetSettings,
+} from "@/lib/widget-settings-api";
+
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
@@ -22,96 +31,113 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Separator } from "@workspace/ui/components/separator";
 import { Textarea } from "@workspace/ui/components/textarea";
-import { Doc } from "@workspace/backend/_generated/dataModel";
-import { useMutation } from "convex/react";
-import { api } from "@workspace/backend/_generated/api";
-import { VapiFormFields } from "./vapi-form-fields";
-import { FormSchema } from "../../types";
+
+import type { FormSchema } from "../../types";
 import { widgetSettingsSchema } from "../../schemas";
 
-type WidgetSettings = Doc<"widgetSettings">;
-
 interface CustomizationFormProps {
-  initialData?: WidgetSettings | null;
-  hasVapiPlugin: boolean;
-};
+  initialData: WidgetSettings | null;
+}
 
 export const CustomizationForm = ({
   initialData,
-  hasVapiPlugin,
 }: CustomizationFormProps) => {
-  const upsertWidgetSettings = useMutation(api.private.widgetSettings.upsert);
-
   const form = useForm<FormSchema>({
     resolver: zodResolver(widgetSettingsSchema),
     defaultValues: {
       greetMessage:
-        initialData?.greetMessage || "Hi! How can I help you today?",
+        initialData?.greetMessage ??
+        "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
+
       defaultSuggestions: {
-        suggestion1: initialData?.defaultSuggestions.suggestion1 || "",
-        suggestion2: initialData?.defaultSuggestions.suggestion2 || "",
-        suggestion3: initialData?.defaultSuggestions.suggestion3 || "",
+        suggestion1:
+          initialData?.defaultSuggestions?.suggestion1 ?? "",
+        suggestion2:
+          initialData?.defaultSuggestions?.suggestion2 ?? "",
+        suggestion3:
+          initialData?.defaultSuggestions?.suggestion3 ?? "",
       },
+
+      // Giữ cấu trúc form cũ để tương thích type.
+      // Không gửi các giá trị này lên API trong MVP-01.
       vapiSettings: {
-        assistantId: initialData?.vapiSettings.assistantId || "",
-        phoneNumber: initialData?.vapiSettings.phoneNumber || "",
+        assistantId:
+          initialData?.vapiSettings?.assistantId ?? "",
+        phoneNumber:
+          initialData?.vapiSettings?.phoneNumber ?? "",
       },
     },
   });
 
   const onSubmit = async (values: FormSchema) => {
     try {
-      const vapiSettings: WidgetSettings["vapiSettings"] = {
-        assistantId:
-          values.vapiSettings.assistantId === "none"
-            ? ""
-            : values.vapiSettings.assistantId,
-        phoneNumber:
-          values.vapiSettings.phoneNumber === "none"
-            ? ""
-            : values.vapiSettings.phoneNumber,
-      };
-
-      await upsertWidgetSettings({
-        greetMessage: values.greetMessage,
-        defaultSuggestions: values.defaultSuggestions,
-        vapiSettings,
+      await widgetSettingsApi.updateCurrent({
+        greetMessage: values.greetMessage.trim(),
+        defaultSuggestions: {
+          suggestion1:
+            values.defaultSuggestions.suggestion1?.trim() ?? "",
+          suggestion2:
+            values.defaultSuggestions.suggestion2?.trim() ?? "",
+          suggestion3:
+            values.defaultSuggestions.suggestion3?.trim() ?? "",
+        },
       });
 
-      toast.success("Widget settings saved");
-    } catch(error) {
-      console.error(error);
-      toast.error("Something went wrong");
+      toast.success("Đã lưu cấu hình chatbot.");
+    } catch (error) {
+      console.error(
+        "Failed to save widget settings:",
+        error,
+      );
+
+      toast.error(
+        "Không thể lưu cấu hình. Vui lòng thử lại.",
+      );
     }
-  } 
+  };
 
   return (
     <Form {...form}>
-      <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
+      <form
+        className="space-y-6"
+        onSubmit={form.handleSubmit(onSubmit)}
+      >
         <Card>
           <CardHeader>
-            <CardTitle>General Chat Settings</CardTitle>
+            <CardTitle>
+              General Chat Settings
+            </CardTitle>
+
             <CardDescription>
-              Configure basic chat widget behavior and messages
+              Thiết lập lời chào và nội dung gợi ý
+              cho khách hàng.
             </CardDescription>
           </CardHeader>
+
           <CardContent className="space-y-6">
             <FormField
               control={form.control}
               name="greetMessage"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Greeting Message</FormLabel>
+                  <FormLabel>
+                    Greeting Message
+                  </FormLabel>
+
                   <FormControl>
                     <Textarea
                       {...field}
-                      placeholder="Welcome message shown when chat open"
+                      maxLength={2000}
+                      placeholder="Nhập lời chào khi khách bắt đầu trò chuyện..."
                       rows={3}
                     />
                   </FormControl>
+
                   <FormDescription>
-                    The first message customers see when they open the chat
+                    Tin nhắn đầu tiên khách nhận được
+                    khi bắt đầu hội thoại mới.
                   </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -121,86 +147,97 @@ export const CustomizationForm = ({
 
             <div className="space-y-4">
               <div>
-                <h3 className="mb-4 text-sm">
+                <h3 className="text-sm font-medium">
                   Default Suggestions
                 </h3>
-                <p className="mb-4 text-muted-foreground text-sm">
-                  Quick reply suggestions shown to customers to help guide the
-                  conversation
-                </p>
 
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="defaultSuggestions.suggestion1"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Suggestion 1</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="e.g., How do I get started?"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="defaultSuggestions.suggestion2"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Suggestion 2</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="e.g., What are your pricing plans?"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="defaultSuggestions.suggestion3"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Suggestion 3</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="e.g., I need help with my account"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Cấu hình tối đa 3 câu hỏi gợi ý
+                  cho khách hàng.
+                </p>
               </div>
+
+              <FormField
+                control={form.control}
+                name="defaultSuggestions.suggestion1"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Suggestion 1
+                    </FormLabel>
+
+                    <FormControl>
+                      <Input
+                        {...field}
+                        maxLength={160}
+                        placeholder="Ví dụ: Chính sách đổi trả như thế nào?"
+                      />
+                    </FormControl>
+
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="defaultSuggestions.suggestion2"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Suggestion 2
+                    </FormLabel>
+
+                    <FormControl>
+                      <Input
+                        {...field}
+                        maxLength={160}
+                        placeholder="Ví dụ: Shop có giao hàng toàn quốc không?"
+                      />
+                    </FormControl>
+
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="defaultSuggestions.suggestion3"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Suggestion 3
+                    </FormLabel>
+
+                    <FormControl>
+                      <Input
+                        {...field}
+                        maxLength={160}
+                        placeholder="Ví dụ: Tôi muốn gặp nhân viên tư vấn."
+                      />
+                    </FormControl>
+
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           </CardContent>
         </Card>
 
-        {hasVapiPlugin && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Voice Assistant Settings</CardTitle>
-              <CardDescription>
-                Configure voice calling features powered by Vapi
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <VapiFormFields form={form} />
-            </CardContent>
-          </Card>
-        )}
-
         <div className="flex justify-end">
-          <Button disabled={form.formState.isSubmitting} type="submit">
-            Save Settings
+          <Button
+            type="submit"
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting && (
+              <Loader2Icon className="mr-2 size-4 animate-spin" />
+            )}
+
+            {form.formState.isSubmitting
+              ? "Đang lưu..."
+              : "Save Settings"}
           </Button>
         </div>
       </form>

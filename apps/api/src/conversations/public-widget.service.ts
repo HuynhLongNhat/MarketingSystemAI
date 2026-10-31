@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   ConflictException,
@@ -8,11 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import {
-  createHash,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   db,
   organization,
@@ -33,50 +28,33 @@ type ContactDetails = {
 
 @Injectable()
 export class PublicWidgetService {
-  private readonly logger = new Logger(
-    PublicWidgetService.name,
-  );
+  private readonly logger = new Logger(PublicWidgetService.name);
 
-  constructor(
-    private readonly aiService: PublicWidgetAiService,
-  ) {}
+  constructor(private readonly aiService: PublicWidgetAiService) {}
 
   private hashToken(token: string) {
-    return createHash("sha256")
-      .update(token)
-      .digest("hex");
+    return createHash("sha256").update(token).digest("hex");
   }
 
   private async requireSession(token: string) {
     if (!/^[a-f0-9]{64}$/.test(token)) {
-      throw new UnauthorizedException(
-        "Invalid widget session",
-      );
+      throw new UnauthorizedException("Invalid widget session");
     }
 
     const [session] = await db
       .select()
       .from(contactSessions)
-      .where(
-        eq(
-          contactSessions.sessionTokenHash,
-          this.hashToken(token),
-        ),
-      )
+      .where(eq(contactSessions.sessionTokenHash, this.hashToken(token)))
       .limit(1);
 
     if (!session || session.expiresAt <= new Date()) {
-      throw new UnauthorizedException(
-        "Widget session expired or invalid",
-      );
+      throw new UnauthorizedException("Widget session expired or invalid");
     }
 
     return session;
   }
 
-  private async requireOrganization(
-    organizationId: string,
-  ) {
+  private async requireOrganization(organizationId: string) {
     const [org] = await db
       .select({ id: organization.id })
       .from(organization)
@@ -84,29 +62,19 @@ export class PublicWidgetService {
       .limit(1);
 
     if (!org) {
-      throw new NotFoundException(
-        "Organization not found",
-      );
+      throw new NotFoundException("Organization not found");
     }
 
     return org;
   }
 
-  private async issueSession(
-    organizationId: string,
-    details?: ContactDetails,
-  ) {
+  private async issueSession(organizationId: string, details?: ContactDetails) {
     await this.requireOrganization(organizationId);
 
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    const identified = Boolean(
-      details?.name?.trim() &&
-        details?.email?.trim(),
-    );
+    const identified = Boolean(details?.name?.trim() && details?.email?.trim());
 
     const [session] = await db
       .insert(contactSessions)
@@ -116,18 +84,14 @@ export class PublicWidgetService {
         name: details?.name?.trim() || null,
         email: details?.email?.trim() || null,
         phone: details?.phone?.trim() || null,
-        visitorType: identified
-          ? "identified"
-          : "guest",
+        visitorType: identified ? "identified" : "guest",
         expiresAt,
         sessionTokenHash: this.hashToken(token),
       })
       .returning();
 
     if (!session) {
-      throw new BadRequestException(
-        "Cannot create session",
-      );
+      throw new BadRequestException("Cannot create session");
     }
 
     return {
@@ -143,26 +107,18 @@ export class PublicWidgetService {
     name: string;
     email: string;
   }) {
-    return this.issueSession(
-      input.organizationId,
-      {
-        name: input.name,
-        email: input.email,
-      },
-    );
+    return this.issueSession(input.organizationId, {
+      name: input.name,
+      email: input.email,
+    });
   }
 
-  async createGuestSession(input: {
-    organizationId: string;
-  }) {
-    return this.issueSession(
-      input.organizationId,
-    );
+  async createGuestSession(input: { organizationId: string }) {
+    return this.issueSession(input.organizationId);
   }
 
   async validateSession(token: string) {
-    const session =
-      await this.requireSession(token);
+    const session = await this.requireSession(token);
 
     return {
       valid: true,
@@ -176,12 +132,8 @@ export class PublicWidgetService {
     };
   }
 
-  async updateSession(
-    token: string,
-    details: ContactDetails,
-  ) {
-    const session =
-      await this.requireSession(token);
+  async updateSession(token: string, details: ContactDetails) {
+    const session = await this.requireSession(token);
 
     const updates: ContactDetails = {};
 
@@ -198,9 +150,7 @@ export class PublicWidgetService {
     }
 
     if (Object.keys(updates).length === 0) {
-      throw new BadRequestException(
-        "At least one contact field is required",
-      );
+      throw new BadRequestException("At least one contact field is required");
     }
 
     const name = updates.name ?? session.name;
@@ -210,30 +160,19 @@ export class PublicWidgetService {
       .update(contactSessions)
       .set({
         ...updates,
-        visitorType:
-          name && email
-            ? "identified"
-            : "guest",
+        visitorType: name && email ? "identified" : "guest",
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(
-            contactSessions.id,
-            session.id,
-          ),
-          eq(
-            contactSessions.organizationId,
-            session.organizationId,
-          ),
+          eq(contactSessions.id, session.id),
+          eq(contactSessions.organizationId, session.organizationId),
         ),
       )
       .returning();
 
     if (!updated) {
-      throw new NotFoundException(
-        "Session not found",
-      );
+      throw new NotFoundException("Session not found");
     }
 
     return {
@@ -247,150 +186,70 @@ export class PublicWidgetService {
   }
 
   async createConversation(token: string) {
-    const session =
-      await this.requireSession(token);
+    const session = await this.requireSession(token);
 
-    const [settings] = await db
-      .select({
-        greetMessage:
-          widgetSettings.greetMessage,
+    const [conversation] = await db
+      .insert(conversations)
+      .values({
+        id: randomUUID(),
+        organizationId: session.organizationId,
+        contactSessionId: session.id,
+        status: "unresolved",
       })
-      .from(widgetSettings)
-      .where(
-        eq(
-          widgetSettings.organizationId,
-          session.organizationId,
-        ),
-      )
-      .limit(1);
+      .returning();
 
-    const conversationId = randomUUID();
-
-    const greeting =
-      settings?.greetMessage?.trim() ||
-      "Xin chào! Chúng tôi có thể giúp gì cho bạn?";
-
-    return db.transaction(async (tx) => {
-      const [conversation] = await tx
-        .insert(conversations)
-        .values({
-          id: conversationId,
-          organizationId:
-            session.organizationId,
-          contactSessionId: session.id,
-          status: "unresolved",
-        })
-        .returning();
-
-      await tx
-        .insert(conversationMessages)
-        .values({
-          id: randomUUID(),
-          organizationId:
-            session.organizationId,
-          conversationId,
-          role: "assistant",
-          content: greeting,
-        });
-
-      return conversation;
-    });
+    return conversation;
   }
 
-  private async requireConversation(
-    token: string,
-    conversationId: string,
-  ) {
-    const session =
-      await this.requireSession(token);
+  private async requireConversation(token: string, conversationId: string) {
+    const session = await this.requireSession(token);
 
     const [conversation] = await db
       .select()
       .from(conversations)
       .where(
         and(
-          eq(
-            conversations.id,
-            conversationId,
-          ),
-          eq(
-            conversations.organizationId,
-            session.organizationId,
-          ),
-          eq(
-            conversations.contactSessionId,
-            session.id,
-          ),
+          eq(conversations.id, conversationId),
+          eq(conversations.organizationId, session.organizationId),
+          eq(conversations.contactSessionId, session.id),
         ),
       )
       .limit(1);
 
     if (!conversation) {
-      throw new NotFoundException(
-        "Conversation not found",
-      );
+      throw new NotFoundException("Conversation not found");
     }
 
     return conversation;
   }
 
   async listConversations(token: string) {
-    const session =
-      await this.requireSession(token);
+    const session = await this.requireSession(token);
 
     return db
       .select()
       .from(conversations)
       .where(
         and(
-          eq(
-            conversations.organizationId,
-            session.organizationId,
-          ),
-          eq(
-            conversations.contactSessionId,
-            session.id,
-          ),
+          eq(conversations.organizationId, session.organizationId),
+          eq(conversations.contactSessionId, session.id),
         ),
       )
-      .orderBy(
-        desc(conversations.createdAt),
-      )
+      .orderBy(desc(conversations.createdAt))
       .limit(50);
   }
 
-  async getConversation(
-    token: string,
-    conversationId: string,
-  ) {
-    return this.requireConversation(
-      token,
-      conversationId,
-    );
+  async getConversation(token: string, conversationId: string) {
+    return this.requireConversation(token, conversationId);
   }
 
-  async listMessages(
-    token: string,
-    conversationId: string,
-    before?: string,
-  ) {
-    const conversation =
-      await this.requireConversation(
-        token,
-        conversationId,
-      );
+  async listMessages(token: string, conversationId: string, before?: string) {
+    const conversation = await this.requireConversation(token, conversationId);
 
-    const beforeDate = before
-      ? new Date(before)
-      : null;
+    const beforeDate = before ? new Date(before) : null;
 
-    if (
-      beforeDate &&
-      Number.isNaN(beforeDate.getTime())
-    ) {
-      throw new BadRequestException(
-        "Invalid before date",
-      );
+    if (beforeDate && Number.isNaN(beforeDate.getTime())) {
+      throw new BadRequestException("Invalid before date");
     }
 
     const rows = await db
@@ -398,19 +257,10 @@ export class PublicWidgetService {
       .from(conversationMessages)
       .where(
         and(
-          eq(
-            conversationMessages.organizationId,
-            conversation.organizationId,
-          ),
-          eq(
-            conversationMessages.conversationId,
-            conversationId,
-          ),
+          eq(conversationMessages.organizationId, conversation.organizationId),
+          eq(conversationMessages.conversationId, conversationId),
           beforeDate
-            ? lt(
-                conversationMessages.createdAt,
-                beforeDate,
-              )
+            ? lt(conversationMessages.createdAt, beforeDate)
             : undefined,
         ),
       )
@@ -420,17 +270,13 @@ export class PublicWidgetService {
       )
       .limit(51);
 
-    const items = rows
-      .slice(0, 50)
-      .reverse();
+    const items = rows.slice(0, 50).reverse();
 
     return {
       items,
       hasMore: rows.length > 50,
       nextBefore:
-        rows.length > 50 && items[0]
-          ? items[0].createdAt.toISOString()
-          : null,
+        rows.length > 50 && items[0] ? items[0].createdAt.toISOString() : null,
     };
   }
 
@@ -438,9 +284,13 @@ export class PublicWidgetService {
     organizationId: string,
     conversationId: string,
   ): Promise<void> {
+    const fallbackMessage =
+      "Xin lỗi, hệ thống trả lời tự động đang tạm gián đoạn. " +
+      "Mình đã chuyển cuộc trò chuyện đến nhân viên hỗ trợ. " +
+      "Bạn có thể tiếp tục gửi thông tin tại đây.";
+
     try {
-      // Không gọi AI nếu hội thoại đã
-      // chuyển sang nhân viên hoặc đã đóng.
+      // 1. Chỉ gọi AI khi hội thoại đang được AI xử lý.
       const [beforeGeneration] = await db
         .select({
           status: conversations.status,
@@ -448,114 +298,117 @@ export class PublicWidgetService {
         .from(conversations)
         .where(
           and(
-            eq(
-              conversations.id,
-              conversationId,
-            ),
-            eq(
-              conversations.organizationId,
-              organizationId,
-            ),
+            eq(conversations.id, conversationId),
+            eq(conversations.organizationId, organizationId),
           ),
         )
         .limit(1);
 
-      if (
-        beforeGeneration?.status !==
-        "unresolved"
-      ) {
+      if (beforeGeneration?.status !== "unresolved") {
         return;
       }
 
+      // 2. Đọc lịch sử trong đúng Organization.
       const history = await db
         .select({
           role: conversationMessages.role,
-          content:
-            conversationMessages.content,
+          content: conversationMessages.content,
         })
         .from(conversationMessages)
         .where(
           and(
-            eq(
-              conversationMessages.organizationId,
-              organizationId,
-            ),
-            eq(
-              conversationMessages.conversationId,
-              conversationId,
-            ),
+            eq(conversationMessages.organizationId, organizationId),
+            eq(conversationMessages.conversationId, conversationId),
           ),
         )
         .orderBy(
-          desc(
-            conversationMessages.createdAt,
-          ),
+          desc(conversationMessages.createdAt),
           desc(conversationMessages.id),
         )
         .limit(12);
 
-      // KB-04: truyền organizationId để
-      // chỉ truy vấn FAQ của doanh nghiệp này.
-      const reply =
-        await this.aiService.generateReply(
-          history.reverse(),
-          organizationId,
-        );
+      // 3. Gọi AI, giữ nguyên Knowledge Base Injection.
+      const reply = await this.aiService.generateReply(
+        history.reverse(),
+        organizationId,
+      );
 
-      if (!reply) {
-        return;
-      }
-
-      // Kiểm tra lại trạng thái sau khi
-      // OpenRouter hoàn thành.
-      const [currentConversation] = await db
-        .select({
-          status: conversations.status,
-        })
-        .from(conversations)
-        .where(
-          and(
-            eq(
-              conversations.id,
-              conversationId,
+      // 4. Ghi kết quả trong transaction.
+      // Lock hội thoại để tránh AI và nhân viên cùng
+      // thay đổi trạng thái trong lúc lưu phản hồi.
+      await db.transaction(async (tx) => {
+        const [currentConversation] = await tx
+          .select({
+            status: conversations.status,
+          })
+          .from(conversations)
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.organizationId, organizationId),
             ),
-            eq(
-              conversations.organizationId,
-              organizationId,
+          )
+          .for("update")
+          .limit(1);
+
+        // Nếu nhân viên đã tiếp quản hoặc kết thúc,
+        // không gửi thêm phản hồi tự động.
+        if (currentConversation?.status !== "unresolved") {
+          return;
+        }
+
+        if (reply?.trim()) {
+          // AI thành công: lưu phản hồi như cũ.
+          await tx.insert(conversationMessages).values({
+            id: randomUUID(),
+            organizationId,
+            conversationId,
+            role: "assistant",
+            content: reply.trim(),
+          });
+
+          return;
+        }
+
+        // 5. AI lỗi: chuyển sang nhân viên.
+        await tx
+          .update(conversations)
+          .set({
+            status: "escalated",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.organizationId, organizationId),
+              eq(conversations.status, "unresolved"),
             ),
-          ),
-        )
-        .limit(1);
+          );
 
-      if (
-        currentConversation?.status !==
-        "unresolved"
-      ) {
-        return;
-      }
-
-      await db
-        .insert(conversationMessages)
-        .values({
+        // 6. Thông báo rõ ràng cho khách.
+        await tx.insert(conversationMessages).values({
           id: randomUUID(),
           organizationId,
           conversationId,
           role: "assistant",
-          content: reply,
+          content: fallbackMessage,
         });
+      });
+
+      if (!reply?.trim()) {
+        this.logger.warn(
+          `AI fallback activated for conversation ${conversationId}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
-        "Could not save AI reply",
-        error instanceof Error
-          ? error.message
-          : String(error),
+        "Could not process AI reply or fallback",
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
       );
     }
   }
 
-  private isHumanSupportRequest(
-    content: string,
-  ): boolean {
+  private isHumanSupportRequest(content: string): boolean {
     const normalized = content
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -581,9 +434,7 @@ export class PublicWidgetService {
       return false;
     }
 
-    return requests.some((pattern) =>
-      pattern.test(normalized),
-    );
+    return requests.some((pattern) => pattern.test(normalized));
   }
 
   private async handoffToHuman(
@@ -597,18 +448,9 @@ export class PublicWidgetService {
       })
       .where(
         and(
-          eq(
-            conversations.id,
-            conversationId,
-          ),
-          eq(
-            conversations.organizationId,
-            organizationId,
-          ),
-          eq(
-            conversations.status,
-            "unresolved",
-          ),
+          eq(conversations.id, conversationId),
+          eq(conversations.organizationId, organizationId),
+          eq(conversations.status, "unresolved"),
         ),
       )
       .returning({
@@ -619,17 +461,15 @@ export class PublicWidgetService {
       return false;
     }
 
-    await db
-      .insert(conversationMessages)
-      .values({
-        id: randomUUID(),
-        organizationId,
-        conversationId,
-        role: "assistant",
-        content:
-          "Mình đã chuyển yêu cầu của bạn đến nhân viên hỗ trợ. " +
-          "Nhân viên sẽ phản hồi khi có thể. Bạn có thể tiếp tục gửi thông tin tại đây.",
-      });
+    await db.insert(conversationMessages).values({
+      id: randomUUID(),
+      organizationId,
+      conversationId,
+      role: "assistant",
+      content:
+        "Mình đã chuyển yêu cầu của bạn đến nhân viên hỗ trợ. " +
+        "Nhân viên sẽ phản hồi khi có thể. Bạn có thể tiếp tục gửi thông tin tại đây.",
+    });
 
     return true;
   }
@@ -640,36 +480,18 @@ export class PublicWidgetService {
     content: string,
     clientMessageId: string,
   ) {
-    const conversation =
-      await this.requireConversation(
-        token,
-        conversationId,
-      );
+    const conversation = await this.requireConversation(token, conversationId);
 
     const trimmed = content.trim();
 
-    if (
-      !trimmed ||
-      trimmed.length > 5000
-    ) {
-      throw new BadRequestException(
-        "Invalid message content",
-      );
+    if (!trimmed || trimmed.length > 5000) {
+      throw new BadRequestException("Invalid message content");
     }
 
     const messageIdentity = and(
-      eq(
-        conversationMessages.organizationId,
-        conversation.organizationId,
-      ),
-      eq(
-        conversationMessages.conversationId,
-        conversationId,
-      ),
-      eq(
-        conversationMessages.clientMessageId,
-        clientMessageId,
-      ),
+      eq(conversationMessages.organizationId, conversation.organizationId),
+      eq(conversationMessages.conversationId, conversationId),
+      eq(conversationMessages.clientMessageId, clientMessageId),
     );
 
     const [existing] = await db
@@ -679,10 +501,7 @@ export class PublicWidgetService {
       .limit(1);
 
     if (existing) {
-      if (
-        existing.role !== "user" ||
-        existing.content !== trimmed
-      ) {
+      if (existing.role !== "user" || existing.content !== trimmed) {
         throw new ConflictException(
           "Client message ID already used with different content",
         );
@@ -691,20 +510,15 @@ export class PublicWidgetService {
       return existing;
     }
 
-    if (
-      conversation.status === "resolved"
-    ) {
-      throw new ForbiddenException(
-        "Conversation resolved",
-      );
+    if (conversation.status === "resolved") {
+      throw new ForbiddenException("Conversation resolved");
     }
 
     const [inserted] = await db
       .insert(conversationMessages)
       .values({
         id: randomUUID(),
-        organizationId:
-          conversation.organizationId,
+        organizationId: conversation.organizationId,
         conversationId,
         role: "user",
         content: trimmed,
@@ -720,24 +534,14 @@ export class PublicWidgetService {
       .returning();
 
     if (inserted) {
-      if (
-        conversation.status ===
-        "unresolved"
-      ) {
-        if (
-          this.isHumanSupportRequest(
-            trimmed,
-          )
-        ) {
+      if (conversation.status === "unresolved") {
+        if (this.isHumanSupportRequest(trimmed)) {
           await this.handoffToHuman(
             conversation.organizationId,
             conversationId,
           );
         } else {
-          await this.replyWithAi(
-            conversation.organizationId,
-            conversationId,
-          );
+          await this.replyWithAi(conversation.organizationId, conversationId);
         }
       }
 
@@ -751,15 +555,10 @@ export class PublicWidgetService {
       .limit(1);
 
     if (!saved) {
-      throw new ConflictException(
-        "Unable to resolve duplicate message",
-      );
+      throw new ConflictException("Unable to resolve duplicate message");
     }
 
-    if (
-      saved.role !== "user" ||
-      saved.content !== trimmed
-    ) {
+    if (saved.role !== "user" || saved.content !== trimmed) {
       throw new ConflictException(
         "Client message ID already used with different content",
       );
@@ -768,47 +567,29 @@ export class PublicWidgetService {
     return saved;
   }
 
-  async getPublicConfiguration(
-    organizationId: string,
-  ) {
+  async getPublicConfiguration(organizationId: string) {
     const [org] = await db
       .select({
         id: organization.id,
         name: organization.name,
       })
       .from(organization)
-      .where(
-        eq(
-          organization.id,
-          organizationId,
-        ),
-      )
+      .where(eq(organization.id, organizationId))
       .limit(1);
 
     if (!org) {
-      throw new NotFoundException(
-        "Organization not found",
-      );
+      throw new NotFoundException("Organization not found");
     }
 
     const [settings] = await db
       .select({
-        greetMessage:
-          widgetSettings.greetMessage,
-        defaultSuggestions:
-          widgetSettings.defaultSuggestions,
-        vapiAssistantId:
-          widgetSettings.vapiAssistantId,
-        vapiPhoneNumber:
-          widgetSettings.vapiPhoneNumber,
+        greetMessage: widgetSettings.greetMessage,
+        defaultSuggestions: widgetSettings.defaultSuggestions,
+        vapiAssistantId: widgetSettings.vapiAssistantId,
+        vapiPhoneNumber: widgetSettings.vapiPhoneNumber,
       })
       .from(widgetSettings)
-      .where(
-        eq(
-          widgetSettings.organizationId,
-          organizationId,
-        ),
-      )
+      .where(eq(widgetSettings.organizationId, organizationId))
       .limit(1);
 
     return {
@@ -816,23 +597,16 @@ export class PublicWidgetService {
       settings: settings
         ? {
             organizationId,
-            greetMessage:
-              settings.greetMessage,
-            defaultSuggestions:
-              settings.defaultSuggestions,
+            greetMessage: settings.greetMessage,
+            defaultSuggestions: settings.defaultSuggestions,
             vapiSettings: {
-              assistantId:
-                settings.vapiAssistantId ??
-                undefined,
-              phoneNumber:
-                settings.vapiPhoneNumber ??
-                undefined,
+              assistantId: settings.vapiAssistantId ?? undefined,
+              phoneNumber: settings.vapiPhoneNumber ?? undefined,
             },
           }
         : {
             organizationId,
-            greetMessage:
-              "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
+            greetMessage: "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
             defaultSuggestions: {},
             vapiSettings: {},
           },

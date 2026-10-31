@@ -1,6 +1,9 @@
+
 "use client";
+
 import { OrganizationSwitcher } from "@/modules/auth/ui/components/organization-switcher";
 import { UserMenu } from "@/modules/auth/ui/components/user-menu";
+
 import {
   CreditCardIcon,
   InboxIcon,
@@ -8,9 +11,12 @@ import {
   LibraryBigIcon,
   Mic,
   PaletteIcon,
+  UsersIcon,
 } from "lucide-react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
 import {
   Sidebar,
   SidebarContent,
@@ -24,16 +30,17 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@workspace/ui/components/sidebar";
+
 import { cn } from "@workspace/ui/lib/utils";
-import { UsersIcon } from "lucide-react";
+
 const customerSupportItems = [
   {
-    title: "Conversations",
+    title: "Hội thoại",
     url: "/conversations",
     icon: InboxIcon,
   },
   {
-    title: "Knowledge Base",
+    title: "Kho kiến thức",
     url: "/files",
     icon: LibraryBigIcon,
   },
@@ -41,17 +48,17 @@ const customerSupportItems = [
 
 const configurationItems = [
   {
-    title: "Widget Customization",
+    title: "Tùy chỉnh Chatbot",
     url: "/customization",
     icon: PaletteIcon,
   },
   {
-    title: "Integrations",
+    title: "Tích hợp Website",
     url: "/integrations",
     icon: LayoutDashboardIcon,
   },
   {
-    title: "Voice Assistant",
+    title: "Trợ lý giọng nói",
     url: "/plugins/vapi",
     icon: Mic,
   },
@@ -59,12 +66,12 @@ const configurationItems = [
 
 const accountItems = [
   {
-    title: "Plans & Billing",
+    title: "Gói dịch vụ & Thanh toán",
     url: "/billing",
     icon: CreditCardIcon,
   },
   {
-    title: "Team Members",
+    title: "Thành viên",
     url: "/settings/members",
     icon: UsersIcon,
   },
@@ -78,99 +85,87 @@ export const DashboardSidebar = () => {
       return pathname === "/";
     }
 
-    return pathname.startsWith(url);
+    return (
+      pathname === url ||
+      pathname.startsWith(`${url}/`)
+    );
   };
+
+  const renderMenuItems = (
+    items: typeof customerSupportItems,
+  ) =>
+    items.map((item) => {
+      const active = isActive(item.url);
+
+      return (
+        <SidebarMenuItem key={item.url}>
+          <SidebarMenuButton
+            asChild
+            isActive={active}
+            className={cn(
+              "transition-colors",
+              active &&
+                "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground",
+            )}
+            tooltip={item.title}
+          >
+            <Link href={item.url}>
+              <item.icon className="size-4" />
+              <span>{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      );
+    });
 
   return (
     <Sidebar className="group" collapsible="icon">
       <SidebarHeader>
         <OrganizationSwitcher />
       </SidebarHeader>
+
       <SidebarContent>
-        {/* Customer Support */}
         <SidebarGroup>
-          <SidebarGroupLabel>Customer Support</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            Chăm sóc khách hàng
+          </SidebarGroupLabel>
+
           <SidebarGroupContent>
             <SidebarMenu>
-              {customerSupportItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    className={cn(
-                      isActive(item.url) &&
-                        "bg-gradient-to-b from-sidebar-primary to-[#0b63f3]! text-sidebar-primary-foreground! hover:to-[#0b63f3]/90!",
-                    )}
-                    tooltip={item.title}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="size-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {renderMenuItems(customerSupportItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Configuration */}
         <SidebarGroup>
-          <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            Cấu hình
+          </SidebarGroupLabel>
+
           <SidebarGroupContent>
             <SidebarMenu>
-              {configurationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    className={cn(
-                      isActive(item.url) &&
-                        "bg-gradient-to-b from-sidebar-primary to-[#0b63f3]! text-sidebar-primary-foreground! hover:to-[#0b63f3]/90!",
-                    )}
-                    tooltip={item.title}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="size-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {renderMenuItems(configurationItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Account */}
         <SidebarGroup>
-          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            Tài khoản
+          </SidebarGroupLabel>
+
           <SidebarGroupContent>
             <SidebarMenu>
-              {accountItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    className={cn(
-                      isActive(item.url) &&
-                        "bg-gradient-to-b from-sidebar-primary to-[#0b63f3]! text-sidebar-primary-foreground! hover:to-[#0b63f3]/90!",
-                    )}
-                    tooltip={item.title}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="size-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {renderMenuItems(accountItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       <SidebarFooter>
         <UserMenu />
       </SidebarFooter>
+
       <SidebarRail />
     </Sidebar>
   );

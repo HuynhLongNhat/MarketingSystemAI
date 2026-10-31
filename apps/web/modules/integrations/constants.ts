@@ -1,3 +1,4 @@
+
 export const INTEGRATIONS = [
   {
     id: "html",
@@ -19,11 +20,17 @@ export const INTEGRATIONS = [
     title: "JavaScript",
     icon: "/languages/javascript.svg",
   },
-];
+] as const;
 
-export type IntegrationId = (typeof INTEGRATIONS)[number]["id"];
+export type IntegrationId =
+  (typeof INTEGRATIONS)[number]["id"];
 
-export const HTML_SCRIPT = `<script src="https://next15-echo-widget.vercel.app/widget.js" data-organization-id="{{ORGANIZATION_ID}}"></script>`;
-export const REACT_SCRIPT = `<script src="https://next15-echo-widget.vercel.app/widget.js" data-organization-id="{{ORGANIZATION_ID}}"></script>`;
-export const NEXTJS_SCRIPT = `<script src="https://next15-echo-widget.vercel.app/widget.js" data-organization-id="{{ORGANIZATION_ID}}"></script>`;
-export const JAVASCRIPT_SCRIPT = `<script src="https://next15-echo-widget.vercel.app/widget.js" data-organization-id="{{ORGANIZATION_ID}}"></script>`;
+// Local: http://localhost:3001
+// Production: URL public của ứng dụng Widget.
+export const WIDGET_BASE_URL = (
+  process.env.NEXT_PUBLIC_WIDGET_URL ||
+  "http://localhost:3001"
+).replace(/\/+$/, "");
+
+export const WIDGET_SCRIPT_URL =
+  `${WIDGET_BASE_URL}/widget.js`;

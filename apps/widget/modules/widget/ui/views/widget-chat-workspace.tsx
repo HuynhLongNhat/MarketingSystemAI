@@ -99,6 +99,18 @@ export const WidgetChatWorkspace = () => {
   const sendingRef = useRef(false);
   const pendingMessageRef = useRef<PendingMessage | null>(null);
 
+  // MVP-01.2: Lấy câu hỏi gợi ý đã lưu từ Dashboard.
+  const suggestions = Object.values(
+    settings?.defaultSuggestions ?? {},
+  )
+    .filter(
+      (value): value is string =>
+        typeof value === "string" &&
+        value.trim().length > 0,
+    )
+    .map((value) => value.trim())
+    .slice(0, 3);
+
   const getToken = useCallback(() => {
     return organizationId
       ? widgetSession.get(organizationId)
@@ -154,7 +166,6 @@ export const WidgetChatWorkspace = () => {
       setChats(results);
     } catch (err) {
       console.error("Load conversations failed", err);
-
       setError("Không thể tải lịch sử trò chuyện.");
     } finally {
       setLoadingChats(false);
@@ -340,8 +351,10 @@ export const WidgetChatWorkspace = () => {
     }
   };
 
-  const sendMessage = async () => {
-    const content = draft.trim();
+  // MVP-01.2: Có thể gửi nội dung từ textarea
+  // hoặc gửi trực tiếp một câu hỏi gợi ý.
+  const sendMessage = async (suggestedContent?: string) => {
+    const content = (suggestedContent ?? draft).trim();
 
     if (
       !content ||
@@ -383,7 +396,7 @@ export const WidgetChatWorkspace = () => {
     try {
       let token = getToken();
 
-      // 1. Tạo Guest Session khi khách gửi tin đầu tiên.
+      // 1. Tạo Guest Session nếu chưa có.
       if (!token) {
         const guest =
           await widgetApi.createGuestSession(
@@ -403,7 +416,7 @@ export const WidgetChatWorkspace = () => {
       }
 
       // 2. Tạo conversation nếu chưa có.
-      // Giữ ID đã tạo để retry không tạo lại conversation.
+      // Giữ ID để retry không tạo trùng.
       let id =
         conversationId ??
         pendingMessageRef.current?.conversationId ??
@@ -435,7 +448,7 @@ export const WidgetChatWorkspace = () => {
         pendingMessageRef.current.conversationId = id;
       }
 
-      // 3. Gửi tin nhắn cùng UUID nếu đang retry.
+      // 3. Gửi tin nhắn với UUID chống trùng.
       const message = await widgetApi.sendMessage(
         token,
         id,
@@ -452,7 +465,7 @@ export const WidgetChatWorkspace = () => {
         );
       }
 
-      // 5. Cập nhật tiêu đề trong sidebar.
+      // 5. Cập nhật tiêu đề lịch sử.
       setChats((previous) =>
         previous.map((chat) =>
           chat.id === id &&
@@ -474,8 +487,6 @@ export const WidgetChatWorkspace = () => {
         err instanceof WidgetApiError &&
         err.status === 401
       ) {
-        // Token không còn hợp lệ.
-        // Xóa phiên cũ và cả pending ID gắn với phiên này.
         widgetSession.clear(organizationId);
         pendingMessageRef.current = null;
 
@@ -492,6 +503,8 @@ export const WidgetChatWorkspace = () => {
           "Phiên trò chuyện đã hết hạn. Vui lòng gửi lại tin nhắn để bắt đầu phiên mới.",
         );
       } else {
+        // Giữ nội dung đã chọn để khách có thể thử lại.
+        setDraft(content);
         setError(
           "Không thể gửi tin nhắn. Vui lòng thử lại.",
         );
@@ -652,8 +665,8 @@ export const WidgetChatWorkspace = () => {
 
         <div className="flex min-h-0 flex-1 flex-col">
           {!conversationId ? (
-            <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
-              <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-zinc-100">
+            <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-6 text-center">
+              <div className="mb-5 flex size-12 shrink-0 items-center justify-center rounded-2xl bg-zinc-100">
                 <MessageCircle className="size-6" />
               </div>
 
@@ -661,9 +674,30 @@ export const WidgetChatWorkspace = () => {
                 Xin chào!
               </h1>
 
-              <p className="mt-3 text-sm text-zinc-500">
-                Chúng tôi có thể giúp gì cho bạn hôm nay?
+              {/* Lời chào từ Widget Settings */}
+              <p className="mt-3 max-w-md whitespace-pre-wrap text-sm leading-6 text-zinc-500">
+                {settings?.greetMessage?.trim() ||
+                  "Chúng tôi có thể giúp gì cho bạn hôm nay?"}
               </p>
+
+              {/* MVP-01.2: Câu hỏi gợi ý */}
+              {suggestions.length > 0 && (
+                <div className="mt-7 flex w-full max-w-md flex-col gap-2">
+                  {suggestions.map((suggestion, index) => (
+                    <button
+                      key={`${index}-${suggestion}`}
+                      type="button"
+                      disabled={sending || loadingMessages}
+                      onClick={() => {
+                        void sendMessage(suggestion);
+                      }}
+                      className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-left text-sm leading-5 text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-4">

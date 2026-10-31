@@ -1,11 +1,22 @@
 
-import { Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+} from "@nestjs/common";
 
-import { db, widgetSettings } from "@workspace/db/node";
+import {
+  db,
+  widgetSettings,
+} from "@workspace/db/node";
 
 import type { RequestContext } from "../auth/request-context.js";
 import { assertTenantAccess } from "../common/tenant/tenant-access.js";
 import { tenantWhere } from "../common/tenant/tenant-query.js";
+
+import type { UpdateWidgetSettingsDto } from "./widget-settings.dto.js";
+
+const DEFAULT_GREETING =
+  "Xin chào! Chúng tôi có thể giúp gì cho bạn?";
 
 @Injectable()
 export class WidgetSettingsService {
@@ -20,7 +31,6 @@ export class WidgetSettingsService {
     context: RequestContext,
     organizationId: string,
   ) {
-    // Giữ nguyên bảo vệ cho legacy endpoint.
     assertTenantAccess(context, organizationId);
 
     const [settings] = await db
@@ -34,8 +44,22 @@ export class WidgetSettingsService {
       )
       .limit(1);
 
+    // Luôn trả về JSON hợp lệ kể cả khi Organization
+    // chưa từng lưu cấu hình Widget.
     if (!settings) {
-      return null;
+      return {
+        organizationId,
+        greetMessage: DEFAULT_GREETING,
+        defaultSuggestions: {
+          suggestion1: "",
+          suggestion2: "",
+          suggestion3: "",
+        },
+        vapiSettings: {
+          assistantId: undefined,
+          phoneNumber: undefined,
+        },
+      };
     }
 
     return {
@@ -49,5 +73,44 @@ export class WidgetSettingsService {
           settings.vapiPhoneNumber ?? undefined,
       },
     };
+  }
+
+  async updateCurrent(
+    context: RequestContext,
+    dto: UpdateWidgetSettingsDto,
+  ) {
+    const greetMessage = dto.greetMessage.trim();
+
+    if (!greetMessage) {
+      throw new BadRequestException(
+        "Greeting message cannot be empty",
+      );
+    }
+
+    const defaultSuggestions = {
+      suggestion1:
+        dto.defaultSuggestions.suggestion1?.trim() ?? "",
+      suggestion2:
+        dto.defaultSuggestions.suggestion2?.trim() ?? "",
+      suggestion3:
+        dto.defaultSuggestions.suggestion3?.trim() ?? "",
+    };
+
+    await db
+      .insert(widgetSettings)
+      .values({
+        organizationId: context.organizationId,
+        greetMessage,
+        defaultSuggestions,
+      })
+      .onConflictDoUpdate({
+        target: widgetSettings.organizationId,
+        set: {
+          greetMessage,
+          defaultSuggestions,
+        },
+      });
+
+    return this.getCurrent(context);
   }
 }
