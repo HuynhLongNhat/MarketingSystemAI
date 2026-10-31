@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   ConflictException,
@@ -29,13 +28,9 @@ type ContactDetails = {
 
 @Injectable()
 export class PublicWidgetService {
-  private readonly logger = new Logger(
-    PublicWidgetService.name,
-  );
+  private readonly logger = new Logger(PublicWidgetService.name);
 
-  constructor(
-    private readonly aiService: PublicWidgetAiService,
-  ) {}
+  constructor(private readonly aiService: PublicWidgetAiService) {}
 
   private hashToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
@@ -49,18 +44,11 @@ export class PublicWidgetService {
     const [session] = await db
       .select()
       .from(contactSessions)
-      .where(
-        eq(
-          contactSessions.sessionTokenHash,
-          this.hashToken(token),
-        ),
-      )
+      .where(eq(contactSessions.sessionTokenHash, this.hashToken(token)))
       .limit(1);
 
     if (!session || session.expiresAt <= new Date()) {
-      throw new UnauthorizedException(
-        "Widget session expired or invalid",
-      );
+      throw new UnauthorizedException("Widget session expired or invalid");
     }
 
     return session;
@@ -80,20 +68,13 @@ export class PublicWidgetService {
     return org;
   }
 
-  private async issueSession(
-    organizationId: string,
-    details?: ContactDetails,
-  ) {
+  private async issueSession(organizationId: string, details?: ContactDetails) {
     await this.requireOrganization(organizationId);
 
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    const identified = Boolean(
-      details?.name?.trim() && details?.email?.trim(),
-    );
+    const identified = Boolean(details?.name?.trim() && details?.email?.trim());
 
     const [session] = await db
       .insert(contactSessions)
@@ -132,9 +113,7 @@ export class PublicWidgetService {
     });
   }
 
-  async createGuestSession(input: {
-    organizationId: string;
-  }) {
+  async createGuestSession(input: { organizationId: string }) {
     return this.issueSession(input.organizationId);
   }
 
@@ -171,9 +150,7 @@ export class PublicWidgetService {
     }
 
     if (Object.keys(updates).length === 0) {
-      throw new BadRequestException(
-        "At least one contact field is required",
-      );
+      throw new BadRequestException("At least one contact field is required");
     }
 
     const name = updates.name ?? session.name;
@@ -183,17 +160,13 @@ export class PublicWidgetService {
       .update(contactSessions)
       .set({
         ...updates,
-        visitorType:
-          name && email ? "identified" : "guest",
+        visitorType: name && email ? "identified" : "guest",
         updatedAt: new Date(),
       })
       .where(
         and(
           eq(contactSessions.id, session.id),
-          eq(
-            contactSessions.organizationId,
-            session.organizationId,
-          ),
+          eq(contactSessions.organizationId, session.organizationId),
         ),
       )
       .returning();
@@ -220,12 +193,7 @@ export class PublicWidgetService {
         greetMessage: widgetSettings.greetMessage,
       })
       .from(widgetSettings)
-      .where(
-        eq(
-          widgetSettings.organizationId,
-          session.organizationId,
-        ),
-      )
+      .where(eq(widgetSettings.organizationId, session.organizationId))
       .limit(1);
 
     const conversationId = randomUUID();
@@ -257,10 +225,7 @@ export class PublicWidgetService {
     });
   }
 
-  private async requireConversation(
-    token: string,
-    conversationId: string,
-  ) {
+  private async requireConversation(token: string, conversationId: string) {
     const session = await this.requireSession(token);
 
     const [conversation] = await db
@@ -269,10 +234,7 @@ export class PublicWidgetService {
       .where(
         and(
           eq(conversations.id, conversationId),
-          eq(
-            conversations.organizationId,
-            session.organizationId,
-          ),
+          eq(conversations.organizationId, session.organizationId),
           eq(conversations.contactSessionId, session.id),
         ),
       )
@@ -293,10 +255,7 @@ export class PublicWidgetService {
       .from(conversations)
       .where(
         and(
-          eq(
-            conversations.organizationId,
-            session.organizationId,
-          ),
+          eq(conversations.organizationId, session.organizationId),
           eq(conversations.contactSessionId, session.id),
         ),
       )
@@ -304,22 +263,12 @@ export class PublicWidgetService {
       .limit(50);
   }
 
-  async getConversation(
-    token: string,
-    conversationId: string,
-  ) {
+  async getConversation(token: string, conversationId: string) {
     return this.requireConversation(token, conversationId);
   }
 
-  async listMessages(
-    token: string,
-    conversationId: string,
-    before?: string,
-  ) {
-    const conversation = await this.requireConversation(
-      token,
-      conversationId,
-    );
+  async listMessages(token: string, conversationId: string, before?: string) {
+    const conversation = await this.requireConversation(token, conversationId);
 
     const beforeDate = before ? new Date(before) : null;
 
@@ -332,19 +281,10 @@ export class PublicWidgetService {
       .from(conversationMessages)
       .where(
         and(
-          eq(
-            conversationMessages.organizationId,
-            conversation.organizationId,
-          ),
-          eq(
-            conversationMessages.conversationId,
-            conversationId,
-          ),
+          eq(conversationMessages.organizationId, conversation.organizationId),
+          eq(conversationMessages.conversationId, conversationId),
           beforeDate
-            ? lt(
-                conversationMessages.createdAt,
-                beforeDate,
-              )
+            ? lt(conversationMessages.createdAt, beforeDate)
             : undefined,
         ),
       )
@@ -360,9 +300,7 @@ export class PublicWidgetService {
       items,
       hasMore: rows.length > 50,
       nextBefore:
-        rows.length > 50 && items[0]
-          ? items[0].createdAt.toISOString()
-          : null,
+        rows.length > 50 && items[0] ? items[0].createdAt.toISOString() : null,
     };
   }
 
@@ -396,14 +334,8 @@ export class PublicWidgetService {
         .from(conversationMessages)
         .where(
           and(
-            eq(
-              conversationMessages.organizationId,
-              organizationId,
-            ),
-            eq(
-              conversationMessages.conversationId,
-              conversationId,
-            ),
+            eq(conversationMessages.organizationId, organizationId),
+            eq(conversationMessages.conversationId, conversationId),
           ),
         )
         .orderBy(
@@ -412,9 +344,7 @@ export class PublicWidgetService {
         )
         .limit(12);
 
-      const reply = await this.aiService.generateReply(
-        history.reverse(),
-      );
+      const reply = await this.aiService.generateReply(history.reverse());
 
       if (!reply) return;
 
@@ -450,39 +380,85 @@ export class PublicWidgetService {
     }
   }
 
+  private isHumanSupportRequest(content: string): boolean {
+    const normalized = content
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .toLowerCase()
+      .replace(/[.,!?;:]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const requests = [
+      /\b(muon|can|cho|xin|yeu cau)\s+(duoc\s+)?(gap|noi chuyen voi|chat voi|lien he voi)\s+(nhan vien|nguoi that|tu van vien|tong dai vien)\b/,
+      /\b(chuyen|ket noi)\s+(toi|sang|cho)\s+(nhan vien|tu van vien|tong dai vien)\b/,
+      /\b(gap|goi)\s+(nhan vien|tu van vien|tong dai vien)\s+(ho tro|tu van)?\b/,
+      /\b(human agent|live agent|real person|talk to a person)\b/,
+    ];
+
+    if (
+      /\b(khong muon|khong can|chua can|dung|thoi)\s+(gap|noi chuyen voi|chuyen)\b/.test(
+        normalized,
+      )
+    ) {
+      return false;
+    }
+
+    return requests.some((pattern) => pattern.test(normalized));
+  }
+
+  private async handoffToHuman(
+    organizationId: string,
+    conversationId: string,
+  ): Promise<boolean> {
+    const [updated] = await db
+      .update(conversations)
+      .set({ status: "escalated" })
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.organizationId, organizationId),
+          eq(conversations.status, "unresolved"),
+        ),
+      )
+      .returning({ id: conversations.id });
+
+    if (!updated) return false;
+
+    await db.insert(conversationMessages).values({
+      id: randomUUID(),
+      organizationId,
+      conversationId,
+      role: "assistant",
+      content:
+        "Mình đã chuyển yêu cầu của bạn đến nhân viên hỗ trợ. " +
+        "Nhân viên sẽ phản hồi khi có thể. Bạn có thể tiếp tục gửi thông tin tại đây.",
+    });
+
+    return true;
+  }
+
   async sendMessage(
     token: string,
     conversationId: string,
     content: string,
     clientMessageId: string,
   ) {
-    const conversation = await this.requireConversation(
-      token,
-      conversationId,
-    );
+    const conversation = await this.requireConversation(token, conversationId);
 
     const trimmed = content.trim();
 
     if (!trimmed || trimmed.length > 5000) {
-      throw new BadRequestException(
-        "Invalid message content",
-      );
+      throw new BadRequestException("Invalid message content");
     }
 
     // Idempotency: gửi lại cùng UUID chỉ trả về tin nhắn cũ.
     const messageIdentity = and(
-      eq(
-        conversationMessages.organizationId,
-        conversation.organizationId,
-      ),
-      eq(
-        conversationMessages.conversationId,
-        conversationId,
-      ),
-      eq(
-        conversationMessages.clientMessageId,
-        clientMessageId,
-      ),
+      eq(conversationMessages.organizationId, conversation.organizationId),
+      eq(conversationMessages.conversationId, conversationId),
+      eq(conversationMessages.clientMessageId, clientMessageId),
     );
 
     const [existing] = await db
@@ -492,10 +468,7 @@ export class PublicWidgetService {
       .limit(1);
 
     if (existing) {
-      if (
-        existing.role !== "user" ||
-        existing.content !== trimmed
-      ) {
+      if (existing.role !== "user" || existing.content !== trimmed) {
         throw new ConflictException(
           "Client message ID already used with different content",
         );
@@ -528,14 +501,15 @@ export class PublicWidgetService {
       .returning();
 
     if (inserted) {
-      // Chỉ AI mode (unresolved) mới được tạo câu trả lời.
-      // Human mode (escalated) vẫn lưu tin khách,
-      // nhưng không gọi OpenRouter.
       if (conversation.status === "unresolved") {
-        await this.replyWithAi(
-          conversation.organizationId,
-          conversationId,
-        );
+        if (this.isHumanSupportRequest(trimmed)) {
+          await this.handoffToHuman(
+            conversation.organizationId,
+            conversationId,
+          );
+        } else {
+          await this.replyWithAi(conversation.organizationId, conversationId);
+        }
       }
 
       return inserted;
@@ -548,15 +522,10 @@ export class PublicWidgetService {
       .limit(1);
 
     if (!saved) {
-      throw new ConflictException(
-        "Unable to resolve duplicate message",
-      );
+      throw new ConflictException("Unable to resolve duplicate message");
     }
 
-    if (
-      saved.role !== "user" ||
-      saved.content !== trimmed
-    ) {
+    if (saved.role !== "user" || saved.content !== trimmed) {
       throw new ConflictException(
         "Client message ID already used with different content",
       );
@@ -587,9 +556,7 @@ export class PublicWidgetService {
         vapiPhoneNumber: widgetSettings.vapiPhoneNumber,
       })
       .from(widgetSettings)
-      .where(
-        eq(widgetSettings.organizationId, organizationId),
-      )
+      .where(eq(widgetSettings.organizationId, organizationId))
       .limit(1);
 
     return {
@@ -600,16 +567,13 @@ export class PublicWidgetService {
             greetMessage: settings.greetMessage,
             defaultSuggestions: settings.defaultSuggestions,
             vapiSettings: {
-              assistantId:
-                settings.vapiAssistantId ?? undefined,
-              phoneNumber:
-                settings.vapiPhoneNumber ?? undefined,
+              assistantId: settings.vapiAssistantId ?? undefined,
+              phoneNumber: settings.vapiPhoneNumber ?? undefined,
             },
           }
         : {
             organizationId,
-            greetMessage:
-              "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
+            greetMessage: "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
             defaultSuggestions: {},
             vapiSettings: {},
           },

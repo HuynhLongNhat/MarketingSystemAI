@@ -44,6 +44,8 @@ import {
 import { statusFilterAtom } from "../../atoms";
 
 const PAGE_SIZE = 10;
+const MAX_REFRESH_SIZE = 100;
+const POLLING_INTERVAL = 5000;
 
 const STATUS_LABELS: Record<ConversationStatus, string> = {
   unresolved: "AI đang hỗ trợ",
@@ -66,11 +68,17 @@ export const ConversationsPanel = () => {
 
   const requestVersion = useRef(0);
   const loadingMoreRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const itemCountRef = useRef(0);
 
   const status =
     statusFilter === "all"
       ? undefined
       : (statusFilter as ConversationStatus);
+
+  useEffect(() => {
+    itemCountRef.current = items.length;
+  }, [items.length]);
 
   const loadFirstPage = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -81,19 +89,27 @@ export const ConversationsPanel = () => {
     setCursor(null);
     setHasMore(false);
 
+    itemCountRef.current = 0;
+
     try {
       const result = await conversationsApi.listPage({
         status,
         limit: PAGE_SIZE,
       });
 
-      if (version !== requestVersion.current) return;
+      if (version !== requestVersion.current) {
+        return;
+      }
 
       setItems(result.items);
+      itemCountRef.current = result.items.length;
+
       setCursor(result.nextCursor);
       setHasMore(result.hasMore);
     } catch (err) {
-      if (version !== requestVersion.current) return;
+      if (version !== requestVersion.current) {
+        return;
+      }
 
       console.error("Failed to load conversations:", err);
       setError("Không thể tải danh sách hội thoại.");
@@ -112,10 +128,93 @@ export const ConversationsPanel = () => {
     };
   }, [loadFirstPage]);
 
+  // Cập nhật danh sách hội thoại mà không hiện skeleton
+  // hoặc xóa danh sách đang hiển thị.
+  const refreshConversations = useCallback(async () => {
+    if (
+      refreshingRef.current ||
+      loadingMoreRef.current
+    ) {
+      return;
+    }
+
+    refreshingRef.current = true;
+
+    const version = requestVersion.current;
+
+    try {
+      // Giữ lại số lượng hội thoại đã tải qua "Tải thêm".
+      // API hiện hỗ trợ limit tối đa 100.
+      const limit = Math.min(
+        MAX_REFRESH_SIZE,
+        Math.max(PAGE_SIZE, itemCountRef.current),
+      );
+
+      const result = await conversationsApi.listPage({
+        status,
+        limit,
+      });
+
+      if (version !== requestVersion.current) {
+        return;
+      }
+
+      // Thay dữ liệu trực tiếp, không reset giao diện.
+      // Hội thoại mới và thay đổi trạng thái sẽ xuất hiện.
+      setItems(result.items);
+      itemCountRef.current = result.items.length;
+
+      setCursor(result.nextCursor);
+      setHasMore(result.hasMore);
+      setError(null);
+    } catch (err) {
+      // Lỗi mạng tạm thời không xóa lịch sử đang hiển thị.
+      console.error(
+        "Failed to refresh conversations:",
+        err,
+      );
+    } finally {
+      refreshingRef.current = false;
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (loading || error) {
+      return;
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshConversations();
+      }
+    };
+
+    const interval = window.setInterval(
+      refreshIfVisible,
+      POLLING_INTERVAL,
+    );
+
+    // Khi quay lại tab Dashboard, cập nhật ngay.
+    document.addEventListener(
+      "visibilitychange",
+      refreshIfVisible,
+    );
+
+    return () => {
+      window.clearInterval(interval);
+
+      document.removeEventListener(
+        "visibilitychange",
+        refreshIfVisible,
+      );
+    };
+  }, [loading, error, refreshConversations]);
+
   const loadMore = useCallback(async () => {
     if (
       loading ||
       loadingMoreRef.current ||
+      refreshingRef.current ||
       !hasMore ||
       !cursor
     ) {
@@ -135,27 +234,39 @@ export const ConversationsPanel = () => {
         limit: PAGE_SIZE,
       });
 
-      if (version !== requestVersion.current) return;
+      if (version !== requestVersion.current) {
+        return;
+      }
 
       setItems((current) => {
         const existingIds = new Set(
           current.map((item) => item.id),
         );
 
-        return [
+        const next = [
           ...current,
           ...result.items.filter(
             (item) => !existingIds.has(item.id),
           ),
         ];
+
+        itemCountRef.current = next.length;
+
+        return next;
       });
 
       setCursor(result.nextCursor);
       setHasMore(result.hasMore);
     } catch (err) {
-      if (version !== requestVersion.current) return;
+      if (version !== requestVersion.current) {
+        return;
+      }
 
-      console.error("Failed to load more conversations:", err);
+      console.error(
+        "Failed to load more conversations:",
+        err,
+      );
+
       setError("Không thể tải thêm hội thoại.");
     } finally {
       loadingMoreRef.current = false;
@@ -221,6 +332,7 @@ export const ConversationsPanel = () => {
           <div className="flex w-full flex-col text-sm">
             {items.map((conversation) => {
               const contact = conversation.contactSession;
+
               const contactName =
                 contact.name?.trim() || "Khách truy cập";
 
@@ -269,7 +381,10 @@ export const ConversationsPanel = () => {
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                         {formatDistanceToNow(
                           new Date(conversation.createdAt),
-                          { addSuffix: true, locale: vi },
+                          {
+                            addSuffix: true,
+                            locale: vi,
+                          },
                         )}
                       </span>
                     </div>
@@ -299,6 +414,7 @@ export const ConversationsPanel = () => {
                 <p className="text-sm text-destructive">
                   {error}
                 </p>
+
                 <Button
                   variant="outline"
                   size="sm"
