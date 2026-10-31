@@ -8,7 +8,9 @@ import {
   Patch,
   Post,
   Query,
+  SetMetadata,
   UnauthorizedException,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
@@ -21,6 +23,10 @@ import {
 } from "class-validator";
 
 import { PublicWidgetService } from "./public-widget.service.js";
+import {
+  PublicWidgetRateLimitGuard,
+  WIDGET_RATE_LIMIT_KEY,
+} from "./public-widget-rate-limit.guard.js";
 
 class CreatePublicSessionDto {
   @IsString()
@@ -71,6 +77,7 @@ class SendPublicMessageDto {
 
 @ApiTags("Public Widget")
 @Controller("public/widget")
+@UseGuards(PublicWidgetRateLimitGuard)
 export class PublicWidgetController {
   constructor(
     private readonly service: PublicWidgetService,
@@ -87,6 +94,7 @@ export class PublicWidgetController {
   }
 
   @Post("sessions")
+  @SetMetadata(WIDGET_RATE_LIMIT_KEY, "create-session")
   @ApiOperation({
     summary: "Create identified visitor session",
   })
@@ -95,6 +103,7 @@ export class PublicWidgetController {
   }
 
   @Post("guest-sessions")
+  @SetMetadata(WIDGET_RATE_LIMIT_KEY, "create-session")
   @ApiOperation({
     summary: "Create anonymous guest session",
   })
@@ -129,6 +138,7 @@ export class PublicWidgetController {
   }
 
   @Post("conversations")
+  @SetMetadata(WIDGET_RATE_LIMIT_KEY, "create-conversation")
   createConversation(
     @Headers("authorization") authorization?: string,
   ) {
@@ -171,6 +181,7 @@ export class PublicWidgetController {
   }
 
   @Post("conversations/:id/messages")
+  @SetMetadata(WIDGET_RATE_LIMIT_KEY, "send-message")
   sendMessage(
     @Headers("authorization") authorization: string,
     @Param("id") id: string,

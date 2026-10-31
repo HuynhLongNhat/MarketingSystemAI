@@ -1,3 +1,4 @@
+
 import { Module } from "@nestjs/common";
 
 import { AuthGuard } from "../auth/auth.guard.js";
@@ -17,8 +18,13 @@ import { MessagesRepository } from "./messages.repository.js";
 import { MessagesService } from "./messages.service.js";
 
 import { MessageEnhancementService } from "./message-enhancement.service.js";
+
 import { PublicWidgetController } from "./public-widget.controller.js";
+
 import { PublicWidgetService } from "./public-widget.service.js";
+
+import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js";
+
 @Module({
   controllers: [
     ConversationsController,
@@ -32,6 +38,7 @@ import { PublicWidgetService } from "./public-widget.service.js";
     MessagesService,
     MessageEnhancementService,
     PublicWidgetService,
+    PublicWidgetRateLimitGuard,
     AuthGuard,
     PermissionsGuard,
   ],
