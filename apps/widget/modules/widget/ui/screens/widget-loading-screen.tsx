@@ -17,6 +17,7 @@ import {
 
 import {
   widgetApi,
+  WidgetApiError,
   widgetSession,
   widgetConversationStorage,
 } from "@/lib/widget-api";
@@ -54,11 +55,15 @@ export const WidgetLoadingScreen = ({
         setLoadingMessage("Đang tải cấu hình...");
 
         const configuration =
-          await widgetApi.getPublicConfiguration(organizationId);
+          await widgetApi.getPublicConfiguration(
+            organizationId,
+          );
 
         if (cancelled) return;
 
-        if (configuration.organization.id !== organizationId) {
+        if (
+          configuration.organization.id !== organizationId
+        ) {
           throw new Error("Organization không hợp lệ");
         }
 
@@ -68,10 +73,12 @@ export const WidgetLoadingScreen = ({
 
         const token = widgetSession.get(organizationId);
 
+        // Khách mới: mở thẳng giao diện chat.
+        // Session sẽ được tạo khi gửi tin đầu tiên.
         if (!token) {
           setContactSessionId(null);
           setConversationId(null);
-          setScreen("auth");
+          setScreen("selection");
           return;
         }
 
@@ -81,14 +88,23 @@ export const WidgetLoadingScreen = ({
 
         try {
           session = await widgetApi.validateSession(token);
-        } catch {
+        } catch (error) {
           if (cancelled) return;
 
-          widgetSession.clear(organizationId);
-          setContactSessionId(null);
-          setConversationId(null);
-          setScreen("auth");
-          return;
+          // Chỉ xóa token nếu backend xác nhận
+          // phiên không còn hợp lệ.
+          if (
+            error instanceof WidgetApiError &&
+            error.status === 401
+          ) {
+            widgetSession.clear(organizationId);
+            setContactSessionId(null);
+            setConversationId(null);
+            setScreen("selection");
+            return;
+          }
+
+          throw error;
         }
 
         if (cancelled) return;
@@ -100,13 +116,15 @@ export const WidgetLoadingScreen = ({
           widgetSession.clear(organizationId);
           setContactSessionId(null);
           setConversationId(null);
-          setScreen("auth");
+          setScreen("selection");
           return;
         }
 
         setContactSessionId(session.contactSessionId);
 
-        setLoadingMessage("Đang tải lịch sử trò chuyện...");
+        setLoadingMessage(
+          "Đang tải lịch sử trò chuyện...",
+        );
 
         const conversations =
           await widgetApi.listConversations(token);
@@ -118,11 +136,14 @@ export const WidgetLoadingScreen = ({
 
         const selected =
           conversations.find(
-            (conversation) => conversation.id === savedId,
+            (conversation) =>
+              conversation.id === savedId,
           ) ?? conversations[0];
 
         if (!selected) {
-          widgetConversationStorage.clear(organizationId);
+          widgetConversationStorage.clear(
+            organizationId,
+          );
           setConversationId(null);
           setScreen("selection");
           return;
@@ -138,7 +159,10 @@ export const WidgetLoadingScreen = ({
       } catch (error) {
         if (cancelled) return;
 
-        console.error("Widget initialization failed", error);
+        console.error(
+          "Widget initialization failed",
+          error,
+        );
 
         setErrorMessage(
           "Không thể khởi tạo Widget. Vui lòng thử lại.",

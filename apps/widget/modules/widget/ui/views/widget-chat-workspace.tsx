@@ -14,21 +14,20 @@ import {
   Menu,
   MessageCircle,
   PanelLeftClose,
-  Plus,
   Search,
   SquarePen,
-  X,
 } from "lucide-react";
 
 import {
+  contactSessionIdAtomFamily,
   conversationIdAtom,
   organizationIdAtom,
-  screenAtom,
   widgetSettingsAtom,
 } from "../../atoms/widget-atoms";
 
 import {
   widgetApi,
+  WidgetApiError,
   widgetConversationStorage,
   widgetSession,
   type WidgetConversation,
@@ -66,7 +65,9 @@ export const WidgetChatWorkspace = () => {
   const settings = useAtomValue(widgetSettingsAtom);
 
   const setConversationId = useSetAtom(conversationIdAtom);
-  const setScreen = useSetAtom(screenAtom);
+  const setContactSessionId = useSetAtom(
+    contactSessionIdAtomFamily(organizationId ?? ""),
+  );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chats, setChats] = useState<ChatItem[]>([]);
@@ -81,7 +82,9 @@ export const WidgetChatWorkspace = () => {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [nextBefore, setNextBefore] = useState<string | null>(
+    null,
+  );
   const [loadingMore, setLoadingMore] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -96,7 +99,12 @@ export const WidgetChatWorkspace = () => {
 
   const loadChats = useCallback(async () => {
     const token = getToken();
-    if (!token) return;
+
+    if (!token) {
+      setChats([]);
+      setLoadingChats(false);
+      return;
+    }
 
     setLoadingChats(true);
 
@@ -122,7 +130,7 @@ export const WidgetChatWorkspace = () => {
               title = firstMessage.content;
             }
           } catch {
-            // Không chặn lịch sử khi preview bị lỗi.
+            // Không chặn lịch sử nếu preview bị lỗi.
           }
 
           return { ...item, title };
@@ -138,6 +146,7 @@ export const WidgetChatWorkspace = () => {
       setChats(results);
     } catch (err) {
       console.error("Load conversations failed", err);
+
       setError("Không thể tải lịch sử trò chuyện.");
     } finally {
       setLoadingChats(false);
@@ -149,7 +158,7 @@ export const WidgetChatWorkspace = () => {
   }, [loadChats]);
 
   const openChat = (id: string) => {
-    if (!organizationId) return;
+    if (!organizationId || sendingRef.current) return;
 
     widgetConversationStorage.set(organizationId, id);
     setConversationId(id);
@@ -173,7 +182,9 @@ export const WidgetChatWorkspace = () => {
       widgetConversationStorage.clear(organizationId);
     }
 
-    requestAnimationFrame(() => textareaRef.current?.focus());
+    requestAnimationFrame(() =>
+      textareaRef.current?.focus(),
+    );
   };
 
   useEffect(() => {
@@ -217,7 +228,9 @@ export const WidgetChatWorkspace = () => {
         console.error("Load messages failed", err);
         setError("Không thể tải tin nhắn.");
       } finally {
-        if (!cancelled) setLoadingMessages(false);
+        if (!cancelled) {
+          setLoadingMessages(false);
+        }
       }
     };
 
@@ -238,7 +251,10 @@ export const WidgetChatWorkspace = () => {
     let busy = false;
 
     const refresh = async () => {
-      if (busy || document.visibilityState !== "visible") {
+      if (
+        busy ||
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
 
@@ -316,11 +332,9 @@ export const WidgetChatWorkspace = () => {
 
   const sendMessage = async () => {
     const content = draft.trim();
-    const token = getToken();
 
     if (
       !content ||
-      !token ||
       !organizationId ||
       sendingRef.current ||
       loadingMessages ||
@@ -334,6 +348,29 @@ export const WidgetChatWorkspace = () => {
     setError(null);
 
     try {
+      let token = getToken();
+
+      // 1. Khách chưa có session:
+      // tạo Guest Session khi gửi tin đầu tiên.
+      if (!token) {
+        const guest =
+          await widgetApi.createGuestSession(
+            organizationId,
+          );
+
+        token = guest.token;
+
+        widgetSession.set(
+          organizationId,
+          guest.token,
+        );
+
+        setContactSessionId(
+          guest.contactSessionId,
+        );
+      }
+
+      // 2. Tạo conversation nếu chưa có.
       let id = conversationId;
 
       if (!id) {
@@ -347,28 +384,35 @@ export const WidgetChatWorkspace = () => {
           created.id,
         );
 
-        setConversation(created);
-        setConversationId(created.id);
-
         setChats((previous) => [
           {
             ...created,
             title: content,
           },
-          ...previous,
+          ...previous.filter(
+            (chat) => chat.id !== created.id,
+          ),
         ]);
       }
 
+      // 3. Gửi tin nhắn.
       const message = await widgetApi.sendMessage(
         token,
         id,
         content,
       );
 
-      setMessages((previous) =>
-        mergeMessages(previous, [message]),
-      );
+      // 4. Chuyển sang conversation vừa tạo.
+      // Effect sẽ tải cả lời chào và tin nhắn.
+      if (conversationId !== id) {
+        setConversationId(id);
+      } else {
+        setMessages((previous) =>
+          mergeMessages(previous, [message]),
+        );
+      }
 
+      // 5. Cập nhật tiêu đề trong sidebar.
       setChats((previous) =>
         previous.map((chat) =>
           chat.id === id &&
@@ -379,12 +423,37 @@ export const WidgetChatWorkspace = () => {
       );
 
       setDraft("");
+
+      // 6. Đồng bộ lịch sử.
       void loadChats();
     } catch (err) {
       console.error("Send message failed", err);
-      setError(
-        "Không thể gửi tin nhắn. Vui lòng thử lại.",
-      );
+
+      if (
+        err instanceof WidgetApiError &&
+        err.status === 401
+      ) {
+        // Backend xác nhận token hết hạn hoặc sai.
+        // Xóa phiên cũ nhưng giữ nội dung đang nhập.
+        widgetSession.clear(organizationId);
+
+        setContactSessionId(null);
+        setConversationId(null);
+        setConversation(null);
+        setMessages([]);
+        setChats([]);
+        setLoadingChats(false);
+        setHasMore(false);
+        setNextBefore(null);
+
+        setError(
+          "Phiên trò chuyện đã hết hạn. Vui lòng gửi lại tin nhắn để bắt đầu phiên mới.",
+        );
+      } else {
+        setError(
+          "Không thể gửi tin nhắn. Vui lòng thử lại.",
+        );
+      }
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -394,10 +463,13 @@ export const WidgetChatWorkspace = () => {
   const filteredChats = chats.filter((chat) =>
     chat.title
       .toLocaleLowerCase("vi-VN")
-      .includes(search.trim().toLocaleLowerCase("vi-VN")),
+      .includes(
+        search.trim().toLocaleLowerCase("vi-VN"),
+      ),
   );
 
-  const isResolved = conversation?.status === "resolved";
+  const isResolved =
+    conversation?.status === "resolved";
 
   return (
     <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-white text-zinc-900">
@@ -454,7 +526,9 @@ export const WidgetChatWorkspace = () => {
             <Search className="size-4 text-zinc-500" />
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
               placeholder="Tìm kiếm đoạn chat"
               aria-label="Tìm kiếm đoạn chat"
               className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-zinc-500"
@@ -491,11 +565,12 @@ export const WidgetChatWorkspace = () => {
               </button>
             ))}
 
-          {!loadingChats && filteredChats.length === 0 && (
-            <p className="px-3 py-4 text-sm text-zinc-500">
-              Không có cuộc trò chuyện.
-            </p>
-          )}
+          {!loadingChats &&
+            filteredChats.length === 0 && (
+              <p className="px-3 py-4 text-sm text-zinc-500">
+                Không có cuộc trò chuyện.
+              </p>
+            )}
         </div>
 
         <div className="border-t border-zinc-200 px-4 py-3 text-xs text-zinc-500">
@@ -508,7 +583,9 @@ export const WidgetChatWorkspace = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setSidebarOpen((value) => !value)}
+              onClick={() =>
+                setSidebarOpen((value) => !value)
+              }
               className="rounded-lg p-2 hover:bg-zinc-100"
               aria-label="Mở hoặc đóng lịch sử"
             >
@@ -569,7 +646,8 @@ export const WidgetChatWorkspace = () => {
                 )}
 
                 {messages.map((message) => {
-                  const isUser = message.role === "user";
+                  const isUser =
+                    message.role === "user";
 
                   return (
                     <div
@@ -643,7 +721,9 @@ export const WidgetChatWorkspace = () => {
                     placeholder="Hỏi bất kỳ điều gì..."
                     aria-label="Nhập tin nhắn"
                     rows={2}
-                    disabled={sending || loadingMessages}
+                    disabled={
+                      sending || loadingMessages
+                    }
                     className="max-h-36 min-h-12 w-full resize-none bg-transparent text-sm leading-6 outline-none placeholder:text-zinc-400 disabled:opacity-50"
                   />
 
@@ -654,7 +734,9 @@ export const WidgetChatWorkspace = () => {
 
                     <button
                       type="button"
-                      onClick={() => void sendMessage()}
+                      onClick={() =>
+                        void sendMessage()
+                      }
                       disabled={
                         !draft.trim() ||
                         sending ||

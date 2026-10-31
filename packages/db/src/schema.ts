@@ -1,3 +1,4 @@
+
 import {
   boolean,
   foreignKey,
@@ -9,10 +10,6 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-// -----------------------------------------------------------------------------
-// Existing widget settings — giữ nguyên để không phá dữ liệu hiện có.
-// -----------------------------------------------------------------------------
-
 export type DefaultSuggestions = {
   suggestion1?: string;
   suggestion2?: string;
@@ -21,21 +18,13 @@ export type DefaultSuggestions = {
 
 export const widgetSettings = pgTable("widget_settings", {
   organizationId: text("organization_id").primaryKey(),
-
   greetMessage: text("greet_message").notNull(),
-
   defaultSuggestions: jsonb("default_suggestions")
     .$type<DefaultSuggestions>()
     .notNull(),
-
   vapiAssistantId: text("vapi_assistant_id"),
-
   vapiPhoneNumber: text("vapi_phone_number"),
 });
-
-// -----------------------------------------------------------------------------
-// Better Auth core tables.
-// -----------------------------------------------------------------------------
 
 export const user = pgTable(
   "user",
@@ -64,8 +53,6 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-
-    // Added by Better Auth Organization plugin.
     activeOrganizationId: text("active_organization_id"),
   },
   (table) => [
@@ -83,7 +70,6 @@ export const account = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
@@ -91,7 +77,6 @@ export const account = pgTable(
     refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
     scope: text("scope"),
     password: text("password"),
-
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -114,12 +99,10 @@ export const verification = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)],
+  (table) => [
+    index("verification_identifier_idx").on(table.identifier),
+  ],
 );
-
-// -----------------------------------------------------------------------------
-// Better Auth Organization plugin tables.
-// -----------------------------------------------------------------------------
 
 export const organization = pgTable(
   "organization",
@@ -131,7 +114,9 @@ export const organization = pgTable(
     metadata: text("metadata"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("organization_slug_unique").on(table.slug)],
+  (table) => [
+    uniqueIndex("organization_slug_unique").on(table.slug),
+  ],
 );
 
 export const member = pgTable(
@@ -140,10 +125,14 @@ export const member = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => user.id, {
+        onDelete: "cascade",
+      }),
     role: text("role").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
@@ -163,14 +152,18 @@ export const invitation = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
     email: text("email").notNull(),
     role: text("role"),
     status: text("status").notNull().default("pending"),
     expiresAt: timestamp("expires_at").notNull(),
     inviterId: text("inviter_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => user.id, {
+        onDelete: "cascade",
+      }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
@@ -179,31 +172,20 @@ export const invitation = pgTable(
   ],
 );
 
-// -----------------------------------------------------------------------------
-// Inferred TypeScript types.
-// -----------------------------------------------------------------------------
-
 export type WidgetSettings = typeof widgetSettings.$inferSelect;
 export type NewWidgetSettings = typeof widgetSettings.$inferInsert;
-
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;
-
 export type Session = typeof session.$inferSelect;
 export type NewSession = typeof session.$inferInsert;
-
 export type Account = typeof account.$inferSelect;
 export type NewAccount = typeof account.$inferInsert;
-
 export type Verification = typeof verification.$inferSelect;
 export type NewVerification = typeof verification.$inferInsert;
-
 export type Organization = typeof organization.$inferSelect;
 export type NewOrganization = typeof organization.$inferInsert;
-
 export type Member = typeof member.$inferSelect;
 export type NewMember = typeof member.$inferInsert;
-
 export type Invitation = typeof invitation.$inferSelect;
 export type NewInvitation = typeof invitation.$inferInsert;
 
@@ -222,34 +204,36 @@ export type ContactSessionMetadata = {
   currentUrl?: string;
 };
 
+export const VISITOR_TYPES = ["guest", "identified"] as const;
+export type VisitorType = (typeof VISITOR_TYPES)[number];
+
 export const contactSessions = pgTable(
   "contact_sessions",
   {
     id: text("id").primaryKey(),
-
     sessionTokenHash: text("session_token_hash").unique(),
-
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-
-    name: text("name").notNull(),
-    email: text("email").notNull(),
-
+    name: text("name"),
+    email: text("email"),
+    phone: text("phone"),
+    visitorType: text("visitor_type", {
+      enum: VISITOR_TYPES,
+    })
+      .notNull()
+      .default("guest"),
     expiresAt: timestamp("expires_at", {
       withTimezone: true,
     }).notNull(),
-
     metadata: jsonb("metadata").$type<ContactSessionMetadata>(),
-
     createdAt: timestamp("created_at", {
       withTimezone: true,
     })
       .notNull()
       .defaultNow(),
-
     updatedAt: timestamp("updated_at", {
       withTimezone: true,
     })
@@ -258,9 +242,7 @@ export const contactSessions = pgTable(
   },
   (table) => [
     index("contact_sessions_org_idx").on(table.organizationId),
-
     index("contact_sessions_expires_idx").on(table.expiresAt),
-
     uniqueIndex("contact_sessions_id_org_unique").on(
       table.id,
       table.organizationId,
@@ -268,46 +250,36 @@ export const contactSessions = pgTable(
   ],
 );
 
-//
-// Conversations
-//
-
 export const CONVERSATION_STATUSES = [
   "unresolved",
   "escalated",
   "resolved",
 ] as const;
 
-export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
+export type ConversationStatus =
+  (typeof CONVERSATION_STATUSES)[number];
 
 export const conversations = pgTable(
   "conversations",
   {
     id: text("id").primaryKey(),
-
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-
     contactSessionId: text("contact_session_id").notNull(),
-
-    // Nullable until the new AI runtime is integrated.
     threadId: text("thread_id").unique(),
-
     status: text("status", {
       enum: CONVERSATION_STATUSES,
     })
       .notNull()
       .default("unresolved"),
-
     createdAt: timestamp("created_at", {
       withTimezone: true,
     })
       .notNull()
       .defaultNow(),
-
     updatedAt: timestamp("updated_at", {
       withTimezone: true,
     })
@@ -318,7 +290,10 @@ export const conversations = pgTable(
     foreignKey({
       name: "conversations_session_org_fk",
       columns: [table.contactSessionId, table.organizationId],
-      foreignColumns: [contactSessions.id, contactSessions.organizationId],
+      foreignColumns: [
+        contactSessions.id,
+        contactSessions.organizationId,
+      ],
     }).onDelete("cascade"),
     uniqueIndex("conversations_id_org_unique").on(
       table.id,
@@ -328,9 +303,9 @@ export const conversations = pgTable(
       table.organizationId,
       table.status,
     ),
-
-    index("conversations_session_idx").on(table.contactSessionId),
-
+    index("conversations_session_idx").on(
+      table.contactSessionId,
+    ),
     index("conversations_org_created_idx").on(
       table.organizationId,
       table.createdAt,
@@ -339,14 +314,16 @@ export const conversations = pgTable(
 );
 
 export type ContactSession = typeof contactSessions.$inferSelect;
-
 export type NewContactSession = typeof contactSessions.$inferInsert;
-
 export type Conversation = typeof conversations.$inferSelect;
-
 export type NewConversation = typeof conversations.$inferInsert;
 
-export const MESSAGE_ROLES = ["user", "assistant", "system", "tool"] as const;
+export const MESSAGE_ROLES = [
+  "user",
+  "assistant",
+  "system",
+  "tool",
+] as const;
 
 export type MessageRole = (typeof MESSAGE_ROLES)[number];
 
@@ -354,23 +331,17 @@ export const conversationMessages = pgTable(
   "conversation_messages",
   {
     id: text("id").primaryKey(),
-
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-
     conversationId: text("conversation_id").notNull(),
-
     role: text("role", {
       enum: MESSAGE_ROLES,
     }).notNull(),
-
     content: text("content").notNull(),
-
     senderId: text("sender_id"),
-
     createdAt: timestamp("created_at", {
       withTimezone: true,
     })
@@ -380,10 +351,15 @@ export const conversationMessages = pgTable(
   (table) => [
     foreignKey({
       name: "conversation_messages_conversation_org_fk",
-      columns: [table.conversationId, table.organizationId],
-      foreignColumns: [conversations.id, conversations.organizationId],
+      columns: [
+        table.conversationId,
+        table.organizationId,
+      ],
+      foreignColumns: [
+        conversations.id,
+        conversations.organizationId,
+      ],
     }).onDelete("cascade"),
-
     index("conversation_messages_org_conversation_created_idx").on(
       table.organizationId,
       table.conversationId,
@@ -392,6 +368,7 @@ export const conversationMessages = pgTable(
   ],
 );
 
-export type ConversationMessage = typeof conversationMessages.$inferSelect;
-
-export type NewConversationMessage = typeof conversationMessages.$inferInsert;
+export type ConversationMessage =
+  typeof conversationMessages.$inferSelect;
+export type NewConversationMessage =
+  typeof conversationMessages.$inferInsert;

@@ -20,6 +20,17 @@ export type PublicWidgetConfiguration = {
   settings: PublicWidgetSettings;
 };
 
+export type WidgetSessionInfo = {
+  valid: boolean;
+  contactSessionId: string;
+  organizationId: string;
+  visitorType: "guest" | "identified";
+  expiresAt: string;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
 export type WidgetConversation = {
   id: string;
   organizationId: string;
@@ -41,6 +52,16 @@ type MessagePage = {
   hasMore: boolean;
   nextBefore: string | null;
 };
+
+export class WidgetApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "WidgetApiError";
+  }
+}
 
 const tokenKey = (organizationId: string) =>
   `widget_session_token_${organizationId}`;
@@ -69,7 +90,9 @@ export const widgetSession = {
 export const widgetConversationStorage = {
   get(organizationId: string): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem(activeConversationKey(organizationId));
+    return localStorage.getItem(
+      activeConversationKey(organizationId),
+    );
   },
 
   set(organizationId: string, conversationId: string): void {
@@ -82,7 +105,9 @@ export const widgetConversationStorage = {
 
   clear(organizationId: string): void {
     if (typeof window === "undefined") return;
-    localStorage.removeItem(activeConversationKey(organizationId));
+    localStorage.removeItem(
+      activeConversationKey(organizationId),
+    );
   },
 };
 
@@ -94,21 +119,30 @@ async function request<T>(
   const headers = new Headers(options.headers);
 
   if (options.body) {
-    headers.set("Content-Type", "application/json");
+    headers.set(
+      "Content-Type",
+      "application/json; charset=utf-8",
+    );
   }
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_URL}/v1/public/widget${path}`, {
-    ...options,
-    headers,
-    cache: "no-store",
-  });
+  const response = await fetch(
+    `${API_URL}/v1/public/widget${path}`,
+    {
+      ...options,
+      headers,
+      cache: "no-store",
+    },
+  );
 
   if (!response.ok) {
-    throw new Error(`Widget API error: ${response.status}`);
+    throw new WidgetApiError(
+      response.status,
+      `Widget API error: ${response.status}`,
+    );
   }
 
   return response.json() as Promise<T>;
@@ -121,6 +155,19 @@ export const widgetApi = {
     );
   },
 
+  createGuestSession(organizationId: string) {
+    return request<{
+      contactSessionId: string;
+      token: string;
+      expiresAt: string;
+      visitorType: "guest";
+    }>("/guest-sessions", {
+      method: "POST",
+      body: JSON.stringify({ organizationId }),
+    });
+  },
+
+  // Giữ API cũ để tương thích.
   createSession(input: {
     organizationId: string;
     name: string;
@@ -130,6 +177,7 @@ export const widgetApi = {
       contactSessionId: string;
       token: string;
       expiresAt: string;
+      visitorType: "identified";
     }>("/sessions", {
       method: "POST",
       body: JSON.stringify(input),
@@ -137,11 +185,11 @@ export const widgetApi = {
   },
 
   validateSession(token: string) {
-    return request<{
-      valid: boolean;
-      contactSessionId: string;
-      organizationId: string;
-    }>("/sessions/current", {}, token);
+    return request<WidgetSessionInfo>(
+      "/sessions/current",
+      {},
+      token,
+    );
   },
 
   createConversation(token: string) {
@@ -168,7 +216,11 @@ export const widgetApi = {
     );
   },
 
-  listMessages(token: string, id: string, before?: string) {
+  listMessages(
+    token: string,
+    id: string,
+    before?: string,
+  ) {
     const query = before
       ? `?before=${encodeURIComponent(before)}`
       : "";
@@ -180,7 +232,11 @@ export const widgetApi = {
     );
   },
 
-  sendMessage(token: string, id: string, content: string) {
+  sendMessage(
+    token: string,
+    id: string,
+    content: string,
+  ) {
     return request<WidgetMessage>(
       `/conversations/${encodeURIComponent(id)}/messages`,
       {

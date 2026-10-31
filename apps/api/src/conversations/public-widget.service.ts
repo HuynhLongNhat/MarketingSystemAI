@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -16,6 +17,12 @@ import {
 } from "@workspace/db/node";
 import { and, desc, eq, lt } from "drizzle-orm";
 
+type ContactDetails = {
+  name?: string;
+  email?: string;
+  phone?: string;
+};
+
 @Injectable()
 export class PublicWidgetService {
   private hashToken(token: string) {
@@ -30,41 +37,61 @@ export class PublicWidgetService {
     const [session] = await db
       .select()
       .from(contactSessions)
-      .where(eq(contactSessions.sessionTokenHash, this.hashToken(token)))
+      .where(
+        eq(
+          contactSessions.sessionTokenHash,
+          this.hashToken(token),
+        ),
+      )
       .limit(1);
 
     if (!session || session.expiresAt <= new Date()) {
-      throw new UnauthorizedException("Widget session expired or invalid");
+      throw new UnauthorizedException(
+        "Widget session expired or invalid",
+      );
     }
 
     return session;
   }
 
-  async createSession(input: {
-    organizationId: string;
-    name: string;
-    email: string;
-  }) {
+  private async requireOrganization(organizationId: string) {
     const [org] = await db
       .select({ id: organization.id })
       .from(organization)
-      .where(eq(organization.id, input.organizationId))
+      .where(eq(organization.id, organizationId))
       .limit(1);
 
     if (!org) {
       throw new NotFoundException("Organization not found");
     }
 
+    return org;
+  }
+
+  private async issueSession(
+    organizationId: string,
+    details?: ContactDetails,
+  ) {
+    await this.requireOrganization(organizationId);
+
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    );
+
+    const identified = Boolean(
+      details?.name?.trim() && details?.email?.trim(),
+    );
 
     const [session] = await db
       .insert(contactSessions)
       .values({
         id: randomUUID(),
-        organizationId: input.organizationId,
-        name: input.name,
-        email: input.email,
+        organizationId,
+        name: details?.name?.trim() || null,
+        email: details?.email?.trim() || null,
+        phone: details?.phone?.trim() || null,
+        visitorType: identified ? "identified" : "guest",
         expiresAt,
         sessionTokenHash: this.hashToken(token),
       })
@@ -78,7 +105,25 @@ export class PublicWidgetService {
       contactSessionId: session.id,
       token,
       expiresAt: session.expiresAt,
+      visitorType: session.visitorType,
     };
+  }
+
+  async createSession(input: {
+    organizationId: string;
+    name: string;
+    email: string;
+  }) {
+    return this.issueSession(input.organizationId, {
+      name: input.name,
+      email: input.email,
+    });
+  }
+
+  async createGuestSession(input: {
+    organizationId: string;
+  }) {
+    return this.issueSession(input.organizationId);
   }
 
   async validateSession(token: string) {
@@ -88,6 +133,70 @@ export class PublicWidgetService {
       valid: true,
       contactSessionId: session.id,
       organizationId: session.organizationId,
+      visitorType: session.visitorType,
+      name: session.name,
+      email: session.email,
+      phone: session.phone,
+      expiresAt: session.expiresAt,
+    };
+  }
+
+  async updateSession(token: string, details: ContactDetails) {
+    const session = await this.requireSession(token);
+
+    const updates: ContactDetails = {};
+
+    if (details.name !== undefined) {
+      updates.name = details.name.trim();
+    }
+
+    if (details.email !== undefined) {
+      updates.email = details.email.trim();
+    }
+
+    if (details.phone !== undefined) {
+      updates.phone = details.phone.trim();
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw new BadRequestException(
+        "At least one contact field is required",
+      );
+    }
+
+    const name = updates.name ?? session.name;
+    const email = updates.email ?? session.email;
+
+    const [updated] = await db
+      .update(contactSessions)
+      .set({
+        ...updates,
+        visitorType:
+          name && email ? "identified" : "guest",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(contactSessions.id, session.id),
+          eq(
+            contactSessions.organizationId,
+            session.organizationId,
+          ),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException("Session not found");
+    }
+
+    return {
+      contactSessionId: updated.id,
+      organizationId: updated.organizationId,
+      visitorType: updated.visitorType,
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone,
     };
   }
 
@@ -95,14 +204,23 @@ export class PublicWidgetService {
     const session = await this.requireSession(token);
 
     const [settings] = await db
-      .select({ greetMessage: widgetSettings.greetMessage })
+      .select({
+        greetMessage: widgetSettings.greetMessage,
+      })
       .from(widgetSettings)
-      .where(eq(widgetSettings.organizationId, session.organizationId))
+      .where(
+        eq(
+          widgetSettings.organizationId,
+          session.organizationId,
+        ),
+      )
       .limit(1);
 
     const conversationId = randomUUID();
+
     const greeting =
-      settings?.greetMessage?.trim() || "Hello, how can I help you today?";
+      settings?.greetMessage?.trim() ||
+      "Xin chào! Chúng tôi có thể giúp gì cho bạn?";
 
     return db.transaction(async (tx) => {
       const [conversation] = await tx
@@ -127,7 +245,10 @@ export class PublicWidgetService {
     });
   }
 
-  private async requireConversation(token: string, conversationId: string) {
+  private async requireConversation(
+    token: string,
+    conversationId: string,
+  ) {
     const session = await this.requireSession(token);
 
     const [conversation] = await db
@@ -136,7 +257,10 @@ export class PublicWidgetService {
       .where(
         and(
           eq(conversations.id, conversationId),
-          eq(conversations.organizationId, session.organizationId),
+          eq(
+            conversations.organizationId,
+            session.organizationId,
+          ),
           eq(conversations.contactSessionId, session.id),
         ),
       )
@@ -157,7 +281,10 @@ export class PublicWidgetService {
       .from(conversations)
       .where(
         and(
-          eq(conversations.organizationId, session.organizationId),
+          eq(
+            conversations.organizationId,
+            session.organizationId,
+          ),
           eq(conversations.contactSessionId, session.id),
         ),
       )
@@ -169,8 +296,15 @@ export class PublicWidgetService {
     return this.requireConversation(token, conversationId);
   }
 
-  async listMessages(token: string, conversationId: string, before?: string) {
-    const conversation = await this.requireConversation(token, conversationId);
+  async listMessages(
+    token: string,
+    conversationId: string,
+    before?: string,
+  ) {
+    const conversation = await this.requireConversation(
+      token,
+      conversationId,
+    );
 
     const beforeDate = before ? new Date(before) : null;
 
@@ -183,10 +317,19 @@ export class PublicWidgetService {
       .from(conversationMessages)
       .where(
         and(
-          eq(conversationMessages.organizationId, conversation.organizationId),
-          eq(conversationMessages.conversationId, conversationId),
+          eq(
+            conversationMessages.organizationId,
+            conversation.organizationId,
+          ),
+          eq(
+            conversationMessages.conversationId,
+            conversationId,
+          ),
           beforeDate
-            ? lt(conversationMessages.createdAt, beforeDate)
+            ? lt(
+                conversationMessages.createdAt,
+                beforeDate,
+              )
             : undefined,
         ),
       )
@@ -202,12 +345,21 @@ export class PublicWidgetService {
       items,
       hasMore: rows.length > 50,
       nextBefore:
-        rows.length > 50 && items[0] ? items[0].createdAt.toISOString() : null,
+        rows.length > 50 && items[0]
+          ? items[0].createdAt.toISOString()
+          : null,
     };
   }
 
-  async sendMessage(token: string, conversationId: string, content: string) {
-    const conversation = await this.requireConversation(token, conversationId);
+  async sendMessage(
+    token: string,
+    conversationId: string,
+    content: string,
+  ) {
+    const conversation = await this.requireConversation(
+      token,
+      conversationId,
+    );
 
     if (conversation.status === "resolved") {
       throw new ForbiddenException("Conversation resolved");
@@ -216,7 +368,9 @@ export class PublicWidgetService {
     const trimmed = content.trim();
 
     if (!trimmed || trimmed.length > 5000) {
-      throw new BadRequestException("Invalid message content");
+      throw new BadRequestException(
+        "Invalid message content",
+      );
     }
 
     const [message] = await db
@@ -255,7 +409,9 @@ export class PublicWidgetService {
         vapiPhoneNumber: widgetSettings.vapiPhoneNumber,
       })
       .from(widgetSettings)
-      .where(eq(widgetSettings.organizationId, organizationId))
+      .where(
+        eq(widgetSettings.organizationId, organizationId),
+      )
       .limit(1);
 
     return {
@@ -266,13 +422,16 @@ export class PublicWidgetService {
             greetMessage: settings.greetMessage,
             defaultSuggestions: settings.defaultSuggestions,
             vapiSettings: {
-              assistantId: settings.vapiAssistantId ?? undefined,
-              phoneNumber: settings.vapiPhoneNumber ?? undefined,
+              assistantId:
+                settings.vapiAssistantId ?? undefined,
+              phoneNumber:
+                settings.vapiPhoneNumber ?? undefined,
             },
           }
         : {
             organizationId,
-            greetMessage: "Hello! How can we help you?",
+            greetMessage:
+              "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
             defaultSuggestions: {},
             vapiSettings: {},
           },
