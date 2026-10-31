@@ -71,6 +71,13 @@
       "when": 1793447019458,
       "tag": "0009_ordinary_mother_askani",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793464717830,
+      "tag": "0010_nostalgic_frank_castle",
+      "breakpoints": true
     }
   ]
 }

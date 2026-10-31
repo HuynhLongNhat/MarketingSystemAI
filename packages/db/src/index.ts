@@ -64,3 +64,18 @@ export {
 export type {
   DatabaseEnvironment,
 } from "./environment-guard.js";
+
+
+export {
+  aiProviderConnections,
+  aiModelDefaults,
+  AI_PROVIDER_TYPES,
+} from "./ai-schema.js";
+
+export type {
+  AiProviderType,
+  AiProviderConnection,
+  NewAiProviderConnection,
+  AiModelDefault,
+  NewAiModelDefault,
+} from "./ai-schema.js";
