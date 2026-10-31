@@ -1,0 +1,62 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Widget Embed MVP Test</title>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 40px;
+      font-family: Arial, sans-serif;
+      background: #f5f6fa;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 60px auto;
+      padding: 40px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      color: #222;
+    }
+
+    p {
+      color: #666;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Website khách hàng (Demo)</h1>
+
+    <p>
+      Đây là trang HTML độc lập dùng để kiểm tra
+      khả năng nhúng Chatbot CSKH.
+    </p>
+
+    <p>
+      Chatbot phải xuất hiện dưới góc phải màn hình.
+    </p>
+
+    <p>
+      Nhấn biểu tượng chat để mở và gửi tin nhắn.
+    </p>
+  </div>
+
+  <script
+    src="http://localhost:3001/widget.js"
+    data-organization-id="Wxna7neA16piExhFoPzE74GJGuKPG7cu"
+    data-position="bottom-right"
+    defer
+  ></script>
+</body>
+</html>

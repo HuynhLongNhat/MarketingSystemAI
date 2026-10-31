@@ -1,11 +1,11 @@
-(function(){"use strict";const o={WIDGET_URL:"https://next15-echo-widget.vercel.app",DEFAULT_POSITION:"bottom-right"},u=`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+(function(){"use strict";const b={WIDGET_URL:"http://localhost:3001",DEFAULT_POSITION:"bottom-right"},x=`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-</svg>`,b=`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+</svg>`,k=`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <line x1="18" y1="6" x2="6" y2="18"></line>
   <line x1="6" y1="6" x2="18" y2="18"></line>
-</svg>`;(function(){let n=null,t=null,e=null,d=!1,r=null,a=o.DEFAULT_POSITION;const c=document.currentScript;if(c)r=c.getAttribute("data-organization-id"),a=c.getAttribute("data-position")||o.DEFAULT_POSITION;else{const i=document.querySelectorAll('script[src*="embed"]'),s=Array.from(i).find(l=>l.hasAttribute("data-organization-id"));s&&(r=s.getAttribute("data-organization-id"),a=s.getAttribute("data-position")||o.DEFAULT_POSITION)}if(!r){console.error("Echo Widget: data-organization-id attribute is required");return}function h(){document.readyState==="loading"?document.addEventListener("DOMContentLoaded",g):g()}function g(){e=document.createElement("button"),e.id="echo-widget-button",e.innerHTML=u,e.style.cssText=`
+</svg>`;(function(){var L;const m=window;if(m.EchoWidget)return;const o=document.currentScript;o!=null&&o.src&&new URL(o.src);const y=b.WIDGET_URL.replace(/\/$/,""),T=new URL(y).origin;let l=((L=o==null?void 0:o.getAttribute("data-organization-id"))==null?void 0:L.trim())||null,u=(o==null?void 0:o.getAttribute("data-position"))==="bottom-left"?"bottom-left":b.DEFAULT_POSITION,n=null,t=null,e=null,r=!1,s=!1,d=null;function I(){const i=new URL(y);return l&&i.searchParams.set("organizationId",l),i.toString()}function h(){d!==null&&(window.clearTimeout(d),d=null)}function g(){if(!(s||e||t)){if(!l){console.error("Echo Widget: data-organization-id attribute is required");return}e=document.createElement("button"),e.id="echo-widget-button",e.type="button",e.setAttribute("aria-label","Mở hỗ trợ khách hàng"),e.setAttribute("aria-expanded","false"),e.innerHTML=x,e.style.cssText=`
       position: fixed;
-      ${a==="bottom-right"?"right: 20px;":"left: 20px;"}
+      ${u==="bottom-left"?"left: 20px;":"right: 20px;"}
       bottom: 20px;
       width: 60px;
       height: 60px;
@@ -19,10 +19,10 @@
       align-items: center;
       justify-content: center;
       box-shadow: 0 4px 24px rgba(59, 130, 246, 0.35);
-      transition: all 0.2s ease;
-    `,e.addEventListener("click",y),e.addEventListener("mouseenter",()=>{e&&(e.style.transform="scale(1.05)")}),e.addEventListener("mouseleave",()=>{e&&(e.style.transform="scale(1)")}),document.body.appendChild(e),t=document.createElement("div"),t.id="echo-widget-container",t.style.cssText=`
+      transition: transform 0.2s ease;
+    `,e.addEventListener("click",M),e.addEventListener("mouseenter",()=>{e&&(e.style.transform="scale(1.05)")}),e.addEventListener("mouseleave",()=>{e&&(e.style.transform="scale(1)")}),t=document.createElement("div"),t.id="echo-widget-container",t.style.cssText=`
       position: fixed;
-      ${a==="bottom-right"?"right: 20px;":"left: 20px;"}
+      ${u==="bottom-left"?"left: 20px;":"right: 20px;"}
       bottom: 90px;
       width: 400px;
       height: 600px;
@@ -35,9 +35,10 @@
       display: none;
       opacity: 0;
       transform: translateY(10px);
-      transition: all 0.3s ease;
-    `,n=document.createElement("iframe"),n.src=w(),n.style.cssText=`
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    `,n=document.createElement("iframe"),n.src=I(),n.title="Hỗ trợ khách hàng",n.setAttribute("loading","lazy"),n.style.cssText=`
       width: 100%;
       height: 100%;
       border: none;
-    `,n.allow="microphone; clipboard-read; clipboard-write",t.appendChild(n),document.body.appendChild(t),window.addEventListener("message",f)}function w(){const i=new URLSearchParams;return i.append("organizationId",r),`${o.WIDGET_URL}?${i.toString()}`}function f(i){if(i.origin!==new URL(o.WIDGET_URL).origin)return;const{type:s,payload:l}=i.data;switch(s){case"close":p();break;case"resize":l.height&&t&&(t.style.height=`${l.height}px`);break}}function y(){d?p():m()}function m(){t&&e&&(d=!0,t.style.display="block",setTimeout(()=>{t&&(t.style.opacity="1",t.style.transform="translateY(0)")},10),e.innerHTML=b)}function p(){t&&e&&(d=!1,t.style.opacity="0",t.style.transform="translateY(10px)",setTimeout(()=>{t&&(t.style.display="none")},300),e.innerHTML=u,e.style.background="#3b82f6")}function x(){window.removeEventListener("message",f),t&&(t.remove(),t=null,n=null),e&&(e.remove(),e=null),d=!1}function v(i){x(),i.organizationId&&(r=i.organizationId),i.position&&(a=i.position),h()}window.EchoWidget={init:v,show:m,hide:p,destroy:x},h()})()})();
+      display: block;
+    `,n.allow="microphone; clipboard-read; clipboard-write",t.appendChild(n),document.body.appendChild(e),document.body.appendChild(t),window.addEventListener("message",p)}}function v(){document.readyState==="loading"?document.addEventListener("DOMContentLoaded",g,{once:!0}):g()}function p(i){if(i.origin!==T||i.source!==(n==null?void 0:n.contentWindow)||!i.data||typeof i.data!="object")return;const{type:f,payload:c}=i.data;switch(f){case"close":w();break;case"resize":{if(!t)break;const a=Number(c==null?void 0:c.height);if(!Number.isFinite(a)||a<=0)break;const O=Math.min(Math.max(a,200),window.innerHeight-110);t.style.height=`${Math.max(100,O)}px`;break}}}function E(){!t||!e||s||(h(),r=!0,t.style.display="block",window.requestAnimationFrame(()=>{!t||!r||(t.style.opacity="1",t.style.transform="translateY(0)")}),e.innerHTML=k,e.setAttribute("aria-label","Đóng hỗ trợ khách hàng"),e.setAttribute("aria-expanded","true"))}function w(){!t||!e||s||(h(),r=!1,t.style.opacity="0",t.style.transform="translateY(10px)",e.innerHTML=x,e.setAttribute("aria-label","Mở hỗ trợ khách hàng"),e.setAttribute("aria-expanded","false"),d=window.setTimeout(()=>{t&&!r&&(t.style.display="none"),d=null},300))}function M(){r?w():E()}function z(){s=!0,h(),document.removeEventListener("DOMContentLoaded",g),window.removeEventListener("message",p),e==null||e.remove(),t==null||t.remove(),e=null,t=null,n=null,r=!1,delete m.EchoWidget}function A(i={}){var a;const f=((a=i.organizationId)==null?void 0:a.trim())||l;if(!f){console.error("Echo Widget: organizationId is required");return}const c=i.position==="bottom-left"?"bottom-left":"bottom-right";h(),document.removeEventListener("DOMContentLoaded",g),window.removeEventListener("message",p),e==null||e.remove(),t==null||t.remove(),e=null,t=null,n=null,r=!1,s=!1,l=f,u=i.position?c:u,v()}m.EchoWidget={init:A,show:E,hide:w,destroy:z},v()})()})();
