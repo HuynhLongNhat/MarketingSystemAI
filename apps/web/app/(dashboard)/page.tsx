@@ -27,22 +27,6 @@ type CompanyModule = {
 
 const companyModules: CompanyModule[] = [
   {
-    title: "AI Workforce",
-    description:
-      "Quản lý nhân viên AI, vai trò, model và quyền truy cập.",
-    href: "#ai-workforce",
-    status: "planned",
-    icon: BotIcon,
-  },
-  {
-    title: "Departments",
-    description:
-      "Tổ chức đội ngũ theo các phòng ban Marketing, Sales và Support.",
-    href: "#departments",
-    status: "planned",
-    icon: NetworkIcon,
-  },
-  {
     title: "AI Office",
     description:
       "Quan sát trực quan trạng thái làm việc của từng nhân viên AI.",
@@ -61,6 +45,22 @@ const companyModules: CompanyModule[] = [
 ];
 
 const availableModules: CompanyModule[] = [
+  {
+    title: "AI Workforce",
+    description:
+      "Quản lý nhân viên AI, vai trò, trạng thái và template.",
+    href: "/workforce",
+    status: "available",
+    icon: BotIcon,
+  },
+  {
+    title: "Departments",
+    description:
+      "Tổ chức đội ngũ theo các phòng ban Marketing, Sales và Support.",
+    href: "/workforce",
+    status: "available",
+    icon: NetworkIcon,
+  },
   {
     title: "Customer Conversations",
     description:
@@ -118,9 +118,7 @@ function ModuleCard({
         )}
       </div>
 
-      <h3 className="font-semibold">
-        {module.title}
-      </h3>
+      <h3 className="font-semibold">{module.title}</h3>
 
       <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">
         {module.description}
@@ -236,13 +234,11 @@ export default function CompanyOverviewPage() {
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Dashboard hiện chưa hiển thị số lượng
-            nhân viên AI, nhiệm vụ đang chạy hoặc
-            chi phí token vì các chỉ số này chưa
-            được kết nối với API tổng hợp dữ liệu.
-            Khi triển khai Workforce và Execution,
-            các chỉ số sẽ lấy trực tiếp từ backend
-            theo organization.
+            AI Workforce hiện lấy dữ liệu từ các API
+            Departments, Agents và Agent Templates
+            theo organization. Các chỉ số execution,
+            token và chi phí AI sẽ được bổ sung khi
+            triển khai Tasks & Workflows.
           </p>
         </section>
       </div>
