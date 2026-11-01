@@ -13,12 +13,30 @@ import {
   AlertDialogTitle,
 } from "@workspace/ui/components/alert-dialog";
 
+import { useUiLanguage } from "@/lib/ui-language";
+
 interface ConfirmDeleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void | Promise<void>;
+
+  /**
+   * Name of the item being deleted.
+   *
+   * Example:
+   * itemName="Customer Support Specialist"
+   *
+   * Generated title:
+   * "Xóa Customer Support Specialist?"
+   */
+  itemName?: string | null;
+
+  /**
+   * Optional overrides for existing callers.
+   */
   title?: string;
   description?: string;
+
   loading?: boolean;
   cancelLabel?: string;
   confirmLabel?: string;
@@ -28,12 +46,40 @@ export function ConfirmDeleteDialog({
   open,
   onOpenChange,
   onConfirm,
-  title = "Xác nhận xóa",
-  description = "Bạn có chắc chắn muốn xóa mục này? Hành động này không thể hoàn tác.",
+  itemName,
+  title,
+  description,
   loading = false,
-  cancelLabel = "Hủy",
-  confirmLabel = "Xóa",
+  cancelLabel,
+  confirmLabel,
 }: ConfirmDeleteDialogProps) {
+  const { language } = useUiLanguage();
+
+  const isVietnamese = language === "vi";
+  const normalizedItemName = itemName?.trim();
+
+  const defaultTitle = normalizedItemName
+    ? isVietnamese
+      ? `Xóa ${normalizedItemName}?`
+      : `Delete ${normalizedItemName}?`
+    : isVietnamese
+      ? "Xác nhận xóa"
+      : "Confirm deletion";
+
+  const defaultDescription = isVietnamese
+    ? "Bạn có chắc chắn muốn xóa mục này? Hành động này không thể hoàn tác."
+    : "Are you sure you want to delete this item? This action cannot be undone.";
+
+  const resolvedTitle = title ?? defaultTitle;
+  const resolvedDescription =
+    description ?? defaultDescription;
+
+  const resolvedCancelLabel =
+    cancelLabel ?? (isVietnamese ? "Hủy" : "Cancel");
+
+  const resolvedConfirmLabel =
+    confirmLabel ?? (isVietnamese ? "Xóa" : "Delete");
+
   return (
     <AlertDialog
       open={open}
@@ -45,10 +91,12 @@ export function ConfirmDeleteDialog({
     >
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {resolvedTitle}
+          </AlertDialogTitle>
 
           <AlertDialogDescription>
-            {description}
+            {resolvedDescription}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -60,7 +108,7 @@ export function ConfirmDeleteDialog({
             onClick={() => onOpenChange(false)}
           >
             <X className="size-4" />
-            {cancelLabel}
+            {resolvedCancelLabel}
           </Button>
 
           <Button
@@ -74,7 +122,8 @@ export function ConfirmDeleteDialog({
             ) : (
               <Trash2 className="size-4" />
             )}
-            {confirmLabel}
+
+            {resolvedConfirmLabel}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -25,115 +25,110 @@ type MessageOptions = {
   description?: string;
 };
 
-const entityLabels: Record<
-  UiLanguage,
-  Record<CrudEntity, string>
-> = {
-  vi: {
-    agent: "nhân viên AI",
-    agentTemplate: "mẫu nhân viên",
-    department: "phòng ban",
-    knowledge: "kiến thức",
-    aiConnection: "kết nối AI",
-    chatbot: "chatbot",
-    settings: "cấu hình",
-  },
-  en: {
-    agent: "AI agent",
-    agentTemplate: "agent template",
-    department: "department",
-    knowledge: "knowledge entry",
-    aiConnection: "AI connection",
-    chatbot: "chatbot",
-    settings: "settings",
-  },
-};
+type CrudMessageType = "success" | "error";
 
-const actionLabels: Record<
+const messages: Record<
   UiLanguage,
-  Record<CrudAction, { success: string; error: string }>
+  Record<
+    CrudAction,
+    Record<CrudMessageType, string>
+  >
 > = {
   vi: {
     create: {
-      success: "Đã tạo",
-      error: "Không thể tạo",
+      success: "Đã tạo thành công.",
+      error: "Tạo thất bại.",
     },
     update: {
-      success: "Đã cập nhật",
-      error: "Không thể cập nhật",
+      success: "Đã cập nhật thành công.",
+      error: "Cập nhật thất bại.",
     },
     delete: {
-      success: "Đã xóa",
-      error: "Không thể xóa",
+      success: "Đã xóa thành công.",
+      error: "Xóa thất bại.",
     },
     save: {
-      success: "Đã lưu",
-      error: "Không thể lưu",
+      success: "Đã lưu thành công.",
+      error: "Lưu thất bại.",
     },
   },
+
   en: {
     create: {
-      success: "Created",
-      error: "Failed to create",
+      success: "Created successfully.",
+      error: "Failed to create.",
     },
     update: {
-      success: "Updated",
-      error: "Failed to update",
+      success: "Updated successfully.",
+      error: "Failed to update.",
     },
     delete: {
-      success: "Deleted",
-      error: "Failed to delete",
+      success: "Deleted successfully.",
+      error: "Failed to delete.",
     },
     save: {
-      success: "Saved",
-      error: "Failed to save",
+      success: "Saved successfully.",
+      error: "Failed to save.",
     },
   },
 };
 
+/**
+ * Returns a consistent CRUD notification.
+ *
+ * The entity argument is optional and retained
+ * for compatibility with existing callers.
+ *
+ * Examples:
+ * getCrudMessage("create", "agent", "success", "vi")
+ * getCrudMessage("delete", "department", "success", "vi")
+ *
+ * Both return generic messages without entity names.
+ */
 export function getCrudMessage(
   action: CrudAction,
-  entity: CrudEntity,
-  type: "success" | "error",
+  entity: CrudEntity | undefined,
+  type: CrudMessageType,
   language: UiLanguage = "vi",
 ): string {
-  const label = entityLabels[language][entity];
-  const verb = actionLabels[language][action][type];
+  void entity;
 
-  if (language === "vi") {
-    return type === "success"
-      ? `${verb} ${label} thành công.`
-      : `${verb} ${label}. Vui lòng thử lại.`;
-  }
-
-  return type === "success"
-    ? `${verb} ${label} successfully.`
-    : `${verb} ${label}. Please try again.`;
+  return messages[language][action][type];
 }
 
 export const crudToast = {
   success(
     action: CrudAction,
-    entity: CrudEntity,
+    entity?: CrudEntity,
     options: MessageOptions = {},
   ) {
-    const { language = "vi", description } = options;
+    void entity;
+
+    const {
+      language = "vi",
+      description,
+    } = options;
 
     toast.success(
-      getCrudMessage(action, entity, "success", language),
+      messages[language][action].success,
       { description },
     );
   },
 
   error(
     action: CrudAction,
-    entity: CrudEntity,
+    entity?: CrudEntity,
     options: MessageOptions = {},
   ) {
-    const { language = "vi", description } = options;
+    void entity;
+
+    const {
+      language = "vi",
+      description,
+    } = options;
 
     toast.error(
-      getCrudMessage(action, entity, "error", language),
+      messages[language][action].error,
       { description },
     );
   },

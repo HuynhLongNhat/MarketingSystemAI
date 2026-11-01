@@ -64,6 +64,12 @@ export interface CreateDepartmentInput {
   description?: string;
 }
 
+export interface UpdateDepartmentInput {
+  name?: string;
+  slug?: string;
+  description?: string;
+}
+
 export interface CreateAgentInput {
   name: string;
   role: string;
@@ -118,6 +124,19 @@ export const workforceApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
+  },
+
+  updateDepartment(
+    id: string,
+    input: UpdateDepartmentInput,
+  ) {
+    return apiFetch<Department>(
+      `/departments/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      },
+    );
   },
 
   deleteDepartment(id: string) {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -46,6 +45,7 @@ import {
   type AgentCategory,
   type AgentTemplate,
   type Department,
+  type UpdateDepartmentInput,
 } from "@/lib/workforce-api";
 import { crudToast } from "@/lib/crud-messages";
 import { useUiLanguage } from "@/lib/ui-language";
@@ -54,6 +54,8 @@ import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { AgentFormDialog } from "@/modules/workforce/agent-form-dialog";
 import { TemplateFormDialog } from "@/modules/workforce/template-form-dialog";
 import { CreateAgentFromTemplateDialog } from "@/modules/workforce/create-agent-from-template-dialog";
+import { DepartmentCard } from "@/modules/workforce/department-card";
+import { CreateDepartmentDialog } from "@/modules/workforce/create-department-dialog";
 
 type Tab = "agents" | "departments" | "templates";
 
@@ -74,9 +76,7 @@ const statuses: Record<AiAgent["status"], string> = {
 };
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "Vui lòng thử lại.";
+  return error instanceof Error ? error.message : "Vui lòng thử lại.";
 }
 
 export default function WorkforcePage() {
@@ -103,47 +103,42 @@ export default function WorkforcePage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
 
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<AiAgent | null>(
+  const [editingAgent, setEditingAgent] = useState<AiAgent | null>(null);
+  const [deleteAgentTarget, setDeleteAgentTarget] = useState<AiAgent | null>(
     null,
   );
-  const [deleteAgentTarget, setDeleteAgentTarget] =
-    useState<AiAgent | null>(null);
 
-  const [templateDialogOpen, setTemplateDialogOpen] =
-    useState(false);
-  const [editingTemplate, setEditingTemplate] =
-    useState<AgentTemplate | null>(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<AgentTemplate | null>(
+    null,
+  );
   const [deleteTemplateTarget, setDeleteTemplateTarget] =
     useState<AgentTemplate | null>(null);
 
-  const [createFromTemplateOpen, setCreateFromTemplateOpen] =
-    useState(false);
+  const [createFromTemplateOpen, setCreateFromTemplateOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentTemplate | null>(null);
 
-  const [departmentFormOpen, setDepartmentFormOpen] =
-    useState(false);
+  const [departmentFormOpen, setDepartmentFormOpen] = useState(false);
   const [departmentName, setDepartmentName] = useState("");
-  const [departmentDescription, setDepartmentDescription] =
-    useState("");
+  const [departmentDescription, setDepartmentDescription] = useState("");
+  const [deleteDepartmentTarget, setDeleteDepartmentTarget] =
+    useState<Department | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [agentData, departmentData, templateData] =
-        await Promise.all([
-          workforceApi.listAgents(),
-          workforceApi.listDepartments(),
-          workforceApi.listTemplates(),
-        ]);
+      const [agentData, departmentData, templateData] = await Promise.all([
+        workforceApi.listAgents(),
+        workforceApi.listDepartments(),
+        workforceApi.listTemplates(),
+      ]);
 
       setAgents(agentData);
       setDepartments(departmentData);
       setTemplates(templateData);
     } catch (error) {
       toast.error(
-        language === "vi"
-          ? "Không thể tải dữ liệu."
-          : "Failed to load data.",
+        language === "vi" ? "Không thể tải dữ liệu." : "Failed to load data.",
         { description: errorMessage(error) },
       );
     } finally {
@@ -169,9 +164,7 @@ export default function WorkforcePage() {
     () =>
       departmentFilter === "all"
         ? agents
-        : agents.filter(
-            (agent) => agent.departmentId === departmentFilter,
-          ),
+        : agents.filter((agent) => agent.departmentId === departmentFilter),
     [agents, departmentFilter],
   );
 
@@ -179,10 +172,7 @@ export default function WorkforcePage() {
     const query = templateSearch.trim().toLowerCase();
 
     return templates.filter((template) => {
-      if (
-        categoryFilter !== "all" &&
-        template.category !== categoryFilter
-      ) {
+      if (categoryFilter !== "all" && template.category !== categoryFilter) {
         return false;
       }
 
@@ -203,13 +193,22 @@ export default function WorkforcePage() {
   const departmentNames = useMemo(
     () =>
       new Map(
-        departments.map((department) => [
-          department.id,
-          department.name,
-        ]),
+        departments.map((department) => [department.id, department.name]),
       ),
     [departments],
   );
+
+  const departmentEmployeeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const agent of agents) {
+      if (!agent.departmentId) continue;
+
+      counts.set(agent.departmentId, (counts.get(agent.departmentId) ?? 0) + 1);
+    }
+
+    return counts;
+  }, [agents]);
 
   function switchTab(next: Tab) {
     router.push(`/workforce?tab=${next}`);
@@ -279,9 +278,82 @@ export default function WorkforcePage() {
     }
   }
 
-  async function addDepartment(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  async function updateDepartment(
+    id: string,
+    input: UpdateDepartmentInput,
+  ): Promise<void> {
+    if (busy) {
+      throw new Error(
+        language === "vi"
+          ? "Đang có thao tác khác."
+          : "Another operation is in progress.",
+      );
+    }
+
+    setBusy(true);
+
+    try {
+      await workforceApi.updateDepartment(id, input);
+
+      crudToast.success("update", "department", {
+        language,
+      });
+
+      await refresh();
+    } catch (error) {
+      crudToast.error("update", "department", {
+        language,
+        description: errorMessage(error),
+      });
+
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeDepartment(): Promise<void> {
+    if (!deleteDepartmentTarget || busy) return;
+
+    const department = deleteDepartmentTarget;
+    const employeeCount = departmentEmployeeCounts.get(department.id) ?? 0;
+
+    if (employeeCount > 0) {
+      toast.error(
+        language === "vi"
+          ? "Không thể xóa phòng ban đang có nhân viên."
+          : "Cannot delete a department with assigned employees.",
+      );
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      await workforceApi.deleteDepartment(department.id);
+
+      crudToast.success("delete", "department", {
+        language,
+      });
+
+      setDeleteDepartmentTarget(null);
+
+      if (departmentFilter === department.id) {
+        setDepartmentFilter("all");
+      }
+
+      await refresh();
+    } catch (error) {
+      crudToast.error("delete", "department", {
+        language,
+        description: errorMessage(error),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addDepartment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (busy) return;
@@ -342,13 +414,10 @@ export default function WorkforcePage() {
     <div className="w-full min-w-0 space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Đội ngũ AI
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Đội ngũ AI</h1>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Quản lý nhân viên AI, phòng ban và các mẫu nhân viên
-            chuyên môn.
+            Quản lý nhân viên AI, phòng ban và các mẫu nhân viên chuyên môn.
           </p>
         </div>
 
@@ -360,9 +429,7 @@ export default function WorkforcePage() {
             onClick={() => void manualRefresh()}
           >
             <RefreshCw
-              className={`size-4 ${
-                refreshing ? "animate-spin" : ""
-              }`}
+              className={`size-4 ${refreshing ? "animate-spin" : ""}`}
             />
             Làm mới
           </Button>
@@ -396,9 +463,7 @@ export default function WorkforcePage() {
           },
           {
             label: "Đang hoạt động",
-            value: agents.filter(
-              (agent) => agent.status === "active",
-            ).length,
+            value: agents.filter((agent) => agent.status === "active").length,
             icon: Users,
           },
           {
@@ -422,9 +487,7 @@ export default function WorkforcePage() {
             </CardHeader>
 
             <CardContent>
-              <p className="text-2xl font-semibold">
-                {stat.value}
-              </p>
+              <p className="text-2xl font-semibold">{stat.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -433,20 +496,12 @@ export default function WorkforcePage() {
       <Card className="min-w-0 overflow-hidden">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b">
           <div className="flex flex-wrap gap-1">
-            {(
-              [
-                "agents",
-                "departments",
-                "templates",
-              ] as Tab[]
-            ).map((item) => (
+            {(["agents", "departments", "templates"] as Tab[]).map((item) => (
               <Button
                 key={item}
                 type="button"
                 size="sm"
-                variant={
-                  tab === item ? "default" : "ghost"
-                }
+                variant={tab === item ? "default" : "ghost"}
                 onClick={() => switchTab(item)}
               >
                 {tabLabels[item]}
@@ -464,15 +519,10 @@ export default function WorkforcePage() {
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem value="all">
-                  Tất cả phòng ban
-                </SelectItem>
+                <SelectItem value="all">Tất cả phòng ban</SelectItem>
 
                 {departments.map((department) => (
-                  <SelectItem
-                    key={department.id}
-                    value={department.id}
-                  >
+                  <SelectItem key={department.id} value={department.id}>
                     {department.name}
                   </SelectItem>
                 ))}
@@ -490,35 +540,25 @@ export default function WorkforcePage() {
                   className="pl-9"
                   placeholder="Tìm mẫu nhân viên..."
                   value={templateSearch}
-                  onChange={(event) =>
-                    setTemplateSearch(event.target.value)
-                  }
+                  onChange={(event) => setTemplateSearch(event.target.value)}
                 />
               </div>
 
-              <Select
-                value={categoryFilter}
-                onValueChange={setCategoryFilter}
-              >
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="w-full sm:w-[190px]">
                   <SelectValue />
                 </SelectTrigger>
 
                 <SelectContent>
-                  <SelectItem value="all">
-                    Tất cả chuyên môn
-                  </SelectItem>
+                  <SelectItem value="all">Tất cả chuyên môn</SelectItem>
 
-                  {(
-                    Object.keys(categories) as AgentCategory[]
-                  ).map((category) => (
-                    <SelectItem
-                      key={category}
-                      value={category}
-                    >
-                      {categories[category]}
-                    </SelectItem>
-                  ))}
+                  {(Object.keys(categories) as AgentCategory[]).map(
+                    (category) => (
+                      <SelectItem key={category} value={category}>
+                        {categories[category]}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -526,59 +566,6 @@ export default function WorkforcePage() {
         </CardHeader>
 
         <CardContent className="p-0">
-          {tab === "departments" && departmentFormOpen && (
-            <form
-              onSubmit={(event) =>
-                void addDepartment(event)
-              }
-              className="grid gap-3 border-b p-5 sm:grid-cols-2"
-            >
-              <Input
-                required
-                maxLength={120}
-                placeholder="Tên phòng ban"
-                value={departmentName}
-                onChange={(event) =>
-                  setDepartmentName(event.target.value)
-                }
-              />
-
-              <Input
-                maxLength={2000}
-                placeholder="Mô tả phòng ban"
-                value={departmentDescription}
-                onChange={(event) =>
-                  setDepartmentDescription(
-                    event.target.value,
-                  )
-                }
-              />
-
-              <div className="flex gap-2 sm:col-span-2">
-                <Button
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
-                  Tạo phòng ban
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    setDepartmentFormOpen(false)
-                  }
-                >
-                  Hủy
-                </Button>
-              </div>
-            </form>
-          )}
-
           {loading ? (
             <div className="flex items-center justify-center gap-2 p-12 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
@@ -598,18 +585,15 @@ export default function WorkforcePage() {
                       </div>
 
                       <div className="min-w-0">
-                        <p className="truncate font-medium">
-                          {agent.name}
-                        </p>
+                        <p className="truncate font-medium">{agent.name}</p>
 
                         <p className="truncate text-sm text-muted-foreground">
                           {agent.role}
                         </p>
 
                         <p className="break-all text-xs text-muted-foreground">
-                          {departmentNames.get(
-                            agent.departmentId ?? "",
-                          ) ?? "Chưa phân phòng"}
+                          {departmentNames.get(agent.departmentId ?? "") ??
+                            "Chưa phân phòng"}
                           {" · "}
                           {agent.modelId ?? "Chưa chọn model"}
                         </p>
@@ -617,10 +601,7 @@ export default function WorkforcePage() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className="text-foreground"
-                      >
+                      <Badge variant="outline" className="text-foreground">
                         {statuses[agent.status]}
                       </Badge>
 
@@ -643,9 +624,7 @@ export default function WorkforcePage() {
                         size="icon"
                         disabled={busy}
                         aria-label={`Xóa ${agent.name}`}
-                        onClick={() =>
-                          setDeleteAgentTarget(agent)
-                        }
+                        onClick={() => setDeleteAgentTarget(agent)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -662,34 +641,16 @@ export default function WorkforcePage() {
             departments.length > 0 ? (
               <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
                 {departments.map((department) => (
-                  <div
+                  <DepartmentCard
                     key={department.id}
-                    className="min-w-0 rounded-lg border p-5"
-                  >
-                    <p className="font-medium">
-                      {department.name}
-                    </p>
-
-                    <p className="mt-1 break-all text-xs text-muted-foreground">
-                      {department.slug}
-                    </p>
-
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      {department.description ||
-                        "Chưa có mô tả"}
-                    </p>
-
-                    <p className="mt-4 text-xs">
-                      {
-                        agents.filter(
-                          (agent) =>
-                            agent.departmentId ===
-                            department.id,
-                        ).length
-                      }{" "}
-                      nhân viên
-                    </p>
-                  </div>
+                    department={department}
+                    employeeCount={
+                      departmentEmployeeCounts.get(department.id) ?? 0
+                    }
+                    busy={busy}
+                    onUpdate={updateDepartment}
+                    onDelete={setDeleteDepartmentTarget}
+                  />
                 ))}
               </div>
             ) : (
@@ -700,12 +661,10 @@ export default function WorkforcePage() {
           ) : filteredTemplates.length > 0 ? (
             <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
               {filteredTemplates.map((template) => {
-                const isGlobal =
-                  template.organizationId === null;
+                const isGlobal = template.organizationId === null;
 
                 const usedCount = agents.filter(
-                  (agent) =>
-                    agent.templateId === template.id,
+                  (agent) => agent.templateId === template.id,
                 ).length;
 
                 return (
@@ -718,20 +677,13 @@ export default function WorkforcePage() {
                         <Layers3 className="size-5" />
                       </div>
 
-                      <Badge
-                        variant="outline"
-                        className="text-foreground"
-                      >
-                        {isGlobal
-                          ? "Mẫu hệ thống"
-                          : "Mẫu của tổ chức"}
+                      <Badge variant="outline" className="text-foreground">
+                        {isGlobal ? "Mẫu hệ thống" : "Mẫu của tổ chức"}
                       </Badge>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold">
-                        {template.name}
-                      </h3>
+                      <h3 className="font-semibold">{template.name}</h3>
 
                       <p className="mt-1 break-all text-xs text-muted-foreground">
                         {template.slug}
@@ -742,20 +694,15 @@ export default function WorkforcePage() {
                           {categories[template.category]}
                         </Badge>
 
-                        <Badge variant="outline">
-                          v{template.version}
-                        </Badge>
+                        <Badge variant="outline">v{template.version}</Badge>
 
                         {template.isPublished && (
-                          <Badge variant="outline">
-                            Đã xuất bản
-                          </Badge>
+                          <Badge variant="outline">Đã xuất bản</Badge>
                         )}
                       </div>
 
                       <p className="mt-4 text-sm text-muted-foreground">
-                        {template.description ||
-                          "Chưa có mô tả nhiệm vụ."}
+                        {template.description || "Chưa có mô tả nhiệm vụ."}
                       </p>
 
                       <p className="mt-4 text-xs text-muted-foreground">
@@ -768,9 +715,7 @@ export default function WorkforcePage() {
                         type="button"
                         size="sm"
                         className="flex-1"
-                        onClick={() =>
-                          openTemplateAgent(template)
-                        }
+                        onClick={() => openTemplateAgent(template)}
                       >
                         <CirclePlus className="size-4" />
                         Tạo nhân viên
@@ -802,11 +747,7 @@ export default function WorkforcePage() {
                                 ? "Mẫu đang được nhân viên sử dụng"
                                 : "Xóa mẫu"
                             }
-                            onClick={() =>
-                              setDeleteTemplateTarget(
-                                template,
-                              )
-                            }
+                            onClick={() => setDeleteTemplateTarget(template)}
                           >
                             <Trash2 className="size-4" />
                           </Button>
@@ -828,10 +769,7 @@ export default function WorkforcePage() {
               </p>
 
               {templates.length === 0 && (
-                <Button
-                  type="button"
-                  onClick={openCreateTemplate}
-                >
+                <Button type="button" onClick={openCreateTemplate}>
                   <CirclePlus className="size-4" />
                   Tạo mẫu đầu tiên
                 </Button>
@@ -874,18 +812,12 @@ export default function WorkforcePage() {
             setDeleteAgentTarget(null);
           }
         }}
-        title={
-          language === "vi"
-            ? "Xóa nhân viên AI?"
-            : "Delete AI agent?"
-        }
+        itemName={deleteAgentTarget?.name}
         description={
           language === "vi"
-            ? `Bạn có chắc muốn xóa ${deleteAgentTarget?.name ?? "nhân viên này"}? Hành động này không thể hoàn tác.`
-            : `Are you sure you want to delete ${deleteAgentTarget?.name ?? "this agent"}? This action cannot be undone.`
+            ? "Bạn có chắc muốn xóa nhân viên AI này? Hành động này không thể hoàn tác."
+            : "Are you sure you want to delete this AI agent? This action cannot be undone."
         }
-        cancelLabel={language === "vi" ? "Hủy" : "Cancel"}
-        confirmLabel={language === "vi" ? "Xóa" : "Delete"}
         loading={busy}
         onConfirm={removeAgent}
       />
@@ -897,20 +829,36 @@ export default function WorkforcePage() {
             setDeleteTemplateTarget(null);
           }
         }}
-        title={
-          language === "vi"
-            ? "Xóa mẫu nhân viên?"
-            : "Delete agent template?"
-        }
+        itemName={deleteTemplateTarget?.name}
         description={
           language === "vi"
-            ? `Bạn có chắc muốn xóa mẫu ${deleteTemplateTarget?.name ?? "này"}? Mẫu đang được nhân viên sử dụng sẽ không thể xóa.`
-            : `Are you sure you want to delete ${deleteTemplateTarget?.name ?? "this template"}? Templates currently in use cannot be deleted.`
+            ? "Bạn có chắc muốn xóa mẫu này? Mẫu đang được nhân viên sử dụng sẽ không thể xóa."
+            : "Are you sure you want to delete this template? Templates currently in use cannot be deleted."
         }
-        cancelLabel={language === "vi" ? "Hủy" : "Cancel"}
-        confirmLabel={language === "vi" ? "Xóa" : "Delete"}
         loading={busy}
         onConfirm={removeTemplate}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteDepartmentTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteDepartmentTarget(null);
+          }
+        }}
+        itemName={deleteDepartmentTarget?.name}
+        description={
+          language === "vi"
+            ? "Bạn có chắc muốn xóa phòng ban này? Hành động này không thể hoàn tác."
+            : "Are you sure you want to delete this department? This action cannot be undone."
+        }
+        loading={busy}
+        onConfirm={removeDepartment}
+      />
+      <CreateDepartmentDialog
+        open={departmentFormOpen}
+        onOpenChange={setDepartmentFormOpen}
+        onCreated={refresh}
       />
     </div>
   );
