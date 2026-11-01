@@ -1,3 +1,4 @@
+
 "use client";
 
 import { OrganizationSwitcher } from "@/modules/auth/ui/components/organization-switcher";
@@ -5,13 +6,18 @@ import { UserMenu } from "@/modules/auth/ui/components/user-menu";
 
 import {
   BotIcon,
+  Building2Icon,
   CreditCardIcon,
+  HeadsetIcon,
   InboxIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
-  Mic,
+  MicIcon,
+  NetworkIcon,
   PaletteIcon,
+  Settings2Icon,
   UsersIcon,
+  WorkflowIcon,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -33,7 +39,49 @@ import {
 
 import { cn } from "@workspace/ui/lib/utils";
 
-const customerSupportItems = [
+type MenuItem = {
+  title: string;
+  url: string;
+  icon: typeof BotIcon;
+  comingSoon?: boolean;
+};
+
+const companyItems: MenuItem[] = [
+  {
+    title: "Tổng quan công ty",
+    url: "/",
+    icon: LayoutDashboardIcon,
+  },
+  {
+    title: "AI Office",
+    url: "/#ai-office",
+    icon: Building2Icon,
+    comingSoon: true,
+  },
+  {
+    title: "Nhân viên AI",
+    url: "/#ai-workforce",
+    icon: BotIcon,
+    comingSoon: true,
+  },
+  {
+    title: "Phòng ban",
+    url: "/#departments",
+    icon: NetworkIcon,
+    comingSoon: true,
+  },
+];
+
+const operationsItems: MenuItem[] = [
+  {
+    title: "Tasks & Workflows",
+    url: "/#operations",
+    icon: WorkflowIcon,
+    comingSoon: true,
+  },
+];
+
+const supportItems: MenuItem[] = [
   {
     title: "Hội thoại",
     url: "/conversations",
@@ -44,9 +92,6 @@ const customerSupportItems = [
     url: "/files",
     icon: LibraryBigIcon,
   },
-];
-
-const configurationItems = [
   {
     title: "Tùy chỉnh Chatbot",
     url: "/customization",
@@ -55,48 +100,52 @@ const configurationItems = [
   {
     title: "Tích hợp Website",
     url: "/integrations",
-    icon: LayoutDashboardIcon,
+    icon: HeadsetIcon,
   },
   {
     title: "Trợ lý giọng nói",
     url: "/plugins/vapi",
-    icon: Mic,
+    icon: MicIcon,
   },
 ];
 
-const accountItems = [
+const systemItems: MenuItem[] = [
   {
-    title: "Gói dịch vụ & Thanh toán",
-    url: "/billing",
-    icon: CreditCardIcon,
+    title: "AI Providers & Models",
+    url: "/settings/ai-providers",
+    icon: Settings2Icon,
   },
   {
     title: "Thành viên",
     url: "/settings/members",
     icon: UsersIcon,
   },
-
   {
-    title: "AI Providers & Models",
-    url: "/settings/ai-providers",
-    icon: BotIcon,
+    title: "Thanh toán",
+    url: "/billing",
+    icon: CreditCardIcon,
   },
 ];
 
 export const DashboardSidebar = () => {
   const pathname = usePathname();
 
-  const isActive = (url: string) => {
-    if (url === "/") {
+  const isActive = (item: MenuItem) => {
+    if (item.comingSoon) return false;
+
+    if (item.url === "/") {
       return pathname === "/";
     }
 
-    return pathname === url || pathname.startsWith(`${url}/`);
+    return (
+      pathname === item.url ||
+      pathname.startsWith(`${item.url}/`)
+    );
   };
 
-  const renderMenuItems = (items: typeof customerSupportItems) =>
+  const renderMenuItems = (items: MenuItem[]) =>
     items.map((item) => {
-      const active = isActive(item.url);
+      const active = isActive(item);
 
       return (
         <SidebarMenuItem key={item.url}>
@@ -111,44 +160,52 @@ export const DashboardSidebar = () => {
             tooltip={item.title}
           >
             <Link href={item.url}>
-              <item.icon className="size-4" />
-              <span>{item.title}</span>
+              <item.icon className="size-4 shrink-0" />
+              <span className="truncate">
+                {item.title}
+              </span>
+              {item.comingSoon && (
+                <span className="ml-auto text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+                  Soon
+                </span>
+              )}
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
       );
     });
 
+  const renderGroup = (
+    label: string,
+    items: MenuItem[],
+  ) => (
+    <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {renderMenuItems(items)}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+
   return (
-    <Sidebar className="group" collapsible="icon">
+    <Sidebar
+      className="group"
+      collapsible="icon"
+    >
       <SidebarHeader>
         <OrganizationSwitcher />
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Chăm sóc khách hàng</SidebarGroupLabel>
-
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(customerSupportItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Cấu hình</SidebarGroupLabel>
-
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(configurationItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Tài khoản</SidebarGroupLabel>
-
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(accountItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {renderGroup("Company", companyItems)}
+        {renderGroup("Operations", operationsItems)}
+        {renderGroup(
+          "Customer Support",
+          supportItems,
+        )}
+        {renderGroup("System", systemItems)}
       </SidebarContent>
 
       <SidebarFooter>

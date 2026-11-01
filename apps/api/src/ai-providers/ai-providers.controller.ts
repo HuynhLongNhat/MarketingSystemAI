@@ -37,6 +37,7 @@ import {
 
 import { AiProvidersService } from "./ai-providers.service.js";
 import { ModelCatalogService } from "./model-catalog.service.js";
+import { ProviderConnectionTestService } from "./provider-connection-test.service.js";
 
 @ApiTags("AI Providers")
 @Controller("ai-providers")
@@ -45,6 +46,7 @@ export class AiProvidersController {
   constructor(
     private readonly service: AiProvidersService,
     private readonly modelCatalog: ModelCatalogService,
+    private readonly connectionTester: ProviderConnectionTestService,
   ) {}
 
   @Get()
@@ -73,7 +75,7 @@ export class AiProvidersController {
   @Get("catalog/providers")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
   @ApiOperation({
-    summary: "List supported AI provider definitions",
+    summary: "List supported AI providers",
   })
   listCatalogProviders() {
     return this.modelCatalog.listProviders();
@@ -82,7 +84,7 @@ export class AiProvidersController {
   @Get("catalog/models")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
   @ApiOperation({
-    summary: "List AI models from external catalog",
+    summary: "List models from external catalog",
   })
   @ApiQuery({
     name: "provider",
@@ -144,6 +146,22 @@ export class AiProvidersController {
     return this.service.deleteModelDefault(
       ctx,
       purpose,
+    );
+  }
+
+  @Post(":id/test")
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
+  @ApiOperation({
+    summary: "Test stored AI provider credentials",
+  })
+  testConnection(
+    @CurrentContext() ctx: RequestContext,
+    @Param("id") id: string,
+  ) {
+    return this.connectionTester.testConnection(
+      ctx,
+      id,
     );
   }
 

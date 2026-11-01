@@ -7,12 +7,14 @@ import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
 import { AiProvidersController } from "./ai-providers.controller.js";
 import { AiProvidersService } from "./ai-providers.service.js";
 import { ModelCatalogService } from "./model-catalog.service.js";
+import { ProviderConnectionTestService } from "./provider-connection-test.service.js";
 
 @Module({
   controllers: [AiProvidersController],
   providers: [
     AiProvidersService,
     ModelCatalogService,
+    ProviderConnectionTestService,
     AuthGuard,
     PermissionsGuard,
   ],

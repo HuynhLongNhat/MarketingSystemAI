@@ -85,6 +85,23 @@ export interface CatalogModel {
   supportsTools: boolean | null;
 }
 
+export type ConnectionTestStatus =
+  | "connected"
+  | "unauthorized"
+  | "forbidden"
+  | "rate_limited"
+  | "unavailable"
+  | "unsupported";
+
+export interface ConnectionTestResult {
+  connectionId: string;
+  provider: AiProviderType;
+  status: ConnectionTestStatus;
+  success: boolean;
+  message: string;
+  checkedAt: string;
+}
+
 const BASE_PATH = "/ai-providers";
 
 export const aiProvidersApi = {
@@ -125,6 +142,13 @@ export const aiProvidersApi = {
     return apiFetch<{ deleted: boolean }>(
       `${BASE_PATH}/${encodeURIComponent(id)}`,
       { method: "DELETE" },
+    );
+  },
+
+  testConnection(id: string) {
+    return apiFetch<ConnectionTestResult>(
+      `${BASE_PATH}/${encodeURIComponent(id)}/test`,
+      { method: "POST" },
     );
   },
 
