@@ -56,6 +56,19 @@ export function validateServerEnvironment(): void {
     requireEnv("REDIS_PORT");
   }
 
+  // OAuth: cấu hình nửa vời gần như chắc chắn là nhầm lẫn, nên dừng sớm.
+  for (const [idName, secretName] of [
+    ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+    ["FACEBOOK_CLIENT_ID", "FACEBOOK_CLIENT_SECRET"],
+  ] as const) {
+    if (
+      Boolean(process.env[idName]?.trim()) !==
+      Boolean(process.env[secretName]?.trim())
+    ) {
+      throw new Error(`${idName} and ${secretName} must be set together`);
+    }
+  }
+
   const port = Number(process.env.PORT ?? 3002);
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

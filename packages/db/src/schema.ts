@@ -33,10 +33,19 @@ export const user = pgTable(
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+    // Better Auth phoneNumber plugin. E.164, ví dụ +84912345678.
+    phoneNumber: text("phone_number"),
+    phoneNumberVerified: boolean("phone_number_verified")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("user_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("user_email_unique").on(table.email),
+    // Postgres cho phép nhiều NULL trong unique index nên user chưa có SĐT không bị ảnh hưởng.
+    uniqueIndex("user_phone_number_unique").on(table.phoneNumber),
+  ],
 );
 
 export const session = pgTable(
