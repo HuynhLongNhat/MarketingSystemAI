@@ -303,7 +303,7 @@ export function TemplateFormDialog({
               <Textarea
                 rows={3}
                 maxLength={2000}
-                placeholder="Mẫu nhân viên này phụ trách những công việc gì?"
+                placeholder="Templates này phụ trách những công việc gì?"
                 value={form.description}
                 onChange={(event) =>
                   update("description", event.target.value)

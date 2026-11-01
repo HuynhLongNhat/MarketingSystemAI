@@ -1,4 +1,3 @@
-
 import { config } from "dotenv";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -10,7 +9,12 @@ import {
   type DatabaseEnvironment,
 } from "./environment-guard.js";
 
-// 1. Validate environment
+// Load .env.local trước khi kiểm tra APP_ENV.
+// Không ghi đè biến môi trường đã được thiết lập sẵn.
+config({
+  path: resolve(process.cwd(), "../../.env.local"),
+});
+
 const environment = process.env.APP_ENV;
 
 if (
@@ -40,10 +44,7 @@ const pool = new Pool({
 });
 
 try {
-  await verifyDatabaseEnvironment(
-    pool,
-    environment as DatabaseEnvironment,
-  );
+  await verifyDatabaseEnvironment(pool, environment as DatabaseEnvironment);
 } finally {
   await pool.end();
 }
@@ -51,9 +52,7 @@ try {
 console.log(`Migration preflight passed (${environment})`);
 
 // 4. Resolve Drizzle CLI directly
-const currentDirectory = dirname(
-  fileURLToPath(import.meta.url),
-);
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
 
 const drizzleCli = resolve(
   currentDirectory,
@@ -63,11 +62,7 @@ const drizzleCli = resolve(
 // 5. Execute Drizzle migration
 const result = spawnSync(
   process.execPath,
-  [
-    drizzleCli,
-    "migrate",
-    "--config=drizzle.config.ts",
-  ],
+  [drizzleCli, "migrate", "--config=drizzle.config.ts"],
   {
     stdio: "inherit",
     shell: false,

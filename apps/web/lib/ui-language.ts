@@ -12,7 +12,7 @@ export const messages = {
     subtitle: "Quản lý nhân viên AI, phòng ban và mẫu nhân viên.",
     agents: "Nhân viên AI",
     departments: "Phòng ban",
-    templates: "Mẫu nhân viên",
+    templates: "Templates",
     total: "Tổng nhân viên",
     active: "Đang hoạt động",
     reload: "Làm mới",

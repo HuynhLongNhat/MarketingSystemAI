@@ -328,7 +328,7 @@ export default function WorkforcePage() {
   const tabLabels: Record<Tab, string> = {
     agents: "Nhân viên AI",
     departments: "Phòng ban",
-    templates: "Mẫu nhân viên",
+    templates: "Template",
   };
 
   return (
@@ -401,7 +401,7 @@ export default function WorkforcePage() {
             icon: Building2,
           },
           {
-            label: "Mẫu nhân viên",
+            label: "Templates",
             value: templates.length,
             icon: Layers3,
           },
