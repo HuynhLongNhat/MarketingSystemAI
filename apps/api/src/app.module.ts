@@ -1,4 +1,3 @@
-
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 
@@ -10,7 +9,8 @@ import { OrganizationsModule } from "./organizations/organizations.module.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
 import { KnowledgeModule } from "./knowledge/knowledge.module.js";
 import { AiProvidersModule } from "./ai-providers/ai-providers.module.js";
-
+import { DepartmentsModule } from "./departments/departments.module.js";
+import { AgentsModule } from "./agents/agents.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -29,6 +29,8 @@ import { AiProvidersModule } from "./ai-providers/ai-providers.module.js";
     ConversationsModule,
     KnowledgeModule,
     AiProvidersModule,
+    DepartmentsModule,
+    AgentsModule,
   ],
   controllers: [HealthController],
 })

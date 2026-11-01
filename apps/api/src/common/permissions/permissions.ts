@@ -1,4 +1,3 @@
-
 import type { OrganizationRole } from "../../auth/request-context.js";
 
 export const PERMISSIONS = {
@@ -23,34 +22,39 @@ export const PERMISSIONS = {
   AI_PROVIDER_READ: "ai_provider:read",
   AI_PROVIDER_MANAGE: "ai_provider:manage",
 
+  DEPARTMENT_READ: "department:read",
+  DEPARTMENT_MANAGE: "department:manage",
+
   BILLING_READ: "billing:read",
   BILLING_MANAGE: "billing:manage",
+
+  AGENT_READ: "agent:read",
+  AGENT_MANAGE: "agent:manage",
 } as const;
 
-export type Permission =
-  (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 const ALL_PERMISSIONS = Object.values(PERMISSIONS);
 
-export const ROLE_PERMISSIONS: Record<
-  OrganizationRole,
-  readonly Permission[]
-> = {
-  owner: ALL_PERMISSIONS,
+export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
+  {
+    owner: ALL_PERMISSIONS,
 
-  admin: ALL_PERMISSIONS.filter(
-    (permission) =>
-      permission !== PERMISSIONS.ORGANIZATION_DELETE &&
-      permission !== PERMISSIONS.BILLING_MANAGE,
-  ),
+    admin: ALL_PERMISSIONS.filter(
+      (permission) =>
+        permission !== PERMISSIONS.ORGANIZATION_DELETE &&
+        permission !== PERMISSIONS.BILLING_MANAGE,
+    ),
 
-  member: [
-    PERMISSIONS.ORGANIZATION_READ,
-    PERMISSIONS.WIDGET_READ,
-    PERMISSIONS.CONVERSATION_READ,
-    PERMISSIONS.KNOWLEDGE_READ,
-  ],
-};
+    member: [
+      PERMISSIONS.ORGANIZATION_READ,
+      PERMISSIONS.WIDGET_READ,
+      PERMISSIONS.CONVERSATION_READ,
+      PERMISSIONS.KNOWLEDGE_READ,
+      PERMISSIONS.DEPARTMENT_READ,
+      PERMISSIONS.AGENT_READ,
+    ],
+  };
 
 export function hasPermission(
   role: OrganizationRole,
