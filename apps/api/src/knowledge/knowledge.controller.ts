@@ -16,20 +16,17 @@ import {
 } from "@nestjs/swagger";
 
 import { AuthGuard } from "../auth/auth.guard.js";
-
 import { CurrentContext } from "../auth/current-context.decorator.js";
-
 import type { RequestContext } from "../auth/request-context.js";
 
 import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
-
 import { RequirePermissions } from "../common/permissions/permissions.decorator.js";
-
 import { PERMISSIONS } from "../common/permissions/permissions.js";
 
 import {
   CreateKnowledgeDto,
   UpdateKnowledgeDto,
+  PreviewKnowledgeDto,
 } from "./knowledge.dto.js";
 
 import { KnowledgeService } from "./knowledge.service.js";
@@ -47,8 +44,23 @@ export class KnowledgeController {
   @ApiOperation({
     summary: "List knowledge entries",
   })
-  list(@CurrentContext() ctx: RequestContext) {
+  list(
+    @CurrentContext() ctx: RequestContext,
+  ) {
     return this.knowledgeService.list(ctx);
+  }
+
+  @Post("preview")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_READ)
+  @ApiOperation({
+    summary:
+      "Preview relevant Knowledge Base entries for customer support",
+  })
+  preview(
+    @CurrentContext() ctx: RequestContext,
+    @Body() dto: PreviewKnowledgeDto,
+  ) {
+    return this.knowledgeService.preview(ctx, dto);
   }
 
   @Get(":id")
@@ -85,7 +97,11 @@ export class KnowledgeController {
     @Param("id") id: string,
     @Body() dto: UpdateKnowledgeDto,
   ) {
-    return this.knowledgeService.update(ctx, id, dto);
+    return this.knowledgeService.update(
+      ctx,
+      id,
+      dto,
+    );
   }
 
   @Delete(":id")

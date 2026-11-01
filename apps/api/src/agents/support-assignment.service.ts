@@ -9,7 +9,7 @@ import {
   customerSupportAssignments,
   db,
 } from "@workspace/db/node";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { RequestContext } from "../auth/request-context.js";
 

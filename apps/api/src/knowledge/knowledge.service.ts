@@ -16,8 +16,13 @@ import {
 import type { RequestContext } from "../auth/request-context.js";
 
 import {
+  selectKnowledgeMatches,
+} from "../conversations/knowledge-ranking.js";
+
+import {
   CreateKnowledgeDto,
   UpdateKnowledgeDto,
+  PreviewKnowledgeDto,
 } from "./knowledge.dto.js";
 
 @Injectable()
@@ -52,6 +57,59 @@ export class KnowledgeService {
         desc(knowledgeEntries.id),
       )
       .limit(100);
+  }
+
+  /**
+   * Kiểm tra FAQ mà Chat Engine sẽ đưa vào AI prompt.
+   * Không gọi AI, không lưu tin nhắn.
+   *
+   * Dùng cùng tập 100 FAQ cập nhật gần nhất
+   * và cùng thuật toán với PublicWidgetAiService.
+   */
+  async preview(
+    context: RequestContext,
+    dto: PreviewKnowledgeDto,
+  ) {
+    const query = this.normalizeRequired(
+      dto.query,
+      "query",
+    );
+
+    const entries = await db
+      .select({
+        question: knowledgeEntries.question,
+        answer: knowledgeEntries.answer,
+        category: knowledgeEntries.category,
+      })
+      .from(knowledgeEntries)
+      .where(
+        eq(
+          knowledgeEntries.organizationId,
+          context.organizationId,
+        ),
+      )
+      .orderBy(
+        desc(knowledgeEntries.updatedAt),
+      )
+      .limit(100);
+
+    const matches = selectKnowledgeMatches(
+      entries,
+      query,
+    );
+
+    return {
+      query,
+      totalConsidered: entries.length,
+      matchCount: matches.length,
+      matches: matches.map((match) => ({
+        question: match.entry.question,
+        answer: match.entry.answer,
+        category: match.entry.category,
+        score: match.score,
+        matchedKeywords: match.matchedKeywords,
+      })),
+    };
   }
 
   async getById(

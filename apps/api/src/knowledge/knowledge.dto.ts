@@ -41,3 +41,10 @@ export class UpdateKnowledgeDto {
   @MaxLength(100)
   category?: string;
 }
+
+export class PreviewKnowledgeDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  query!: string;
+}
