@@ -1,3 +1,4 @@
+
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 
@@ -11,6 +12,8 @@ import { KnowledgeModule } from "./knowledge/knowledge.module.js";
 import { AiProvidersModule } from "./ai-providers/ai-providers.module.js";
 import { DepartmentsModule } from "./departments/departments.module.js";
 import { AgentsModule } from "./agents/agents.module.js";
+import { AgentTemplatesModule } from "./agent-templates/agent-templates.module.js";
+
 @Module({
   imports: [
     DatabaseModule,
@@ -31,6 +34,7 @@ import { AgentsModule } from "./agents/agents.module.js";
     AiProvidersModule,
     DepartmentsModule,
     AgentsModule,
+    AgentTemplatesModule,
   ],
   controllers: [HealthController],
 })

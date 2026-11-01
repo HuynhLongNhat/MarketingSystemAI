@@ -11,20 +11,26 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   aiAgents,
   aiProviderConnections,
-  agentTemplates,
   db,
   departments,
 } from "@workspace/db/node";
 
 import type { RequestContext } from "../auth/request-context.js";
-import { CreateAgentDto, UpdateAgentDto } from "./agents.dto.js";
+import type { CreateAgentDto, UpdateAgentDto } from "./agents.dto.js";
 
 function databaseErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
 
-  const value = error as { code?: unknown; cause?: unknown };
+  const value = error as {
+    code?: unknown;
+    cause?: unknown;
+  };
 
-  if (typeof value.code === "string") return value.code;
+  if (typeof value.code === "string") {
+    return value.code;
+  }
 
   return databaseErrorCode(value.cause);
 }
@@ -35,7 +41,9 @@ export class AgentsService {
     const normalized = value.trim();
 
     if (!normalized) {
-      throw new BadRequestException(`${field} cannot be empty`);
+      throw new BadRequestException(
+        `${field} cannot be empty`,
+      );
     }
 
     return normalized;
@@ -53,7 +61,10 @@ export class AgentsService {
       .where(
         and(
           eq(departments.id, departmentId),
-          eq(departments.organizationId, context.organizationId),
+          eq(
+            departments.organizationId,
+            context.organizationId,
+          ),
         ),
       )
       .limit(1);
@@ -80,7 +91,10 @@ export class AgentsService {
       .where(
         and(
           eq(aiProviderConnections.id, connectionId),
-          eq(aiProviderConnections.organizationId, context.organizationId),
+          eq(
+            aiProviderConnections.organizationId,
+            context.organizationId,
+          ),
         ),
       )
       .limit(1);
@@ -108,7 +122,10 @@ export class AgentsService {
       .where(
         and(
           eq(aiAgents.id, id),
-          eq(aiAgents.organizationId, context.organizationId),
+          eq(
+            aiAgents.organizationId,
+            context.organizationId,
+          ),
         ),
       )
       .limit(1);
@@ -124,7 +141,12 @@ export class AgentsService {
     return db
       .select()
       .from(aiAgents)
-      .where(eq(aiAgents.organizationId, context.organizationId))
+      .where(
+        eq(
+          aiAgents.organizationId,
+          context.organizationId,
+        ),
+      )
       .orderBy(desc(aiAgents.createdAt))
       .limit(100);
   }
@@ -133,9 +155,20 @@ export class AgentsService {
     return this.getAgent(context, id);
   }
 
-  async create(context: RequestContext, dto: CreateAgentDto) {
-    await this.validateDepartment(context, dto.departmentId);
-    await this.validateConnection(context, dto.connectionId);
+  async create(
+    context: RequestContext,
+    dto: CreateAgentDto,
+    templateId?: string,
+  ) {
+    await this.validateDepartment(
+      context,
+      dto.departmentId,
+    );
+
+    await this.validateConnection(
+      context,
+      dto.connectionId,
+    );
 
     if (dto.modelId && !dto.connectionId) {
       throw new BadRequestException(
@@ -143,8 +176,14 @@ export class AgentsService {
       );
     }
 
-    if (dto.enabledTools?.some((tool) => !tool.trim())) {
-      throw new BadRequestException("Tool names cannot be empty");
+    if (
+      dto.enabledTools?.some(
+        (tool) => !tool.trim(),
+      )
+    ) {
+      throw new BadRequestException(
+        "Tool names cannot be empty",
+      );
     }
 
     try {
@@ -153,23 +192,40 @@ export class AgentsService {
         .values({
           id: randomUUID(),
           organizationId: context.organizationId,
+          templateId: templateId ?? null,
           name: this.required(dto.name, "name"),
           role: this.required(dto.role, "role"),
-          systemPrompt: this.required(dto.systemPrompt, "systemPrompt"),
-          description: dto.description?.trim() || null,
-          departmentId: dto.departmentId ?? null,
-          connectionId: dto.connectionId ?? null,
-          modelId: dto.modelId?.trim() || null,
+          systemPrompt: this.required(
+            dto.systemPrompt,
+            "systemPrompt",
+          ),
+          description:
+            dto.description?.trim() || null,
+          departmentId:
+            dto.departmentId ?? null,
+          connectionId:
+            dto.connectionId ?? null,
+          modelId:
+            dto.modelId?.trim() || null,
           status: "draft",
           toolConfig: {
-            enabledTools: dto.enabledTools ?? [],
+            enabledTools:
+              dto.enabledTools ?? [],
           },
         })
         .returning();
 
+      if (!agent) {
+        throw new Error(
+          "AI agent insert failed",
+        );
+      }
+
       return agent;
     } catch (error) {
-      if (databaseErrorCode(error) === "23503") {
+      if (
+        databaseErrorCode(error) === "23503"
+      ) {
         throw new ConflictException(
           "Referenced department or connection is no longer available",
         );
@@ -190,10 +246,20 @@ export class AgentsService {
       );
     }
 
-    const existing = await this.getAgent(context, id);
+    const existing = await this.getAgent(
+      context,
+      id,
+    );
 
-    await this.validateDepartment(context, dto.departmentId);
-    await this.validateConnection(context, dto.connectionId);
+    await this.validateDepartment(
+      context,
+      dto.departmentId,
+    );
+
+    await this.validateConnection(
+      context,
+      dto.connectionId,
+    );
 
     const connectionId =
       dto.connectionId === undefined
@@ -211,20 +277,34 @@ export class AgentsService {
       );
     }
 
-    if (dto.enabledTools?.some((tool) => !tool.trim())) {
-      throw new BadRequestException("Tool names cannot be empty");
+    if (
+      dto.enabledTools?.some(
+        (tool) => !tool.trim(),
+      )
+    ) {
+      throw new BadRequestException(
+        "Tool names cannot be empty",
+      );
     }
 
-    const changes: Partial<typeof aiAgents.$inferInsert> = {
+    const changes: Partial<
+      typeof aiAgents.$inferInsert
+    > = {
       updatedAt: new Date(),
     };
 
     if (dto.name !== undefined) {
-      changes.name = this.required(dto.name, "name");
+      changes.name = this.required(
+        dto.name,
+        "name",
+      );
     }
 
     if (dto.role !== undefined) {
-      changes.role = this.required(dto.role, "role");
+      changes.role = this.required(
+        dto.role,
+        "role",
+      );
     }
 
     if (dto.systemPrompt !== undefined) {
@@ -235,19 +315,23 @@ export class AgentsService {
     }
 
     if (dto.description !== undefined) {
-      changes.description = dto.description.trim() || null;
+      changes.description =
+        dto.description.trim() || null;
     }
 
     if (dto.departmentId !== undefined) {
-      changes.departmentId = dto.departmentId;
+      changes.departmentId =
+        dto.departmentId;
     }
 
     if (dto.connectionId !== undefined) {
-      changes.connectionId = dto.connectionId;
+      changes.connectionId =
+        dto.connectionId;
     }
 
     if (dto.modelId !== undefined) {
-      changes.modelId = dto.modelId?.trim() || null;
+      changes.modelId =
+        dto.modelId?.trim() || null;
     }
 
     if (dto.status !== undefined) {
@@ -267,18 +351,25 @@ export class AgentsService {
         .where(
           and(
             eq(aiAgents.id, id),
-            eq(aiAgents.organizationId, context.organizationId),
+            eq(
+              aiAgents.organizationId,
+              context.organizationId,
+            ),
           ),
         )
         .returning();
 
       if (!updated) {
-        throw new NotFoundException("AI agent not found");
+        throw new NotFoundException(
+          "AI agent not found",
+        );
       }
 
       return updated;
     } catch (error) {
-      if (databaseErrorCode(error) === "23503") {
+      if (
+        databaseErrorCode(error) === "23503"
+      ) {
         throw new ConflictException(
           "Referenced department or connection is no longer available",
         );
@@ -288,19 +379,29 @@ export class AgentsService {
     }
   }
 
-  async remove(context: RequestContext, id: string) {
+  async remove(
+    context: RequestContext,
+    id: string,
+  ) {
     const [deleted] = await db
       .delete(aiAgents)
       .where(
         and(
           eq(aiAgents.id, id),
-          eq(aiAgents.organizationId, context.organizationId),
+          eq(
+            aiAgents.organizationId,
+            context.organizationId,
+          ),
         ),
       )
-      .returning({ id: aiAgents.id });
+      .returning({
+        id: aiAgents.id,
+      });
 
     if (!deleted) {
-      throw new NotFoundException("AI agent not found");
+      throw new NotFoundException(
+        "AI agent not found",
+      );
     }
 
     return {
