@@ -17,9 +17,7 @@ export {
   MESSAGE_ROLES,
 } from "./schema.js";
 
-export {
-  knowledgeEntries,
-} from "./knowledge-schema.js";
+export { knowledgeEntries } from "./knowledge-schema.js";
 
 export { eq, sql } from "drizzle-orm";
 
@@ -98,3 +96,12 @@ export type {
   AiAgent,
   NewAiAgent,
 } from "./agents-schema.js";
+
+export {
+  customerSupportAssignments,
+} from "./support-assignment-schema.js";
+
+export type {
+  CustomerSupportAssignment,
+  NewCustomerSupportAssignment,
+} from "./support-assignment-schema.js";

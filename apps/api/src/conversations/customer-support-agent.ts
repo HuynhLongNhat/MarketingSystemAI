@@ -1,6 +1,15 @@
 
-import { aiAgents, db } from "@workspace/db/node";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import {
+  aiAgents,
+  customerSupportAssignments,
+  db,
+} from "@workspace/db/node";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+} from "drizzle-orm";
 
 export type CustomerSupportAgentConfig = {
   id: string;
@@ -24,17 +33,68 @@ const SUPPORT_ROLES = [
 ];
 
 /**
- * Tìm nhân viên CSKH đang hoạt động trong đúng tổ chức.
+ * Quy tắc:
  *
- * Không lựa chọn Agent theo tên hoặc thời gian tạo,
- * vì những tiêu chí đó dễ dẫn đến chạy sai Agent.
+ * 1. Nếu đã gán Agent chính thức:
+ *    - Chỉ chọn Agent đó.
+ *    - Bắt buộc đúng Organization, role và active.
+ *    - Nếu không còn khả dụng, chặn AI thay vì
+ *      âm thầm chuyển sang Agent khác.
  *
- * Giai đoạn MVP chỉ cho phép một Agent CSKH active
- * trong mỗi tổ chức.
+ * 2. Nếu chưa gán:
+ *    - Tương thích cơ chế MVP cũ.
+ *    - 0 active Agent: dùng Model Default.
+ *    - 1 active Agent: sử dụng Agent đó.
+ *    - Nhiều active Agent: từ chối chọn ngẫu nhiên.
  */
 export async function resolveCustomerSupportAgent(
   organizationId: string,
 ): Promise<CustomerSupportAgentResolution> {
+  const [assignment] = await db
+    .select({
+      agentId: customerSupportAssignments.agentId,
+    })
+    .from(customerSupportAssignments)
+    .where(
+      eq(
+        customerSupportAssignments.organizationId,
+        organizationId,
+      ),
+    )
+    .limit(1);
+
+  if (assignment) {
+    const [agent] = await db
+      .select({
+        id: aiAgents.id,
+        name: aiAgents.name,
+        systemPrompt: aiAgents.systemPrompt,
+        connectionId: aiAgents.connectionId,
+        modelId: aiAgents.modelId,
+      })
+      .from(aiAgents)
+      .where(
+        and(
+          eq(aiAgents.id, assignment.agentId),
+          eq(aiAgents.organizationId, organizationId),
+          eq(aiAgents.status, "active"),
+          inArray(aiAgents.role, SUPPORT_ROLES),
+        ),
+      )
+      .limit(1);
+
+    if (!agent) {
+      // Giữ tương thích với interface xử lý lỗi hiện có.
+      // Không fallback sang một Agent ngoài ý muốn.
+      return { kind: "ambiguous" };
+    }
+
+    return {
+      kind: "selected",
+      agent,
+    };
+  }
+
   const agents = await db
     .select({
       id: aiAgents.id,
@@ -70,12 +130,6 @@ export async function resolveCustomerSupportAgent(
 
   return {
     kind: "selected",
-    agent: {
-      id: agent.id,
-      name: agent.name,
-      systemPrompt: agent.systemPrompt,
-      connectionId: agent.connectionId,
-      modelId: agent.modelId,
-    },
+    agent,
   };
 }
