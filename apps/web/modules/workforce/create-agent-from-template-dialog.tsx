@@ -37,6 +37,8 @@ import {
   type Department,
   type CreateAgentFromTemplateInput,
 } from "@/lib/workforce-api";
+import { crudToast } from "@/lib/crud-messages";
+import { useUiLanguage } from "@/lib/ui-language";
 import { ModelPicker } from "./model-picker";
 
 interface Props {
@@ -54,6 +56,8 @@ export function CreateAgentFromTemplateDialog({
   departments,
   onCreated,
 }: Props) {
+  const { language } = useUiLanguage();
+
   const [name, setName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [connectionId, setConnectionId] = useState("");
@@ -62,6 +66,7 @@ export function CreateAgentFromTemplateDialog({
   const [connections, setConnections] = useState<
     AiProviderConnection[]
   >([]);
+
   const [loadingConnections, setLoadingConnections] =
     useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,12 +89,17 @@ export function CreateAgentFromTemplateDialog({
       })
       .catch((error: unknown) => {
         if (active) {
-          toast.error("Không thể tải kết nối AI.", {
-            description:
-              error instanceof Error
-                ? error.message
-                : undefined,
-          });
+          toast.error(
+            language === "vi"
+              ? "Không thể tải kết nối AI."
+              : "Failed to load AI connections.",
+            {
+              description:
+                error instanceof Error
+                  ? error.message
+                  : undefined,
+            },
+          );
         }
       })
       .finally(() => {
@@ -99,7 +109,7 @@ export function CreateAgentFromTemplateDialog({
     return () => {
       active = false;
     };
-  }, [open, template]);
+  }, [open, template, language]);
 
   const selectedConnection = connections.find(
     (item) => item.id === connectionId,
@@ -110,15 +120,23 @@ export function CreateAgentFromTemplateDialog({
   ) {
     event.preventDefault();
 
-    if (!template) return;
+    if (!template || saving) return;
 
     if (!name.trim()) {
-      toast.error("Vui lòng nhập tên nhân viên.");
+      toast.error(
+        language === "vi"
+          ? "Vui lòng nhập tên nhân viên."
+          : "Please enter an agent name.",
+      );
       return;
     }
 
     if (modelId && !connectionId) {
-      toast.error("Vui lòng chọn kết nối AI trước.");
+      toast.error(
+        language === "vi"
+          ? "Vui lòng chọn kết nối AI trước."
+          : "Please select an AI connection first.",
+      );
       return;
     }
 
@@ -138,26 +156,24 @@ export function CreateAgentFromTemplateDialog({
         input,
       );
 
-      toast.success("Đã tạo nhân viên AI từ mẫu.", {
-        description: name.trim(),
+      crudToast.success("create", "agent", {
+        language,
       });
 
       onOpenChange(false);
       await onCreated();
     } catch (error) {
-      toast.error("Không thể tạo nhân viên AI.", {
+      crudToast.error("create", "agent", {
+        language,
         description:
           error instanceof Error
             ? error.message
-            : "Vui lòng thử lại.",
+            : undefined,
       });
     } finally {
       setSaving(false);
     }
   }
-
-  const primaryClass =
-    "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200";
 
   return (
     <Dialog
@@ -169,12 +185,19 @@ export function CreateAgentFromTemplateDialog({
       <DialogContent className="flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
         <DialogHeader className="shrink-0 border-b px-6 py-5 text-left">
           <DialogTitle>
-            Tạo nhân viên từ mẫu
+            {language === "vi"
+              ? "Tạo nhân viên từ mẫu"
+              : "Create agent from template"}
           </DialogTitle>
+
           <DialogDescription>
             {template
-              ? `Mẫu: ${template.name}`
-              : "Chọn mẫu nhân viên."}
+              ? language === "vi"
+                ? `Mẫu: ${template.name}`
+                : `Template: ${template.name}`
+              : language === "vi"
+                ? "Chọn mẫu nhân viên."
+                : "Select an agent template."}
           </DialogDescription>
         </DialogHeader>
 
@@ -184,7 +207,13 @@ export function CreateAgentFromTemplateDialog({
         >
           <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto px-6 py-5 sm:grid-cols-2">
             <label className="space-y-2 text-sm sm:col-span-2">
-              <span>Tên nhân viên *</span>
+              <span>
+                {language === "vi"
+                  ? "Tên nhân viên"
+                  : "Agent name"}{" "}
+                *
+              </span>
+
               <Input
                 required
                 maxLength={120}
@@ -196,7 +225,12 @@ export function CreateAgentFromTemplateDialog({
             </label>
 
             <div className="space-y-2 text-sm sm:col-span-2">
-              <span>Phòng ban</span>
+              <span>
+                {language === "vi"
+                  ? "Phòng ban"
+                  : "Department"}
+              </span>
+
               <Select
                 value={departmentId || "none"}
                 onValueChange={(value) =>
@@ -208,9 +242,12 @@ export function CreateAgentFromTemplateDialog({
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="none">
-                    Chưa phân phòng
+                    {language === "vi"
+                      ? "Chưa phân phòng"
+                      : "Unassigned"}
                   </SelectItem>
 
                   {departments.map((department) => (
@@ -226,7 +263,12 @@ export function CreateAgentFromTemplateDialog({
             </div>
 
             <div className="space-y-2 text-sm">
-              <span>Kết nối AI</span>
+              <span>
+                {language === "vi"
+                  ? "Kết nối AI"
+                  : "AI connection"}
+              </span>
+
               <Select
                 disabled={loadingConnections}
                 value={connectionId || "none"}
@@ -239,12 +281,19 @@ export function CreateAgentFromTemplateDialog({
               >
                 <SelectTrigger className="w-full">
                   <SelectValue
-                    placeholder="Chọn kết nối AI"
+                    placeholder={
+                      language === "vi"
+                        ? "Chọn kết nối AI"
+                        : "Select AI connection"
+                    }
                   />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="none">
-                    Chưa chọn kết nối
+                    {language === "vi"
+                      ? "Chưa chọn kết nối"
+                      : "No connection selected"}
                   </SelectItem>
 
                   {connections
@@ -263,13 +312,20 @@ export function CreateAgentFromTemplateDialog({
 
               {loadingConnections && (
                 <p className="text-xs text-muted-foreground">
-                  Đang tải kết nối AI...
+                  {language === "vi"
+                    ? "Đang tải kết nối AI..."
+                    : "Loading AI connections..."}
                 </p>
               )}
             </div>
 
             <div className="min-w-0 space-y-2 text-sm">
-              <span>Mô hình AI</span>
+              <span>
+                {language === "vi"
+                  ? "Mô hình AI"
+                  : "AI model"}
+              </span>
+
               <ModelPicker
                 provider={selectedConnection?.provider}
                 value={modelId}
@@ -279,8 +335,9 @@ export function CreateAgentFromTemplateDialog({
             </div>
 
             <p className="text-xs text-muted-foreground sm:col-span-2">
-              Vai trò và System Prompt được lấy từ mẫu.
-              Bạn có thể chỉnh sửa nhân viên sau khi tạo.
+              {language === "vi"
+                ? "Vai trò và System Prompt được lấy từ mẫu. Bạn có thể chỉnh sửa nhân viên sau khi tạo."
+                : "Role and system prompt are inherited from the template. You can edit the agent after creation."}
             </p>
           </div>
 
@@ -291,18 +348,19 @@ export function CreateAgentFromTemplateDialog({
               disabled={saving}
               onClick={() => onOpenChange(false)}
             >
-              Hủy
+              {language === "vi" ? "Hủy" : "Cancel"}
             </Button>
 
             <Button
               type="submit"
               disabled={saving || !template}
-              className={primaryClass}
             >
               {saving && (
                 <Loader2 className="size-4 animate-spin" />
               )}
-              Tạo nhân viên
+              {language === "vi"
+                ? "Tạo nhân viên"
+                : "Create agent"}
             </Button>
           </DialogFooter>
         </form>

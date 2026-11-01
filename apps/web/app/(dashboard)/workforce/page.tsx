@@ -39,16 +39,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@workspace/ui/components/alert-dialog";
 
 import {
   workforceApi,
@@ -57,15 +47,15 @@ import {
   type AgentTemplate,
   type Department,
 } from "@/lib/workforce-api";
+import { crudToast } from "@/lib/crud-messages";
+import { useUiLanguage } from "@/lib/ui-language";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 
 import { AgentFormDialog } from "@/modules/workforce/agent-form-dialog";
 import { TemplateFormDialog } from "@/modules/workforce/template-form-dialog";
 import { CreateAgentFromTemplateDialog } from "@/modules/workforce/create-agent-from-template-dialog";
 
 type Tab = "agents" | "departments" | "templates";
-
-const primary =
-  "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200";
 
 const categories: Record<AgentCategory, string> = {
   marketing: "Marketing",
@@ -83,7 +73,7 @@ const statuses: Record<AiAgent["status"], string> = {
   archived: "Đã lưu trữ",
 };
 
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Vui lòng thử lại.";
@@ -92,6 +82,7 @@ function errorMessage(error: unknown) {
 export default function WorkforcePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { language } = useUiLanguage();
 
   const queryTab = searchParams.get("tab");
   const tab: Tab =
@@ -107,17 +98,14 @@ export default function WorkforcePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const [departmentFilter, setDepartmentFilter] =
-    useState("all");
-
+  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [templateSearch, setTemplateSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] =
-    useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  const [agentDialogOpen, setAgentDialogOpen] =
-    useState(false);
-  const [editingAgent, setEditingAgent] =
-    useState<AiAgent | null>(null);
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<AiAgent | null>(
+    null,
+  );
   const [deleteAgentTarget, setDeleteAgentTarget] =
     useState<AiAgent | null>(null);
 
@@ -152,13 +140,16 @@ export default function WorkforcePage() {
       setDepartments(departmentData);
       setTemplates(templateData);
     } catch (error) {
-      toast.error("Không thể tải dữ liệu.", {
-        description: errorMessage(error),
-      });
+      toast.error(
+        language === "vi"
+          ? "Không thể tải dữ liệu."
+          : "Failed to load data.",
+        { description: errorMessage(error) },
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     void refresh();
@@ -166,6 +157,7 @@ export default function WorkforcePage() {
 
   async function manualRefresh() {
     setRefreshing(true);
+
     try {
       await refresh();
     } finally {
@@ -178,8 +170,7 @@ export default function WorkforcePage() {
       departmentFilter === "all"
         ? agents
         : agents.filter(
-            (agent) =>
-              agent.departmentId === departmentFilter,
+            (agent) => agent.departmentId === departmentFilter,
           ),
     [agents, departmentFilter],
   );
@@ -240,20 +231,20 @@ export default function WorkforcePage() {
   }
 
   async function removeAgent() {
-    if (!deleteAgentTarget) return;
+    if (!deleteAgentTarget || busy) return;
 
     setBusy(true);
 
     try {
-      await workforceApi.deleteAgent(
-        deleteAgentTarget.id,
-      );
+      await workforceApi.deleteAgent(deleteAgentTarget.id);
 
-      toast.success("Đã xóa nhân viên AI.");
+      crudToast.success("delete", "agent", { language });
+
       setDeleteAgentTarget(null);
       await refresh();
     } catch (error) {
-      toast.error("Không thể xóa nhân viên.", {
+      crudToast.error("delete", "agent", {
+        language,
         description: errorMessage(error),
       });
     } finally {
@@ -262,21 +253,26 @@ export default function WorkforcePage() {
   }
 
   async function removeTemplate() {
-    if (!deleteTemplateTarget) return;
+    if (!deleteTemplateTarget || busy) return;
 
     setBusy(true);
 
     try {
-      await workforceApi.deleteTemplate(
-        deleteTemplateTarget.id,
-      );
+      await workforceApi.deleteTemplate(deleteTemplateTarget.id);
 
-      toast.success("Đã xóa mẫu nhân viên.");
+      crudToast.success("delete", "agentTemplate", {
+        language,
+      });
+
       setDeleteTemplateTarget(null);
       await refresh();
     } catch (error) {
-      toast.error("Không thể xóa mẫu nhân viên.", {
-        description: `${errorMessage(error)} Mẫu đang được Agent sử dụng sẽ không thể xóa.`,
+      crudToast.error("delete", "agentTemplate", {
+        language,
+        description:
+          language === "vi"
+            ? `${errorMessage(error)} Mẫu đang được Agent sử dụng sẽ không thể xóa.`
+            : errorMessage(error),
       });
     } finally {
       setBusy(false);
@@ -288,6 +284,8 @@ export default function WorkforcePage() {
   ) {
     event.preventDefault();
 
+    if (busy) return;
+
     const name = departmentName.trim();
     const slug = name
       .normalize("NFD")
@@ -298,7 +296,11 @@ export default function WorkforcePage() {
       .replace(/^-|-$/g, "");
 
     if (!name || !slug) {
-      toast.error("Tên phòng ban không hợp lệ.");
+      toast.error(
+        language === "vi"
+          ? "Tên phòng ban không hợp lệ."
+          : "Invalid department name.",
+      );
       return;
     }
 
@@ -311,13 +313,18 @@ export default function WorkforcePage() {
         description: departmentDescription.trim(),
       });
 
-      toast.success("Đã tạo phòng ban.");
+      crudToast.success("create", "department", {
+        language,
+      });
+
       setDepartmentName("");
       setDepartmentDescription("");
       setDepartmentFormOpen(false);
+
       await refresh();
     } catch (error) {
-      toast.error("Không thể tạo phòng ban.", {
+      crudToast.error("create", "department", {
+        language,
         description: errorMessage(error),
       });
     } finally {
@@ -340,8 +347,8 @@ export default function WorkforcePage() {
           </h1>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Quản lý nhân viên AI, phòng ban và các mẫu
-            nhân viên chuyên môn.
+            Quản lý nhân viên AI, phòng ban và các mẫu nhân viên
+            chuyên môn.
           </p>
         </div>
 
@@ -362,7 +369,6 @@ export default function WorkforcePage() {
 
           <Button
             type="button"
-            className={primary}
             onClick={
               tab === "templates"
                 ? openCreateTemplate
@@ -440,9 +446,6 @@ export default function WorkforcePage() {
                 size="sm"
                 variant={
                   tab === item ? "default" : "ghost"
-                }
-                className={
-                  tab === item ? primary : ""
                 }
                 onClick={() => switchTab(item)}
               >
@@ -555,7 +558,6 @@ export default function WorkforcePage() {
                 <Button
                   type="submit"
                   disabled={busy}
-                  className={primary}
                 >
                   {busy && (
                     <Loader2 className="size-4 animate-spin" />
@@ -624,7 +626,7 @@ export default function WorkforcePage() {
 
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="edit"
                         size="icon"
                         aria-label={`Sửa ${agent.name}`}
                         onClick={() => {
@@ -637,7 +639,7 @@ export default function WorkforcePage() {
 
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="delete"
                         size="icon"
                         disabled={busy}
                         aria-label={`Xóa ${agent.name}`}
@@ -765,7 +767,7 @@ export default function WorkforcePage() {
                       <Button
                         type="button"
                         size="sm"
-                        className={`${primary} flex-1`}
+                        className="flex-1"
                         onClick={() =>
                           openTemplateAgent(template)
                         }
@@ -778,7 +780,7 @@ export default function WorkforcePage() {
                         <>
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="edit"
                             size="icon"
                             aria-label={`Sửa mẫu ${template.name}`}
                             onClick={() => {
@@ -791,7 +793,7 @@ export default function WorkforcePage() {
 
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="delete"
                             size="icon"
                             disabled={busy || usedCount > 0}
                             aria-label={`Xóa mẫu ${template.name}`}
@@ -828,7 +830,6 @@ export default function WorkforcePage() {
               {templates.length === 0 && (
                 <Button
                   type="button"
-                  className={primary}
                   onClick={openCreateTemplate}
                 >
                   <CirclePlus className="size-4" />
@@ -866,90 +867,51 @@ export default function WorkforcePage() {
         }}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={deleteAgentTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!open) {
             setDeleteAgentTarget(null);
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Xóa nhân viên AI?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc muốn xóa{" "}
-              {deleteAgentTarget?.name}? Hành động này
-              không thể hoàn tác.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+        title={
+          language === "vi"
+            ? "Xóa nhân viên AI?"
+            : "Delete AI agent?"
+        }
+        description={
+          language === "vi"
+            ? `Bạn có chắc muốn xóa ${deleteAgentTarget?.name ?? "nhân viên này"}? Hành động này không thể hoàn tác.`
+            : `Are you sure you want to delete ${deleteAgentTarget?.name ?? "this agent"}? This action cannot be undone.`
+        }
+        cancelLabel={language === "vi" ? "Hủy" : "Cancel"}
+        confirmLabel={language === "vi" ? "Xóa" : "Delete"}
+        loading={busy}
+        onConfirm={removeAgent}
+      />
 
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>
-              Hủy
-            </AlertDialogCancel>
-
-            <AlertDialogAction
-              disabled={busy}
-              className={primary}
-              onClick={(event) => {
-                event.preventDefault();
-                void removeAgent();
-              }}
-            >
-              {busy && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Xác nhận xóa
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={deleteTemplateTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!open) {
             setDeleteTemplateTarget(null);
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Xóa mẫu nhân viên?
-            </AlertDialogTitle>
-
-            <AlertDialogDescription>
-              Bạn có chắc muốn xóa mẫu{" "}
-              {deleteTemplateTarget?.name}? Mẫu đang
-              được nhân viên sử dụng sẽ không thể xóa.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>
-              Hủy
-            </AlertDialogCancel>
-
-            <AlertDialogAction
-              disabled={busy}
-              className={primary}
-              onClick={(event) => {
-                event.preventDefault();
-                void removeTemplate();
-              }}
-            >
-              {busy && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Xác nhận xóa
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={
+          language === "vi"
+            ? "Xóa mẫu nhân viên?"
+            : "Delete agent template?"
+        }
+        description={
+          language === "vi"
+            ? `Bạn có chắc muốn xóa mẫu ${deleteTemplateTarget?.name ?? "này"}? Mẫu đang được nhân viên sử dụng sẽ không thể xóa.`
+            : `Are you sure you want to delete ${deleteTemplateTarget?.name ?? "this template"}? Templates currently in use cannot be deleted.`
+        }
+        cancelLabel={language === "vi" ? "Hủy" : "Cancel"}
+        confirmLabel={language === "vi" ? "Xóa" : "Delete"}
+        loading={busy}
+        onConfirm={removeTemplate}
+      />
     </div>
   );
 }

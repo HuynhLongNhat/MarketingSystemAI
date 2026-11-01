@@ -41,6 +41,7 @@ import {
   type UpdateAgentInput,
 } from "@/lib/workforce-api";
 import { useUiLanguage } from "@/lib/ui-language";
+import { crudToast } from "@/lib/crud-messages";
 import { ModelPicker } from "./model-picker";
 
 interface Props {
@@ -87,7 +88,7 @@ export function AgentFormDialog({
   departments,
   onSaved,
 }: Props) {
-  const { t } = useUiLanguage();
+  const { t, language } = useUiLanguage();
 
   const [form, setForm] = useState<Form>(empty);
   const [connections, setConnections] = useState<
@@ -151,6 +152,8 @@ export function AgentFormDialog({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (saving) return;
+
     if (
       !form.name.trim() ||
       !form.role.trim() ||
@@ -161,6 +164,8 @@ export function AgentFormDialog({
     }
 
     setSaving(true);
+
+    const action = agent ? "update" : "create";
 
     try {
       if (agent) {
@@ -197,13 +202,19 @@ export function AgentFormDialog({
         await workforceApi.createAgent(input);
       }
 
-      toast.success(agent ? t.saved : t.created);
+      crudToast.success(action, "agent", {
+        language,
+      });
+
       onOpenChange(false);
       await onSaved();
     } catch (error) {
-      toast.error(t.failed, {
+      crudToast.error(action, "agent", {
+        language,
         description:
-          error instanceof Error ? error.message : undefined,
+          error instanceof Error
+            ? error.message
+            : undefined,
       });
     } finally {
       setSaving(false);
@@ -222,7 +233,10 @@ export function AgentFormDialog({
           <DialogTitle>
             {agent ? t.editAgent : t.createAgent}
           </DialogTitle>
-          <DialogDescription>{t.subtitle}</DialogDescription>
+
+          <DialogDescription>
+            {t.subtitle}
+          </DialogDescription>
         </DialogHeader>
 
         <form
@@ -232,6 +246,7 @@ export function AgentFormDialog({
           <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto px-6 py-5 sm:grid-cols-2">
             <label className="space-y-2 text-sm">
               <span>{t.name} *</span>
+
               <Input
                 required
                 maxLength={120}
@@ -244,6 +259,7 @@ export function AgentFormDialog({
 
             <label className="space-y-2 text-sm">
               <span>{t.role} *</span>
+
               <Input
                 required
                 maxLength={120}
@@ -256,6 +272,7 @@ export function AgentFormDialog({
 
             <label className="space-y-2 text-sm sm:col-span-2">
               <span>{t.description}</span>
+
               <Textarea
                 rows={2}
                 maxLength={2000}
@@ -268,6 +285,7 @@ export function AgentFormDialog({
 
             <div className="space-y-2 text-sm">
               <span>{t.department}</span>
+
               <Select
                 value={form.departmentId || "none"}
                 onValueChange={(v) =>
@@ -280,10 +298,12 @@ export function AgentFormDialog({
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="none">
                     {t.unassigned}
                   </SelectItem>
+
                   {departments.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.name}
@@ -295,6 +315,7 @@ export function AgentFormDialog({
 
             <div className="space-y-2 text-sm">
               <span>{t.status}</span>
+
               <Select
                 disabled={!agent}
                 value={form.status}
@@ -305,10 +326,13 @@ export function AgentFormDialog({
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   {statuses.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s === "active" ? t.running : t[s]}
+                      {s === "active"
+                        ? t.running
+                        : t[s]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -317,6 +341,7 @@ export function AgentFormDialog({
 
             <div className="space-y-2 text-sm">
               <span>{t.connection}</span>
+
               <Select
                 disabled={connectionsLoading}
                 value={form.connectionId || "none"}
@@ -334,10 +359,12 @@ export function AgentFormDialog({
                     placeholder={t.noConnection}
                   />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="none">
                     {t.noConnection}
                   </SelectItem>
+
                   {connections
                     .filter(
                       (c) =>
@@ -358,6 +385,7 @@ export function AgentFormDialog({
 
             <div className="space-y-2 text-sm">
               <span>{t.model}</span>
+
               <ModelPicker
                 provider={selectedConnection?.provider}
                 value={form.modelId}
@@ -370,6 +398,7 @@ export function AgentFormDialog({
 
             <label className="space-y-2 text-sm sm:col-span-2">
               <span>{t.prompt} *</span>
+
               <Textarea
                 required
                 rows={7}
@@ -395,7 +424,6 @@ export function AgentFormDialog({
             <Button
               type="submit"
               disabled={saving}
-              className="bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
             >
               {saving && (
                 <Loader2 className="size-4 animate-spin" />
