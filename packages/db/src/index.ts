@@ -65,7 +65,6 @@ export type {
   DatabaseEnvironment,
 } from "./environment-guard.js";
 
-
 export {
   aiProviderConnections,
   aiModelDefaults,
@@ -79,3 +78,23 @@ export type {
   AiModelDefault,
   NewAiModelDefault,
 } from "./ai-schema.js";
+
+export {
+  departments,
+  agentTemplates,
+  aiAgents,
+  AGENT_STATUSES,
+  AGENT_CATEGORIES,
+} from "./agents-schema.js";
+
+export type {
+  AgentStatus,
+  AgentCategory,
+  AgentToolConfig,
+  Department,
+  NewDepartment,
+  AgentTemplate,
+  NewAgentTemplate,
+  AiAgent,
+  NewAiAgent,
+} from "./agents-schema.js";
