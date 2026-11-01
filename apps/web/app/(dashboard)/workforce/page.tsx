@@ -18,6 +18,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Search,
   Trash2,
   Users,
 } from "lucide-react";
@@ -49,22 +50,46 @@ import {
   AlertDialogTitle,
 } from "@workspace/ui/components/alert-dialog";
 
-import { useUiLanguage } from "@/lib/ui-language";
 import {
   workforceApi,
   type AiAgent,
+  type AgentCategory,
   type AgentTemplate,
   type Department,
 } from "@/lib/workforce-api";
+
 import { AgentFormDialog } from "@/modules/workforce/agent-form-dialog";
+import { TemplateFormDialog } from "@/modules/workforce/template-form-dialog";
+import { CreateAgentFromTemplateDialog } from "@/modules/workforce/create-agent-from-template-dialog";
 
 type Tab = "agents" | "departments" | "templates";
 
 const primary =
   "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200";
 
+const categories: Record<AgentCategory, string> = {
+  marketing: "Marketing",
+  sales: "Kinh doanh",
+  support: "Chăm sóc khách hàng",
+  research: "Nghiên cứu",
+  operations: "Vận hành",
+  other: "Khác",
+};
+
+const statuses: Record<AiAgent["status"], string> = {
+  draft: "Bản nháp",
+  active: "Đang hoạt động",
+  paused: "Tạm dừng",
+  archived: "Đã lưu trữ",
+};
+
+function errorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Vui lòng thử lại.";
+}
+
 export default function WorkforcePage() {
-  const { t, language, setLanguage } = useUiLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -77,40 +102,59 @@ export default function WorkforcePage() {
   const [agents, setAgents] = useState<AiAgent[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [templates, setTemplates] = useState<AgentTemplate[]>([]);
+
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+
   const [departmentFilter, setDepartmentFilter] =
     useState("all");
 
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] =
+    useState("all");
+
+  const [agentDialogOpen, setAgentDialogOpen] =
+    useState(false);
   const [editingAgent, setEditingAgent] =
     useState<AiAgent | null>(null);
-  const [deleteTarget, setDeleteTarget] =
+  const [deleteAgentTarget, setDeleteAgentTarget] =
     useState<AiAgent | null>(null);
 
+  const [templateDialogOpen, setTemplateDialogOpen] =
+    useState(false);
+  const [editingTemplate, setEditingTemplate] =
+    useState<AgentTemplate | null>(null);
+  const [deleteTemplateTarget, setDeleteTemplateTarget] =
+    useState<AgentTemplate | null>(null);
+
+  const [createFromTemplateOpen, setCreateFromTemplateOpen] =
+    useState(false);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<AgentTemplate | null>(null);
+
+  const [departmentFormOpen, setDepartmentFormOpen] =
+    useState(false);
   const [departmentName, setDepartmentName] = useState("");
   const [departmentDescription, setDepartmentDescription] =
     useState("");
-  const [departmentFormOpen, setDepartmentFormOpen] =
-    useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [a, d, p] = await Promise.all([
-        workforceApi.listAgents(),
-        workforceApi.listDepartments(),
-        workforceApi.listTemplates(),
-      ]);
+      const [agentData, departmentData, templateData] =
+        await Promise.all([
+          workforceApi.listAgents(),
+          workforceApi.listDepartments(),
+          workforceApi.listTemplates(),
+        ]);
 
-      setAgents(a);
-      setDepartments(d);
-      setTemplates(p);
+      setAgents(agentData);
+      setDepartments(departmentData);
+      setTemplates(templateData);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to load data",
-      );
+      toast.error("Không thể tải dữ liệu.", {
+        description: errorMessage(error),
+      });
     } finally {
       setLoading(false);
     }
@@ -120,48 +164,119 @@ export default function WorkforcePage() {
     void refresh();
   }, [refresh]);
 
-  const filtered = useMemo(
+  async function manualRefresh() {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const filteredAgents = useMemo(
     () =>
       departmentFilter === "all"
         ? agents
         : agents.filter(
-            (a) => a.departmentId === departmentFilter,
+            (agent) =>
+              agent.departmentId === departmentFilter,
           ),
     [agents, departmentFilter],
   );
 
+  const filteredTemplates = useMemo(() => {
+    const query = templateSearch.trim().toLowerCase();
+
+    return templates.filter((template) => {
+      if (
+        categoryFilter !== "all" &&
+        template.category !== categoryFilter
+      ) {
+        return false;
+      }
+
+      if (!query) return true;
+
+      return [
+        template.name,
+        template.slug,
+        template.description ?? "",
+        categories[template.category],
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [templates, templateSearch, categoryFilter]);
+
   const departmentNames = useMemo(
     () =>
       new Map(
-        departments.map((d) => [d.id, d.name]),
+        departments.map((department) => [
+          department.id,
+          department.name,
+        ]),
       ),
     [departments],
   );
 
-  const switchTab = (next: Tab) =>
+  function switchTab(next: Tab) {
     router.push(`/workforce?tab=${next}`);
+  }
 
-  const openCreate = () => {
+  function openCreateAgent() {
     setEditingAgent(null);
-    setEditorOpen(true);
-  };
+    setAgentDialogOpen(true);
+  }
+
+  function openCreateTemplate() {
+    setEditingTemplate(null);
+    setTemplateDialogOpen(true);
+  }
+
+  function openTemplateAgent(template: AgentTemplate) {
+    setSelectedTemplate(template);
+    setCreateFromTemplateOpen(true);
+  }
 
   async function removeAgent() {
-    if (!deleteTarget) return;
+    if (!deleteAgentTarget) return;
 
     setBusy(true);
 
     try {
-      await workforceApi.deleteAgent(deleteTarget.id);
-      toast.success(t.deleted);
-      setDeleteTarget(null);
+      await workforceApi.deleteAgent(
+        deleteAgentTarget.id,
+      );
+
+      toast.success("Đã xóa nhân viên AI.");
+      setDeleteAgentTarget(null);
       await refresh();
     } catch (error) {
-      toast.error(t.failed, {
-        description:
-          error instanceof Error
-            ? error.message
-            : undefined,
+      toast.error("Không thể xóa nhân viên.", {
+        description: errorMessage(error),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeTemplate() {
+    if (!deleteTemplateTarget) return;
+
+    setBusy(true);
+
+    try {
+      await workforceApi.deleteTemplate(
+        deleteTemplateTarget.id,
+      );
+
+      toast.success("Đã xóa mẫu nhân viên.");
+      setDeleteTemplateTarget(null);
+      await refresh();
+    } catch (error) {
+      toast.error("Không thể xóa mẫu nhân viên.", {
+        description: `${errorMessage(error)} Mẫu đang được Agent sử dụng sẽ không thể xóa.`,
       });
     } finally {
       setBusy(false);
@@ -182,7 +297,10 @@ export default function WorkforcePage() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
 
-    if (!name || !slug) return;
+    if (!name || !slug) {
+      toast.error("Tên phòng ban không hợp lệ.");
+      return;
+    }
 
     setBusy(true);
 
@@ -193,144 +311,120 @@ export default function WorkforcePage() {
         description: departmentDescription.trim(),
       });
 
-      toast.success(t.departmentCreated);
+      toast.success("Đã tạo phòng ban.");
       setDepartmentName("");
       setDepartmentDescription("");
       setDepartmentFormOpen(false);
       await refresh();
     } catch (error) {
-      toast.error(t.failed, {
-        description:
-          error instanceof Error
-            ? error.message
-            : undefined,
+      toast.error("Không thể tạo phòng ban.", {
+        description: errorMessage(error),
       });
     } finally {
       setBusy(false);
     }
   }
 
-  async function createFromTemplate(
-    template: AgentTemplate,
-  ) {
-    setBusy(true);
-
-    try {
-      await workforceApi.createAgentFromTemplate(
-        template.id,
-        {},
-      );
-
-      toast.success(t.templateCreated);
-      await refresh();
-      switchTab("agents");
-    } catch (error) {
-      toast.error(t.failed, {
-        description:
-          error instanceof Error
-            ? error.message
-            : undefined,
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
+  const tabLabels: Record<Tab, string> = {
+    agents: "Nhân viên AI",
+    departments: "Phòng ban",
+    templates: "Mẫu nhân viên",
+  };
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 md:px-8">
+    <div className="w-full min-w-0 space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">
-            {t.workforce}
+            Đội ngũ AI
           </h1>
+
           <p className="mt-1 text-sm text-muted-foreground">
-            {t.subtitle}
+            Quản lý nhân viên AI, phòng ban và các mẫu
+            nhân viên chuyên môn.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Select
-            value={language}
-            onValueChange={(v) =>
-              setLanguage(v as "vi" | "en")
-            }
-          >
-            <SelectTrigger
-              aria-label={t.language}
-              className="w-[100px]"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="vi">
-                Tiếng Việt
-              </SelectItem>
-              <SelectItem value="en">
-                English
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
+        <div className="flex flex-wrap items-center gap-2">
           <Button
+            type="button"
             variant="outline"
-            onClick={() => void refresh()}
+            disabled={refreshing}
+            onClick={() => void manualRefresh()}
           >
-            <RefreshCw className="size-4" />
-            <span className="hidden sm:inline">
-              {t.reload}
-            </span>
+            <RefreshCw
+              className={`size-4 ${
+                refreshing ? "animate-spin" : ""
+              }`}
+            />
+            Làm mới
           </Button>
 
           <Button
+            type="button"
             className={primary}
-            onClick={openCreate}
+            onClick={
+              tab === "templates"
+                ? openCreateTemplate
+                : tab === "departments"
+                  ? () => setDepartmentFormOpen(true)
+                  : openCreateAgent
+            }
           >
             <CirclePlus className="size-4" />
-            {t.createAgent}
+            {tab === "templates"
+              ? "Tạo mẫu"
+              : tab === "departments"
+                ? "Tạo phòng ban"
+                : "Tạo nhân viên"}
           </Button>
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
-            label: t.total,
+            label: "Tổng nhân viên",
             value: agents.length,
             icon: Bot,
           },
           {
-            label: t.active,
+            label: "Đang hoạt động",
             value: agents.filter(
-              (a) => a.status === "active",
+              (agent) => agent.status === "active",
             ).length,
             icon: Users,
           },
           {
-            label: t.departments,
+            label: "Phòng ban",
             value: departments.length,
             icon: Building2,
           },
           {
-            label: t.templates,
+            label: "Mẫu nhân viên",
             value: templates.length,
             icon: Layers3,
           },
         ].map((stat) => (
-          <Card key={stat.label}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <Card key={stat.label} className="min-w-0">
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
+              <CardTitle className="min-w-0 text-sm font-medium text-muted-foreground">
                 {stat.label}
               </CardTitle>
-              <stat.icon className="size-4 text-muted-foreground" />
+
+              <stat.icon className="size-4 shrink-0 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="text-2xl font-semibold">
-              {stat.value}
+
+            <CardContent>
+              <p className="text-2xl font-semibold">
+                {stat.value}
+              </p>
             </CardContent>
           </Card>
         ))}
-      </div>
+      </section>
 
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b">
           <div className="flex flex-wrap gap-1">
             {(
@@ -342,6 +436,7 @@ export default function WorkforcePage() {
             ).map((item) => (
               <Button
                 key={item}
+                type="button"
                 size="sm"
                 variant={
                   tab === item ? "default" : "ghost"
@@ -351,7 +446,7 @@ export default function WorkforcePage() {
                 }
                 onClick={() => switchTab(item)}
               >
-                {t[item]}
+                {tabLabels[item]}
               </Button>
             ))}
           </div>
@@ -361,160 +456,193 @@ export default function WorkforcePage() {
               value={departmentFilter}
               onValueChange={setDepartmentFilter}
             >
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[220px]">
                 <SelectValue />
               </SelectTrigger>
+
               <SelectContent>
                 <SelectItem value="all">
-                  {t.filterAll}
+                  Tất cả phòng ban
                 </SelectItem>
-                {departments.map((d) => (
+
+                {departments.map((department) => (
                   <SelectItem
-                    key={d.id}
-                    value={d.id}
+                    key={department.id}
+                    value={department.id}
                   >
-                    {d.name}
+                    {department.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           )}
 
-          {tab === "departments" && (
-            <Button
-              className={primary}
-              onClick={() =>
-                setDepartmentFormOpen(
-                  (v) => !v,
-                )
-              }
-            >
-              <CirclePlus className="size-4" />
-              {t.createDepartment}
-            </Button>
+          {tab === "templates" && (
+            <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+              <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
+                <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+
+                <Input
+                  aria-label="Tìm mẫu nhân viên"
+                  className="pl-9"
+                  placeholder="Tìm mẫu nhân viên..."
+                  value={templateSearch}
+                  onChange={(event) =>
+                    setTemplateSearch(event.target.value)
+                  }
+                />
+              </div>
+
+              <Select
+                value={categoryFilter}
+                onValueChange={setCategoryFilter}
+              >
+                <SelectTrigger className="w-full sm:w-[190px]">
+                  <SelectValue />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    Tất cả chuyên môn
+                  </SelectItem>
+
+                  {(
+                    Object.keys(categories) as AgentCategory[]
+                  ).map((category) => (
+                    <SelectItem
+                      key={category}
+                      value={category}
+                    >
+                      {categories[category]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
         </CardHeader>
 
         <CardContent className="p-0">
-          {tab === "departments" &&
-            departmentFormOpen && (
-              <form
-                onSubmit={(e) =>
-                  void addDepartment(e)
+          {tab === "departments" && departmentFormOpen && (
+            <form
+              onSubmit={(event) =>
+                void addDepartment(event)
+              }
+              className="grid gap-3 border-b p-5 sm:grid-cols-2"
+            >
+              <Input
+                required
+                maxLength={120}
+                placeholder="Tên phòng ban"
+                value={departmentName}
+                onChange={(event) =>
+                  setDepartmentName(event.target.value)
                 }
-                className="grid gap-3 border-b p-5 sm:grid-cols-2"
-              >
-                <Input
-                  required
-                  maxLength={120}
-                  placeholder={t.name}
-                  value={departmentName}
-                  onChange={(e) =>
-                    setDepartmentName(
-                      e.target.value,
-                    )
+              />
+
+              <Input
+                maxLength={2000}
+                placeholder="Mô tả phòng ban"
+                value={departmentDescription}
+                onChange={(event) =>
+                  setDepartmentDescription(
+                    event.target.value,
+                  )
+                }
+              />
+
+              <div className="flex gap-2 sm:col-span-2">
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  className={primary}
+                >
+                  {busy && (
+                    <Loader2 className="size-4 animate-spin" />
+                  )}
+                  Tạo phòng ban
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    setDepartmentFormOpen(false)
                   }
-                />
-                <Input
-                  maxLength={2000}
-                  placeholder={t.description}
-                  value={departmentDescription}
-                  onChange={(e) =>
-                    setDepartmentDescription(
-                      e.target.value,
-                    )
-                  }
-                />
-                <div className="flex gap-2 sm:col-span-2">
-                  <Button
-                    type="submit"
-                    disabled={busy}
-                    className={primary}
-                  >
-                    {t.create}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      setDepartmentFormOpen(
-                        false,
-                      )
-                    }
-                  >
-                    {t.cancel}
-                  </Button>
-                </div>
-              </form>
-            )}
+                >
+                  Hủy
+                </Button>
+              </div>
+            </form>
+          )}
 
           {loading ? (
-            <div className="flex items-center justify-center gap-2 p-12 text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 p-12 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              {t.loading}
+              Đang tải dữ liệu...
             </div>
           ) : tab === "agents" ? (
-            filtered.length ? (
+            filteredAgents.length > 0 ? (
               <div className="divide-y">
-                {filtered.map((agent) => (
+                {filteredAgents.map((agent) => (
                   <div
                     key={agent.id}
                     className="flex flex-wrap items-center justify-between gap-4 p-5 hover:bg-muted/30"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-lg border p-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="shrink-0 rounded-lg border p-3">
                         <Bot className="size-5" />
                       </div>
-                      <div>
-                        <p className="font-medium">
+
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
                           {agent.name}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+
+                        <p className="truncate text-sm text-muted-foreground">
                           {agent.role}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+
+                        <p className="break-all text-xs text-muted-foreground">
                           {departmentNames.get(
                             agent.departmentId ?? "",
-                          ) ?? t.unassigned}
+                          ) ?? "Chưa phân phòng"}
                           {" · "}
-                          {agent.modelId ??
-                            t.chooseModel}
+                          {agent.modelId ?? "Chưa chọn model"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Badge
                         variant="outline"
                         className="text-foreground"
                       >
-                        {agent.status === "active"
-                          ? t.running
-                          : t[agent.status]}
+                        {statuses[agent.status]}
                       </Badge>
 
                       <Button
+                        type="button"
                         variant="outline"
                         size="icon"
-                        aria-label={t.editAgent}
+                        aria-label={`Sửa ${agent.name}`}
                         onClick={() => {
-                          setEditingAgent(
-                            agent,
-                          );
-                          setEditorOpen(true);
+                          setEditingAgent(agent);
+                          setAgentDialogOpen(true);
                         }}
                       >
                         <Pencil className="size-4" />
                       </Button>
 
                       <Button
+                        type="button"
                         variant="outline"
                         size="icon"
-                        aria-label={t.delete}
+                        disabled={busy}
+                        aria-label={`Xóa ${agent.name}`}
                         onClick={() =>
-                          setDeleteTarget(
-                            agent,
-                          )
+                          setDeleteAgentTarget(agent)
                         }
                       >
                         <Trash2 className="size-4" />
@@ -525,134 +653,303 @@ export default function WorkforcePage() {
               </div>
             ) : (
               <div className="p-12 text-center text-sm text-muted-foreground">
-                {t.emptyAgents}
+                Chưa có nhân viên AI.
               </div>
             )
           ) : tab === "departments" ? (
-            departments.length ? (
-              <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
-                {departments.map((d) => (
+            departments.length > 0 ? (
+              <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
+                {departments.map((department) => (
                   <div
-                    key={d.id}
-                    className="rounded-lg border p-4"
+                    key={department.id}
+                    className="min-w-0 rounded-lg border p-5"
                   >
                     <p className="font-medium">
-                      {d.name}
+                      {department.name}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {d.slug}
+
+                    <p className="mt-1 break-all text-xs text-muted-foreground">
+                      {department.slug}
                     </p>
+
                     <p className="mt-3 text-sm text-muted-foreground">
-                      {d.description}
+                      {department.description ||
+                        "Chưa có mô tả"}
                     </p>
-                    <p className="mt-3 text-xs">
+
+                    <p className="mt-4 text-xs">
                       {
                         agents.filter(
-                          (a) =>
-                            a.departmentId ===
-                            d.id,
+                          (agent) =>
+                            agent.departmentId ===
+                            department.id,
                         ).length
                       }{" "}
-                      {t.agents}
+                      nhân viên
                     </p>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="p-12 text-center text-sm text-muted-foreground">
-                {t.emptyDepartments}
+                Chưa có phòng ban.
               </div>
             )
-          ) : templates.length ? (
-            <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
-              {templates.map((template) => (
-                <div
-                  key={template.id}
-                  className="flex flex-col rounded-lg border p-4"
-                >
-                  <p className="font-medium">
-                    {template.name}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {template.category}
-                    {" · v"}
-                    {template.version}
-                  </p>
-                  <p className="my-4 flex-1 text-sm text-muted-foreground">
-                    {template.description}
-                  </p>
-                  <Button
-                    disabled={busy}
-                    className={primary}
-                    onClick={() =>
-                      void createFromTemplate(
-                        template,
-                      )
-                    }
+          ) : filteredTemplates.length > 0 ? (
+            <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredTemplates.map((template) => {
+                const isGlobal =
+                  template.organizationId === null;
+
+                const usedCount = agents.filter(
+                  (agent) =>
+                    agent.templateId === template.id,
+                ).length;
+
+                return (
+                  <div
+                    key={template.id}
+                    className="flex min-w-0 flex-col gap-4 rounded-xl border p-5"
                   >
-                    {t.createFromTemplate}
-                  </Button>
-                </div>
-              ))}
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex size-10 items-center justify-center rounded-lg border bg-muted/30">
+                        <Layers3 className="size-5" />
+                      </div>
+
+                      <Badge
+                        variant="outline"
+                        className="text-foreground"
+                      >
+                        {isGlobal
+                          ? "Mẫu hệ thống"
+                          : "Mẫu của tổ chức"}
+                      </Badge>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold">
+                        {template.name}
+                      </h3>
+
+                      <p className="mt-1 break-all text-xs text-muted-foreground">
+                        {template.slug}
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="secondary">
+                          {categories[template.category]}
+                        </Badge>
+
+                        <Badge variant="outline">
+                          v{template.version}
+                        </Badge>
+
+                        {template.isPublished && (
+                          <Badge variant="outline">
+                            Đã xuất bản
+                          </Badge>
+                        )}
+                      </div>
+
+                      <p className="mt-4 text-sm text-muted-foreground">
+                        {template.description ||
+                          "Chưa có mô tả nhiệm vụ."}
+                      </p>
+
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        {usedCount} nhân viên đang sử dụng
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 border-t pt-4">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className={`${primary} flex-1`}
+                        onClick={() =>
+                          openTemplateAgent(template)
+                        }
+                      >
+                        <CirclePlus className="size-4" />
+                        Tạo nhân viên
+                      </Button>
+
+                      {!isGlobal && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Sửa mẫu ${template.name}`}
+                            onClick={() => {
+                              setEditingTemplate(template);
+                              setTemplateDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            disabled={busy || usedCount > 0}
+                            aria-label={`Xóa mẫu ${template.name}`}
+                            title={
+                              usedCount > 0
+                                ? "Mẫu đang được nhân viên sử dụng"
+                                : "Xóa mẫu"
+                            }
+                            onClick={() =>
+                              setDeleteTemplateTarget(
+                                template,
+                              )
+                            }
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <div className="p-12 text-center text-sm text-muted-foreground">
-              {t.emptyTemplates}
+            <div className="space-y-3 p-12 text-center">
+              <Layers3 className="mx-auto size-9 text-muted-foreground" />
+
+              <p className="text-sm text-muted-foreground">
+                {templates.length === 0
+                  ? "Chưa có mẫu nhân viên AI."
+                  : "Không tìm thấy mẫu phù hợp."}
+              </p>
+
+              {templates.length === 0 && (
+                <Button
+                  type="button"
+                  className={primary}
+                  onClick={openCreateTemplate}
+                >
+                  <CirclePlus className="size-4" />
+                  Tạo mẫu đầu tiên
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
 
       <AgentFormDialog
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
+        open={agentDialogOpen}
+        onOpenChange={setAgentDialogOpen}
         agent={editingAgent}
         departments={departments}
         onSaved={refresh}
       />
 
+      <TemplateFormDialog
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        template={editingTemplate}
+        onSaved={refresh}
+      />
+
+      <CreateAgentFromTemplateDialog
+        open={createFromTemplateOpen}
+        onOpenChange={setCreateFromTemplateOpen}
+        template={selectedTemplate}
+        departments={departments}
+        onCreated={async () => {
+          await refresh();
+          switchTab("agents");
+        }}
+      />
+
       <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={(v) => {
-          if (!v && !busy) {
-            setDeleteTarget(null);
+        open={deleteAgentTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setDeleteAgentTarget(null);
           }
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t.deleteTitle}
+              Xóa nhân viên AI?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget?.name}
-              {" — "}
-              {t.deleteDescription}
+              Bạn có chắc muốn xóa{" "}
+              {deleteAgentTarget?.name}? Hành động này
+              không thể hoàn tác.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel
-              disabled={busy}
-            >
-              {t.cancel}
+            <AlertDialogCancel disabled={busy}>
+              Hủy
             </AlertDialogCancel>
+
             <AlertDialogAction
               disabled={busy}
               className={primary}
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={(event) => {
+                event.preventDefault();
                 void removeAgent();
               }}
             >
               {busy && (
                 <Loader2 className="size-4 animate-spin" />
               )}
-              {t.delete}
+              Xác nhận xóa
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </main>
+
+      <AlertDialog
+        open={deleteTemplateTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setDeleteTemplateTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Xóa mẫu nhân viên?
+            </AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Bạn có chắc muốn xóa mẫu{" "}
+              {deleteTemplateTarget?.name}? Mẫu đang
+              được nhân viên sử dụng sẽ không thể xóa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>
+              Hủy
+            </AlertDialogCancel>
+
+            <AlertDialogAction
+              disabled={busy}
+              className={primary}
+              onClick={(event) => {
+                event.preventDefault();
+                void removeTemplate();
+              }}
+            >
+              {busy && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
+              Xác nhận xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

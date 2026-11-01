@@ -87,6 +87,19 @@ export interface UpdateAgentInput {
   enabledTools?: string[];
 }
 
+export interface CreateAgentTemplateInput {
+  name: string;
+  slug: string;
+  category?: AgentCategory;
+  description?: string;
+  systemPrompt: string;
+  version?: string;
+  isPublished?: boolean;
+}
+
+export type UpdateAgentTemplateInput =
+  Partial<CreateAgentTemplateInput>;
+
 export interface CreateAgentFromTemplateInput {
   name?: string;
   departmentId?: string;
@@ -150,6 +163,39 @@ export const workforceApi = {
 
   listTemplates() {
     return apiFetch<AgentTemplate[]>("/agent-templates");
+  },
+
+  getTemplate(id: string) {
+    return apiFetch<AgentTemplate>(
+      `/agent-templates/${encodeURIComponent(id)}`,
+    );
+  },
+
+  createTemplate(input: CreateAgentTemplateInput) {
+    return apiFetch<AgentTemplate>("/agent-templates", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  updateTemplate(
+    id: string,
+    input: UpdateAgentTemplateInput,
+  ) {
+    return apiFetch<AgentTemplate>(
+      `/agent-templates/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+
+  deleteTemplate(id: string) {
+    return apiFetch<{ success: boolean; id: string }>(
+      `/agent-templates/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
   },
 
   createAgentFromTemplate(

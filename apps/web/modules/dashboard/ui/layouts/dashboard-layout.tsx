@@ -1,14 +1,19 @@
-import { AuthGuard } from "@/modules/auth/ui/components/auth-guard"
-import { OrganizationGuard } from "@/modules/auth/ui/components/organization-guard"
+
+import { AuthGuard } from "@/modules/auth/ui/components/auth-guard";
+import { OrganizationGuard } from "@/modules/auth/ui/components/organization-guard";
 import { DashboardSidebar } from "@/modules/dashboard/ui/components/dashboard-sidebar";
 import { SidebarProvider } from "@workspace/ui/components/sidebar";
 import { Provider } from "jotai";
 import { cookies } from "next/headers";
 
-export const DashboardLayout = async ({ children }: { children: React.ReactNode }) => {
+export const DashboardLayout = async ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const cookieStore = await cookies();
-  // Using SIDEBAR_COOKIE_NAME from sidebar component does not work due to monorepo and SSR
-  const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
+  const defaultOpen =
+    cookieStore.get("sidebar_state")?.value === "true";
 
   return (
     <AuthGuard>
@@ -16,7 +21,8 @@ export const DashboardLayout = async ({ children }: { children: React.ReactNode 
         <Provider>
           <SidebarProvider defaultOpen={defaultOpen}>
             <DashboardSidebar />
-            <main className="flex flex-1 flex-col">
+
+            <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
               {children}
             </main>
           </SidebarProvider>
