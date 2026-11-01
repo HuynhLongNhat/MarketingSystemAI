@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from "@nestjs/common";
 import {
   aiModelDefaults,
@@ -6,7 +5,7 @@ import {
   db,
   knowledgeEntries,
 } from "@workspace/db/node";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 
 import { decryptCredential } from "../ai-credentials/credential-crypto.js";
 import { PROVIDER_REGISTRY } from "../ai-providers/provider-registry.js";
@@ -15,16 +14,11 @@ import {
   resolveCustomerSupportAgent,
   type CustomerSupportAgentConfig,
 } from "./customer-support-agent.js";
+import { selectKnowledge } from "./knowledge-ranking.js";
 
 type ChatMessage = {
   role: string;
   content: string;
-};
-
-type KnowledgeItem = {
-  question: string;
-  answer: string;
-  category: string | null;
 };
 
 type ChatCompletionResponse = {
@@ -35,10 +29,15 @@ type ChatCompletionResponse = {
   }>;
 };
 
+export type RuntimeSource = "agent" | "default" | "legacy";
+
 type RuntimeConfig = {
   endpoint: string;
   apiKey: string;
   modelId: string;
+  provider: string;
+  connectionName: string | null;
+  source: RuntimeSource;
 };
 
 type ModelSelection = {
@@ -46,11 +45,55 @@ type ModelSelection = {
   modelId: string;
 };
 
-const MAX_KNOWLEDGE_ITEMS = 20;
-const MAX_KNOWLEDGE_CHARACTERS = 10000;
+export type AiFailureCode =
+  | "no_user_message"
+  | "agent_ambiguous"
+  | "not_configured"
+  | "provider_error"
+  | "timeout"
+  | "empty_response";
+
+export type AiGenerationMeta = {
+  agentName: string | null;
+  provider: string | null;
+  modelId: string;
+  source: RuntimeSource;
+  knowledgeMatched: number;
+  latencyMs: number;
+};
+
+export type AiGenerationResult =
+  | { ok: true; reply: string; meta: AiGenerationMeta }
+  | { ok: false; code: AiFailureCode };
+
+export type PlaygroundIssue =
+  | "multiple_active_agents"
+  | "no_active_agent"
+  | "model_not_configured";
+
+export type PlaygroundOverview = {
+  ready: boolean;
+  agent: { id: string; name: string } | null;
+  model: {
+    source: RuntimeSource;
+    provider: string | null;
+    connectionName: string | null;
+    modelId: string;
+  } | null;
+  knowledgeCount: number;
+  issues: PlaygroundIssue[];
+};
+
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_REPLY_LENGTH = 5000;
 const AI_TIMEOUT_MS = 20000;
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
 
 @Injectable()
 export class PublicWidgetAiService {
@@ -58,62 +101,15 @@ export class PublicWidgetAiService {
     PublicWidgetAiService.name,
   );
 
-  private normalizeText(value: string): string {
-    return value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/đ/g, "d")
-      .replace(/Đ/g, "D")
-      .toLowerCase();
-  }
-
-  private getKeywords(value: string): Set<string> {
-    return new Set(
-      this.normalizeText(value)
-        .split(/[^a-z0-9]+/)
-        .filter((word) => word.length >= 3),
-    );
-  }
-
-  private scoreKnowledge(
-    item: KnowledgeItem,
-    message: string,
-  ): number {
-    const keywords = this.getKeywords(message);
-
-    if (keywords.size === 0) {
-      return 0;
-    }
-
-    const questionWords = this.getKeywords(item.question);
-    const answerWords = this.getKeywords(item.answer);
-    const categoryWords = this.getKeywords(
-      item.category ?? "",
-    );
-
-    let score = 0;
-
-    for (const keyword of keywords) {
-      if (questionWords.has(keyword)) {
-        score += 3;
-      }
-
-      if (categoryWords.has(keyword)) {
-        score += 2;
-      }
-
-      if (answerWords.has(keyword)) {
-        score += 1;
-      }
-    }
-
-    return score;
-  }
-
+  /**
+   * Chỉ lấy FAQ của đúng Organization, sau đó lọc theo
+   * độ liên quan (xem knowledge-ranking.ts).
+   * Không có FAQ liên quan thì trả chuỗi rỗng.
+   */
   private async getKnowledgeContext(
     organizationId: string,
     latestQuestion: string,
-  ): Promise<string> {
+  ): Promise<{ context: string; count: number }> {
     try {
       const entries = await db
         .select({
@@ -134,54 +130,52 @@ export class PublicWidgetAiService {
         .limit(100);
 
       if (entries.length === 0) {
-        return "";
+        return { context: "", count: 0 };
       }
 
-      const ranked = entries
-        .map((entry, index) => ({
-          entry,
-          index,
-          score: this.scoreKnowledge(
-            entry,
-            latestQuestion,
-          ),
-        }))
-        .sort(
-          (a, b) =>
-            b.score - a.score ||
-            a.index - b.index,
-        )
-        .slice(0, MAX_KNOWLEDGE_ITEMS);
+      const selected = selectKnowledge(
+        entries,
+        latestQuestion,
+      );
 
-      const selected: KnowledgeItem[] = [];
-
-      for (const { entry } of ranked) {
-        const candidate: KnowledgeItem = {
-          question: entry.question.slice(0, 500),
-          answer: entry.answer.slice(0, 2000),
-          category:
-            entry.category?.slice(0, 100) ?? null,
-        };
-
-        const next = [...selected, candidate];
-
-        if (
-          JSON.stringify(next).length >
-          MAX_KNOWLEDGE_CHARACTERS
-        ) {
-          break;
-        }
-
-        selected.push(candidate);
+      if (selected.length === 0) {
+        return { context: "", count: 0 };
       }
 
-      return JSON.stringify(selected);
+      return {
+        context: JSON.stringify(selected),
+        count: selected.length,
+      };
     } catch {
       this.logger.error(
         "Could not load customer support knowledge context",
       );
 
-      return "";
+      return { context: "", count: 0 };
+    }
+  }
+
+  private async countKnowledge(
+    organizationId: string,
+  ): Promise<number> {
+    try {
+      const [row] = await db
+        .select({ value: count() })
+        .from(knowledgeEntries)
+        .where(
+          eq(
+            knowledgeEntries.organizationId,
+            organizationId,
+          ),
+        );
+
+      return Number(row?.value ?? 0);
+    } catch {
+      this.logger.error(
+        "Could not count knowledge entries",
+      );
+
+      return 0;
     }
   }
 
@@ -221,6 +215,7 @@ export class PublicWidgetAiService {
   private async resolveConnectionRuntime(
     organizationId: string,
     selection: ModelSelection,
+    source: RuntimeSource,
   ): Promise<RuntimeConfig | null> {
     const [connection] = await db
       .select()
@@ -299,6 +294,9 @@ export class PublicWidgetAiService {
         "/chat/completions",
       apiKey,
       modelId,
+      provider: connection.provider,
+      connectionName: connection.name,
+      source,
     };
   }
 
@@ -324,6 +322,9 @@ export class PublicWidgetAiService {
         process.env.OPENROUTER_SUPPORT_MODEL ||
         process.env.OPENROUTER_ENHANCEMENT_MODEL ||
         "nvidia/nemotron-3.5-super-vl:free",
+      provider: "openrouter",
+      connectionName: null,
+      source: "legacy",
     };
   }
 
@@ -366,6 +367,7 @@ export class PublicWidgetAiService {
           connectionId: agent.connectionId,
           modelId: agent.modelId,
         },
+        "agent",
       );
     }
 
@@ -376,6 +378,7 @@ export class PublicWidgetAiService {
       return this.resolveConnectionRuntime(
         organizationId,
         modelDefault,
+        "default",
       );
     }
 
@@ -430,16 +433,26 @@ export class PublicWidgetAiService {
       "Không cần nhắc đến cấu trúc JSON.",
       "",
       "DỮ LIỆU FAQ (JSON):",
-      knowledgeContext || "Chưa có dữ liệu FAQ khả dụng.",
+      knowledgeContext ||
+        "Không có mục FAQ nào liên quan đến câu hỏi này. " +
+          "Nếu câu hỏi cần thông tin cụ thể của doanh nghiệp, " +
+          "hãy nói rõ là chưa có thông tin " +
+          "và đề nghị hỗ trợ từ nhân viên thật.",
     ];
 
     return instructions.join("\n");
   }
 
-  async generateReply(
+  /**
+   * Lõi sinh phản hồi, dùng chung cho chatbot thật
+   * và Playground. Không ghi gì vào database.
+   */
+  private async run(
     history: ChatMessage[],
     organizationId: string,
-  ): Promise<string | null> {
+  ): Promise<AiGenerationResult> {
+    const startedAt = Date.now();
+
     const messages = history
       .filter(
         (item) =>
@@ -458,7 +471,7 @@ export class PublicWidgetAiService {
       .find((item) => item.role === "user");
 
     if (!latestUserMessage) {
-      return null;
+      return { ok: false, code: "no_user_message" };
     }
 
     let agent: CustomerSupportAgentConfig | null = null;
@@ -474,7 +487,7 @@ export class PublicWidgetAiService {
         this.logger.warn(
           "Multiple active customer support Agents found in one organization",
         );
-        return null;
+        return { ok: false, code: "agent_ambiguous" };
       }
 
       if (resolution.kind === "selected") {
@@ -489,21 +502,21 @@ export class PublicWidgetAiService {
       this.logger.error(
         "Could not resolve customer support Agent configuration",
       );
-      return null;
+      return { ok: false, code: "not_configured" };
     }
 
     if (!runtime) {
-      return null;
+      return { ok: false, code: "not_configured" };
     }
 
-    const knowledgeContext =
+    const knowledge =
       await this.getKnowledgeContext(
         organizationId,
         latestUserMessage.content,
       );
 
     const systemPrompt = this.buildSystemPrompt(
-      knowledgeContext,
+      knowledge.context,
       agent,
     );
 
@@ -542,7 +555,7 @@ export class PublicWidgetAiService {
           `Customer support AI request failed: HTTP ${response.status}`,
         );
         await response.body?.cancel();
-        return null;
+        return { ok: false, code: "provider_error" };
       }
 
       const data =
@@ -555,16 +568,119 @@ export class PublicWidgetAiService {
         this.logger.warn(
           "Customer support AI returned an empty response",
         );
-        return null;
+        return { ok: false, code: "empty_response" };
       }
 
-      return reply.slice(0, MAX_REPLY_LENGTH);
-    } catch {
+      return {
+        ok: true,
+        reply: reply.slice(0, MAX_REPLY_LENGTH),
+        meta: {
+          agentName: agent?.name ?? null,
+          provider: runtime.provider,
+          modelId: runtime.modelId,
+          source: runtime.source,
+          knowledgeMatched: knowledge.count,
+          latencyMs: Date.now() - startedAt,
+        },
+      };
+    } catch (error) {
       // Không log prompt, request hoặc API key.
       this.logger.error(
         "Customer support AI generation failed",
       );
-      return null;
+
+      return {
+        ok: false,
+        code: isTimeoutError(error)
+          ? "timeout"
+          : "provider_error",
+      };
     }
+  }
+
+  async generateReply(
+    history: ChatMessage[],
+    organizationId: string,
+  ): Promise<string | null> {
+    const result = await this.run(
+      history,
+      organizationId,
+    );
+
+    return result.ok ? result.reply : null;
+  }
+
+  /** Dùng cho Playground: trả kết quả có mã lỗi và metadata. */
+  generatePlaygroundReply(
+    history: ChatMessage[],
+    organizationId: string,
+  ): Promise<AiGenerationResult> {
+    return this.run(history, organizationId);
+  }
+
+  /**
+   * Tóm tắt cấu hình CSKH hiện tại của Organization.
+   * Chỉ trả thông tin an toàn, không có API key.
+   */
+  async getPlaygroundOverview(
+    organizationId: string,
+  ): Promise<PlaygroundOverview> {
+    const issues: PlaygroundIssue[] = [];
+
+    let agent: CustomerSupportAgentConfig | null = null;
+    let runtime: RuntimeConfig | null = null;
+
+    try {
+      const resolution =
+        await resolveCustomerSupportAgent(
+          organizationId,
+        );
+
+      if (resolution.kind === "ambiguous") {
+        issues.push("multiple_active_agents");
+      } else {
+        if (resolution.kind === "selected") {
+          agent = resolution.agent;
+        } else {
+          issues.push("no_active_agent");
+        }
+
+        runtime = await this.resolveRuntime(
+          organizationId,
+          agent,
+        );
+
+        if (!runtime) {
+          issues.push("model_not_configured");
+        }
+      }
+    } catch {
+      this.logger.error(
+        "Could not build playground overview",
+      );
+      issues.push("model_not_configured");
+    }
+
+    const knowledgeCount =
+      await this.countKnowledge(organizationId);
+
+    return {
+      ready:
+        !issues.includes("multiple_active_agents") &&
+        !issues.includes("model_not_configured"),
+      agent: agent
+        ? { id: agent.id, name: agent.name }
+        : null,
+      model: runtime
+        ? {
+            source: runtime.source,
+            provider: runtime.provider,
+            connectionName: runtime.connectionName,
+            modelId: runtime.modelId,
+          }
+        : null,
+      knowledgeCount,
+      issues,
+    };
   }
 }

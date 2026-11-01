@@ -7,6 +7,7 @@ import {
   Bot,
   Building2,
   CreditCard,
+  FlaskConical,
   Headset,
   Inbox,
   LayoutDashboard,
@@ -98,6 +99,11 @@ export const DashboardSidebar = () => {
           title: t.conversations,
           url: "/conversations",
           icon: Inbox,
+        },
+        {
+          title: "Thử nghiệm Chatbot",
+          url: "/playground",
+          icon: FlaskConical,
         },
         {
           title: t.knowledge,

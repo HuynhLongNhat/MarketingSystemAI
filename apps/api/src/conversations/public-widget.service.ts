@@ -19,12 +19,22 @@ import {
 import { and, desc, eq, lt } from "drizzle-orm";
 
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
+import { decideReplyAction, ReplyDecision, safeErrorSummary } from "./reply-guard.js";
 
 type ContactDetails = {
   name?: string;
   email?: string;
   phone?: string;
 };
+
+const AI_FALLBACK_MESSAGE =
+  "Xin lỗi, hệ thống trả lời tự động đang tạm gián đoạn. " +
+  "Mình đã chuyển cuộc trò chuyện đến nhân viên hỗ trợ. " +
+  "Bạn có thể tiếp tục gửi thông tin tại đây.";
+
+const HUMAN_HANDOFF_MESSAGE =
+  "Mình đã chuyển yêu cầu của bạn đến nhân viên hỗ trợ. " +
+  "Nhân viên sẽ phản hồi khi có thể. Bạn có thể tiếp tục gửi thông tin tại đây.";
 
 @Injectable()
 export class PublicWidgetService {
@@ -280,15 +290,21 @@ export class PublicWidgetService {
     };
   }
 
+  /**
+   * Tạo phản hồi AI cho tin nhắn `triggerMessageId`.
+   *
+   * Chống trùng lặp và sai thứ tự:
+   * - Chỉ lượt AI của tin khách MỚI NHẤT được ghi kết quả.
+   *   Nếu có tin mới hơn, kết quả cũ bị bỏ.
+   * - Kiểm tra lại trạng thái sau khi khóa hội thoại, nên
+   *   nhân viên tiếp quản hoặc đóng hội thoại khi AI đang
+   *   chạy thì kết quả AI không được ghi.
+   */
   private async replyWithAi(
     organizationId: string,
     conversationId: string,
+    triggerMessageId: string,
   ): Promise<void> {
-    const fallbackMessage =
-      "Xin lỗi, hệ thống trả lời tự động đang tạm gián đoạn. " +
-      "Mình đã chuyển cuộc trò chuyện đến nhân viên hỗ trợ. " +
-      "Bạn có thể tiếp tục gửi thông tin tại đây.";
-
     try {
       // 1. Chỉ gọi AI khi hội thoại đang được AI xử lý.
       const [beforeGeneration] = await db
@@ -308,7 +324,28 @@ export class PublicWidgetService {
         return;
       }
 
-      // 2. Đọc lịch sử trong đúng Organization.
+      // 2. Nếu đã có tin khách mới hơn thì không tốn chi phí gọi AI.
+      const [latestBefore] = await db
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.organizationId, organizationId),
+            eq(conversationMessages.conversationId, conversationId),
+            eq(conversationMessages.role, "user"),
+          ),
+        )
+        .orderBy(
+          desc(conversationMessages.createdAt),
+          desc(conversationMessages.id),
+        )
+        .limit(1);
+
+      if (latestBefore?.id !== triggerMessageId) {
+        return;
+      }
+
+      // 3. Đọc lịch sử trong đúng Organization.
       const history = await db
         .select({
           role: conversationMessages.role,
@@ -327,17 +364,16 @@ export class PublicWidgetService {
         )
         .limit(12);
 
-      // 3. Gọi AI, giữ nguyên Knowledge Base Injection.
+      // 4. Gọi AI (Knowledge Base được nạp trong aiService).
       const reply = await this.aiService.generateReply(
         history.reverse(),
         organizationId,
       );
 
-      // 4. Ghi kết quả trong transaction.
-      // Lock hội thoại để tránh AI và nhân viên cùng
-      // thay đổi trạng thái trong lúc lưu phản hồi.
-      await db.transaction(async (tx) => {
-        const [currentConversation] = await tx
+      // 5. Ghi kết quả trong transaction, khóa hội thoại để
+      //    tránh AI và nhân viên cùng thay đổi trạng thái.
+      const decision: ReplyDecision = await db.transaction(async (tx) => {
+        const [current] = await tx
           .select({
             status: conversations.status,
           })
@@ -351,14 +387,30 @@ export class PublicWidgetService {
           .for("update")
           .limit(1);
 
-        // Nếu nhân viên đã tiếp quản hoặc kết thúc,
-        // không gửi thêm phản hồi tự động.
-        if (currentConversation?.status !== "unresolved") {
-          return;
-        }
+        const [latestUser] = await tx
+          .select({ id: conversationMessages.id })
+          .from(conversationMessages)
+          .where(
+            and(
+              eq(conversationMessages.organizationId, organizationId),
+              eq(conversationMessages.conversationId, conversationId),
+              eq(conversationMessages.role, "user"),
+            ),
+          )
+          .orderBy(
+            desc(conversationMessages.createdAt),
+            desc(conversationMessages.id),
+          )
+          .limit(1);
 
-        if (reply?.trim()) {
-          // AI thành công: lưu phản hồi như cũ.
+        const action = decideReplyAction({
+          status: current?.status,
+          latestUserMessageId: latestUser?.id,
+          triggerMessageId,
+          reply,
+        });
+
+        if (action === "save_reply" && reply) {
           await tx.insert(conversationMessages).values({
             id: randomUUID(),
             organizationId,
@@ -366,44 +418,51 @@ export class PublicWidgetService {
             role: "assistant",
             content: reply.trim(),
           });
-
-          return;
         }
 
-        // 5. AI lỗi: chuyển sang nhân viên.
-        await tx
-          .update(conversations)
-          .set({
-            status: "escalated",
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(conversations.id, conversationId),
-              eq(conversations.organizationId, organizationId),
-              eq(conversations.status, "unresolved"),
-            ),
-          );
+        if (action === "handoff_fallback") {
+          // AI lỗi: chuyển sang nhân viên.
+          await tx
+            .update(conversations)
+            .set({
+              status: "escalated",
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(conversations.id, conversationId),
+                eq(conversations.organizationId, organizationId),
+                eq(conversations.status, "unresolved"),
+              ),
+            );
 
-        // 6. Thông báo rõ ràng cho khách.
-        await tx.insert(conversationMessages).values({
-          id: randomUUID(),
-          organizationId,
-          conversationId,
-          role: "assistant",
-          content: fallbackMessage,
-        });
+          // Thông báo rõ ràng cho khách.
+          await tx.insert(conversationMessages).values({
+            id: randomUUID(),
+            organizationId,
+            conversationId,
+            role: "assistant",
+            content: AI_FALLBACK_MESSAGE,
+          });
+        }
+
+        return action;
       });
 
-      if (!reply?.trim()) {
+      if (decision === "handoff_fallback") {
         this.logger.warn(
           `AI fallback activated for conversation ${conversationId}`,
         );
+      } else if (decision === "skip_superseded") {
+        this.logger.debug(
+          `Discarded superseded AI result for conversation ${conversationId}`,
+        );
       }
     } catch (error) {
+      // Không log error.message/stack: lỗi DB có thể chứa
+      // câu SQL kèm nội dung tin nhắn của khách.
       this.logger.error(
-        "Could not process AI reply or fallback",
-        error instanceof Error ? (error.stack ?? error.message) : String(error),
+        `Could not process AI reply or fallback: ${safeErrorSummary(error)}`,
       );
     }
   }
@@ -437,41 +496,53 @@ export class PublicWidgetService {
     return requests.some((pattern) => pattern.test(normalized));
   }
 
+  /**
+   * Chuyển hội thoại sang nhân viên. Cập nhật trạng thái và
+   * lưu thông báo trong cùng một transaction.
+   */
   private async handoffToHuman(
     organizationId: string,
     conversationId: string,
   ): Promise<boolean> {
-    const [updated] = await db
-      .update(conversations)
-      .set({
-        status: "escalated",
-      })
-      .where(
-        and(
-          eq(conversations.id, conversationId),
-          eq(conversations.organizationId, organizationId),
-          eq(conversations.status, "unresolved"),
-        ),
-      )
-      .returning({
-        id: conversations.id,
-      });
+    try {
+      return await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(conversations)
+          .set({
+            status: "escalated",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.organizationId, organizationId),
+              eq(conversations.status, "unresolved"),
+            ),
+          )
+          .returning({
+            id: conversations.id,
+          });
 
-    if (!updated) {
+        if (!updated) {
+          return false;
+        }
+
+        await tx.insert(conversationMessages).values({
+          id: randomUUID(),
+          organizationId,
+          conversationId,
+          role: "assistant",
+          content: HUMAN_HANDOFF_MESSAGE,
+        });
+
+        return true;
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not hand off conversation to human: ${safeErrorSummary(error)}`,
+      );
       return false;
     }
-
-    await db.insert(conversationMessages).values({
-      id: randomUUID(),
-      organizationId,
-      conversationId,
-      role: "assistant",
-      content:
-        "Mình đã chuyển yêu cầu của bạn đến nhân viên hỗ trợ. " +
-        "Nhân viên sẽ phản hồi khi có thể. Bạn có thể tiếp tục gửi thông tin tại đây.",
-    });
-
-    return true;
   }
 
   async sendMessage(
@@ -494,6 +565,7 @@ export class PublicWidgetService {
       eq(conversationMessages.clientMessageId, clientMessageId),
     );
 
+    // Request gửi lại do mạng chậm: trả lại tin đã lưu, không xử lý lần hai.
     const [existing] = await db
       .select()
       .from(conversationMessages)
@@ -510,44 +582,91 @@ export class PublicWidgetService {
       return existing;
     }
 
-    if (conversation.status === "resolved") {
+    // Khóa hội thoại, kiểm tra trạng thái và lưu tin trong một
+    // transaction: không ghi tin vào hội thoại vừa bị đóng, và
+    // các tin gửi đồng thời được xếp hàng theo thứ tự.
+    const result = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({
+          status: conversations.status,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.organizationId, conversation.organizationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+
+      if (!locked) {
+        return { kind: "not_found" as const };
+      }
+
+      if (locked.status === "resolved") {
+        return { kind: "resolved" as const };
+      }
+
+      const [row] = await tx
+        .insert(conversationMessages)
+        .values({
+          id: randomUUID(),
+          organizationId: conversation.organizationId,
+          conversationId,
+          role: "user",
+          content: trimmed,
+          clientMessageId,
+        })
+        .onConflictDoNothing({
+          target: [
+            conversationMessages.organizationId,
+            conversationMessages.conversationId,
+            conversationMessages.clientMessageId,
+          ],
+        })
+        .returning();
+
+      if (!row) {
+        return { kind: "duplicate" as const };
+      }
+
+      return {
+        kind: "inserted" as const,
+        message: row,
+        status: locked.status,
+      };
+    });
+
+    if (result.kind === "not_found") {
+      throw new NotFoundException("Conversation not found");
+    }
+
+    if (result.kind === "resolved") {
       throw new ForbiddenException("Conversation resolved");
     }
 
-    const [inserted] = await db
-      .insert(conversationMessages)
-      .values({
-        id: randomUUID(),
-        organizationId: conversation.organizationId,
-        conversationId,
-        role: "user",
-        content: trimmed,
-        clientMessageId,
-      })
-      .onConflictDoNothing({
-        target: [
-          conversationMessages.organizationId,
-          conversationMessages.conversationId,
-          conversationMessages.clientMessageId,
-        ],
-      })
-      .returning();
-
-    if (inserted) {
-      if (conversation.status === "unresolved") {
+    if (result.kind === "inserted") {
+      // Dùng trạng thái đã khóa, không dùng trạng thái đọc từ trước.
+      if (result.status === "unresolved") {
         if (this.isHumanSupportRequest(trimmed)) {
           await this.handoffToHuman(
             conversation.organizationId,
             conversationId,
           );
         } else {
-          await this.replyWithAi(conversation.organizationId, conversationId);
+          await this.replyWithAi(
+            conversation.organizationId,
+            conversationId,
+            result.message.id,
+          );
         }
       }
 
-      return inserted;
+      return result.message;
     }
 
+    // Request trùng đến đồng thời: tin đã được request khác lưu.
     const [saved] = await db
       .select()
       .from(conversationMessages)

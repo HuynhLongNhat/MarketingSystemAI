@@ -1,4 +1,3 @@
-
 import { Module } from "@nestjs/common";
 
 import { AuthGuard } from "../auth/auth.guard.js";
@@ -14,6 +13,9 @@ import { MessagesService } from "./messages.service.js";
 
 import { MessageEnhancementService } from "./message-enhancement.service.js";
 
+import { PlaygroundController } from "./playground.controller.js";
+import { PlaygroundService } from "./playground.service.js";
+
 import { PublicWidgetController } from "./public-widget.controller.js";
 import { PublicWidgetService } from "./public-widget.service.js";
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
@@ -23,6 +25,7 @@ import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js"
   controllers: [
     ConversationsController,
     MessagesController,
+    PlaygroundController,
     PublicWidgetController,
   ],
   providers: [
@@ -31,6 +34,7 @@ import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js"
     MessagesRepository,
     MessagesService,
     MessageEnhancementService,
+    PlaygroundService,
     PublicWidgetService,
     PublicWidgetAiService,
     PublicWidgetRateLimitGuard,
