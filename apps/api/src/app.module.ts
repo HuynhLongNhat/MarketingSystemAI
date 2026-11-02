@@ -13,6 +13,7 @@ import { AiProvidersModule } from "./ai-providers/ai-providers.module.js";
 import { DepartmentsModule } from "./departments/departments.module.js";
 import { AgentsModule } from "./agents/agents.module.js";
 import { AgentTemplatesModule } from "./agent-templates/agent-templates.module.js";
+import { OfficeModule } from "./office/office.module.js";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AgentTemplatesModule } from "./agent-templates/agent-templates.module.j
     DepartmentsModule,
     AgentsModule,
     AgentTemplatesModule,
+    OfficeModule,
   ],
   controllers: [HealthController],
 })
