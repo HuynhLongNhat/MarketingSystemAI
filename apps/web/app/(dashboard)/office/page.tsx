@@ -30,13 +30,16 @@ import {
   type AiAgent,
   type Department,
 } from "@/lib/workforce-api";
+
 import {
   officeApi,
   type OfficeDeskAssignment,
 } from "@/lib/office-api";
+
 import { ApiError } from "@/lib/api-client";
 
 import { OFFICE_LAYOUT } from "@/modules/office/config/office-layout";
+
 import {
   isOfficeEligible,
   mapAgentsToOffice,
@@ -70,12 +73,15 @@ function errorMessage(error: unknown): string {
     if (error.status === 403) {
       return "Bạn không có quyền quản lý bàn làm việc.";
     }
+
     if (error.status === 409) {
       return "Bàn đã có Agent khác hoặc dữ liệu vừa thay đổi. Hãy làm mới.";
     }
+
     if (error.status === 400) {
       return "Agent hoặc bàn làm việc không hợp lệ.";
     }
+
     if (error.status === 404) {
       return "Không tìm thấy Agent trong tổ chức hiện tại.";
     }
@@ -88,6 +94,7 @@ function errorMessage(error: unknown): string {
 
 export default function OfficePage() {
   const mountRef = useRef<HTMLDivElement>(null);
+
   const controllerRef =
     useRef<OfficeSceneController | null>(null);
 
@@ -157,24 +164,33 @@ export default function OfficePage() {
 
   const loadData = useCallback(async () => {
     const requestId = ++requestIdRef.current;
+
     setLoadingData(true);
     setDataError(null);
 
     try {
-      const [nextAgents, nextDepartments, nextAssignments] =
-        await Promise.all([
-          workforceApi.listAgents(),
-          workforceApi.listDepartments(),
-          officeApi.listAssignments(),
-        ]);
+      const [
+        nextAgents,
+        nextDepartments,
+        nextAssignments,
+      ] = await Promise.all([
+        workforceApi.listAgents(),
+        workforceApi.listDepartments(),
+        officeApi.listAssignments(),
+      ]);
 
-      if (requestId !== requestIdRef.current) return;
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
 
       setAgents(nextAgents);
       setDepartments(nextDepartments);
       setSavedAssignments(nextAssignments);
     } catch (error) {
-      if (requestId !== requestIdRef.current) return;
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       setDataError(errorMessage(error));
     } finally {
       if (requestId === requestIdRef.current) {
@@ -193,6 +209,7 @@ export default function OfficePage() {
 
   useEffect(() => {
     const mount = mountRef.current;
+
     if (!mount) return;
 
     let cancelled = false;
@@ -280,6 +297,7 @@ export default function OfficePage() {
       );
 
       await loadData();
+
       setSelectedAgentId("");
       setActionMessage("Đã lưu vị trí bàn làm việc.");
     } catch (error) {
@@ -307,7 +325,9 @@ export default function OfficePage() {
 
     try {
       await officeApi.unassignDesk(selectedDeskId);
+
       await loadData();
+
       setActionMessage("Đã giải phóng bàn làm việc.");
     } catch (error) {
       setActionError(errorMessage(error));
@@ -335,29 +355,54 @@ export default function OfficePage() {
     : undefined;
 
   return (
-    <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-4 p-4 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Building2 className="size-4" />
-            AI COMPANY / OFFICE
+    <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-3 p-3 md:p-4">
+      {/* OFFICE HEADER & TOOLBAR */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Building2 className="size-5" />
           </div>
 
-          <h1 className="mt-1 text-2xl font-bold">
-            My AI Office{" "}
-            <span className="text-sm font-normal text-muted-foreground">
-              3D · Persistent Desks
-            </span>
-          </h1>
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight">
+              Văn phòng AI
+            </h1>
 
-          <p className="text-sm text-muted-foreground">
-            Chọn bàn để phân công nhân viên AI.
-            Vị trí được lưu trong database.
-          </p>
+            <p className="text-xs text-muted-foreground">
+              Không gian làm việc của đội ngũ nhân viên AI
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1.5 text-xs">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <span className="text-muted-foreground">
+              Nhân viên
+            </span>
+            <strong>{agents.length}</strong>
+          </div>
+
+          <div className="rounded-full border bg-background/70 px-3 py-1.5 text-xs">
+            <span className="text-muted-foreground">
+              Đã có bàn{" "}
+            </span>
+            <strong>
+              {mapping.assignments.length}/{DESKS.length}
+            </strong>
+          </div>
+
+          <div className="rounded-full border bg-background/70 px-3 py-1.5 text-xs">
+            <span className="text-muted-foreground">
+              Chưa có bàn{" "}
+            </span>
+            <strong>
+              {mapping.unassignedAgents.length}
+            </strong>
+          </div>
+
           <Button
+            size="sm"
             variant="outline"
             disabled={loadingData || saving}
             onClick={() => void loadData()}
@@ -370,36 +415,20 @@ export default function OfficePage() {
             Làm mới
           </Button>
 
-          <Button variant="outline" asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            asChild
+          >
             <Link href="/workforce?tab=agents">
               <Users className="mr-2 size-4" />
-              Quản lý nhân viên
+              Nhân viên
             </Link>
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-sm">
-        <div className="rounded-lg border bg-card px-4 py-2">
-          Nhân viên AI: <strong>{agents.length}</strong>
-        </div>
-
-        <div className="rounded-lg border bg-card px-4 py-2">
-          Phòng ban: <strong>{departments.length}</strong>
-        </div>
-
-        <div className="rounded-lg border bg-card px-4 py-2">
-          Có chỗ ngồi:{" "}
-          <strong>{mapping.assignments.length}</strong>
-          /{DESKS.length}
-        </div>
-
-        <div className="rounded-lg border bg-card px-4 py-2">
-          Chưa có bàn:{" "}
-          <strong>{mapping.unassignedAgents.length}</strong>
-        </div>
-      </div>
-
+      {/* DATA ERRORS */}
       {dataError && (
         <p
           role="alert"
@@ -418,6 +447,7 @@ export default function OfficePage() {
         </p>
       )}
 
+      {/* 3D OFFICE */}
       <div className="relative min-h-[560px] flex-1 overflow-hidden rounded-2xl border bg-slate-100">
         <div
           ref={mountRef}
@@ -430,6 +460,7 @@ export default function OfficePage() {
           </div>
         )}
 
+        {/* WORKSTATION LIST */}
         <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
           <div className="rounded-lg bg-white/90 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm">
             WORKSPACE · {mapping.assignments.length} Agent
@@ -501,6 +532,7 @@ export default function OfficePage() {
           )}
         </div>
 
+        {/* DESK DETAILS PANEL */}
         {selectedDesk && (
           <div className="absolute bottom-20 left-4 right-4 z-20 max-h-[70%] overflow-y-auto rounded-xl border bg-white/95 p-4 text-slate-800 shadow-xl backdrop-blur-sm sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:w-[330px]">
             <div className="flex items-start justify-between gap-3">
@@ -526,14 +558,20 @@ export default function OfficePage() {
 
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Mã bàn</span>
+                <span className="text-slate-500">
+                  Mã bàn
+                </span>
+
                 <span className="font-mono font-medium">
                   {selectedDesk.id}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Vị trí</span>
+                <span className="text-slate-500">
+                  Vị trí
+                </span>
+
                 <span className="font-mono text-xs">
                   X: {selectedDesk.position[0]},
                   Z: {selectedDesk.position[1]}
@@ -560,6 +598,7 @@ export default function OfficePage() {
                     <span className="text-slate-500">
                       Phòng ban
                     </span>
+
                     <span className="text-right font-medium">
                       {selectedAssignment.departmentName ??
                         "Chưa phân phòng ban"}
@@ -570,10 +609,13 @@ export default function OfficePage() {
                     <span className="text-slate-500">
                       Trạng thái
                     </span>
+
                     <span className="font-medium">
-                      {STATUS_LABELS[
-                        selectedAssignment.agent.status
-                      ]}
+                      {
+                        STATUS_LABELS[
+                          selectedAssignment.agent.status
+                        ]
+                      }
                     </span>
                   </div>
 
@@ -589,13 +631,16 @@ export default function OfficePage() {
                     disabled={saving || loadingData}
                     onClick={() => void unassignAgent()}
                   >
-                    {saving ? "Đang lưu..." : "Giải phóng bàn"}
+                    {saving
+                      ? "Đang lưu..."
+                      : "Giải phóng bàn"}
                   </Button>
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed bg-slate-50 p-3">
                   <div className="flex items-center gap-2">
                     <Info className="size-4 text-slate-500" />
+
                     <span className="font-semibold">
                       Bàn trống
                     </span>
@@ -621,7 +666,9 @@ export default function OfficePage() {
                     value={selectedAgentId}
                     disabled={saving || loadingData}
                     onChange={(event) =>
-                      setSelectedAgentId(event.target.value)
+                      setSelectedAgentId(
+                        event.target.value,
+                      )
                     }
                     className="h-10 w-full rounded-md border bg-white px-3 text-sm"
                   >
@@ -650,8 +697,10 @@ export default function OfficePage() {
                   {selectedAgentCurrentDesk && (
                     <p className="text-xs text-amber-700">
                       Agent sẽ được chuyển từ{" "}
-                      {deskLabel(selectedAgentCurrentDesk)}
-                      {" "}sang bàn này.
+                      {deskLabel(
+                        selectedAgentCurrentDesk,
+                      )}{" "}
+                      sang bàn này.
                     </p>
                   )}
 
@@ -703,6 +752,7 @@ export default function OfficePage() {
           </div>
         )}
 
+        {/* CAMERA CONTROLS */}
         <div className="absolute bottom-4 right-4 z-10 flex gap-2">
           <Button
             size="icon"
@@ -741,12 +791,6 @@ export default function OfficePage() {
           </Button>
         </div>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        Office V0.7 — Vị trí bàn được lưu trong PostgreSQL.
-        Trạng thái nhân vật phản ánh cấu hình Agent,
-        chưa phải trạng thái thực thi từ worker.
-      </p>
     </div>
   );
 }
