@@ -4,6 +4,10 @@ import type {
   Department,
 } from "@/lib/workforce-api";
 
+import type {
+  OfficeDeskAssignment,
+} from "@/lib/office-api";
+
 import { OFFICE_LAYOUT } from "./office-layout";
 
 import type {
@@ -33,31 +37,33 @@ const COLORS = [
   "#2dd4bf",
 ] as const;
 
-function isOfficeEligible(agent: AiAgent): boolean {
+export function isOfficeEligible(
+  agent: AiAgent,
+): boolean {
   return (
     agent.status === "active" ||
     agent.status === "paused"
   );
 }
 
-// Visual state only, not worker execution status.
+// Visual state, not worker execution state.
 export function mapAgentVisualStatus(
   agent: AiAgent,
 ): OfficeAgentStatus {
-  switch (agent.status) {
-    case "active":
-      return "idle";
-    case "paused":
-      return "offline";
-    default:
-      return "offline";
-  }
+  return agent.status === "active"
+    ? "idle"
+    : "offline";
 }
 
 export function mapAgentsToOffice(
   agents: readonly AiAgent[],
   departments: readonly Department[],
+  savedAssignments: readonly OfficeDeskAssignment[],
 ): OfficeAgentMapping {
+  const agentById = new Map(
+    agents.map((agent) => [agent.id, agent]),
+  );
+
   const departmentNames = new Map(
     departments.map((department) => [
       department.id,
@@ -65,28 +71,33 @@ export function mapAgentsToOffice(
     ]),
   );
 
-  // Draft and archived agents do not occupy desks.
-  const eligibleAgents = agents
-    .filter(isOfficeEligible)
-    .sort((a, b) => a.id.localeCompare(b.id));
+  const validDeskIds = new Set(
+    OFFICE_LAYOUT.desks.map((desk) => desk.id),
+  );
 
   const assignments: OfficeAgentAssignment[] = [];
   const characters: OfficeCharacterData[] = [];
+  const seatedAgentIds = new Set<string>();
+  const occupiedDeskIds = new Set<string>();
 
-  const seatedAgents = eligibleAgents.slice(
-    0,
-    OFFICE_LAYOUT.desks.length,
-  );
+  for (const saved of savedAssignments) {
+    if (!validDeskIds.has(saved.deskId)) continue;
+    if (occupiedDeskIds.has(saved.deskId)) continue;
+    if (seatedAgentIds.has(saved.agentId)) continue;
 
-  for (const [index, agent] of seatedAgents.entries()) {
-    const desk = OFFICE_LAYOUT.desks[index];
+    const agent = agentById.get(saved.agentId);
 
-    if (!desk) continue;
+    if (!agent || !isOfficeEligible(agent)) {
+      continue;
+    }
 
     const visualStatus = mapAgentVisualStatus(agent);
+    const deskIndex = OFFICE_LAYOUT.desks.findIndex(
+      (desk) => desk.id === saved.deskId,
+    );
 
     assignments.push({
-      deskId: desk.id,
+      deskId: saved.deskId,
       agent,
       departmentName: agent.departmentId
         ? departmentNames.get(agent.departmentId) ?? null
@@ -96,18 +107,27 @@ export function mapAgentsToOffice(
 
     characters.push({
       id: agent.id,
-      deskId: desk.id,
+      deskId: saved.deskId,
       name: agent.name,
-      color: COLORS[index % COLORS.length]!,
+      color: COLORS[deskIndex % COLORS.length]!,
       status: visualStatus,
     });
+
+    seatedAgentIds.add(agent.id);
+    occupiedDeskIds.add(saved.deskId);
   }
+
+  const unassignedAgents = agents
+    .filter(
+      (agent) =>
+        isOfficeEligible(agent) &&
+        !seatedAgentIds.has(agent.id),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return {
     assignments,
     characters,
-    unassignedAgents: eligibleAgents.slice(
-      OFFICE_LAYOUT.desks.length,
-    ),
+    unassignedAgents,
   };
 }

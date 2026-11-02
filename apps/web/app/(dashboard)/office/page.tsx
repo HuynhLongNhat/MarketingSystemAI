@@ -8,9 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-
 import Link from "next/link";
-
 import {
   Building2,
   CheckCircle2,
@@ -32,10 +30,15 @@ import {
   type AiAgent,
   type Department,
 } from "@/lib/workforce-api";
+import {
+  officeApi,
+  type OfficeDeskAssignment,
+} from "@/lib/office-api";
+import { ApiError } from "@/lib/api-client";
 
 import { OFFICE_LAYOUT } from "@/modules/office/config/office-layout";
-
 import {
+  isOfficeEligible,
   mapAgentsToOffice,
 } from "@/modules/office/config/office-agent-mapping";
 
@@ -57,73 +60,122 @@ function deskLabel(deskId: string) {
     (desk) => desk.id === deskId,
   );
 
-  return index >= 0
-    ? `Bàn làm việc ${String(index + 1).padStart(2, "0")}`
-    : deskId;
+  return index < 0
+    ? deskId
+    : `Bàn làm việc ${String(index + 1).padStart(2, "0")}`;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403) {
+      return "Bạn không có quyền quản lý bàn làm việc.";
+    }
+    if (error.status === 409) {
+      return "Bàn đã có Agent khác hoặc dữ liệu vừa thay đổi. Hãy làm mới.";
+    }
+    if (error.status === 400) {
+      return "Agent hoặc bàn làm việc không hợp lệ.";
+    }
+    if (error.status === 404) {
+      return "Không tìm thấy Agent trong tổ chức hiện tại.";
+    }
+  }
+
+  return error instanceof Error
+    ? error.message
+    : "Đã xảy ra lỗi. Vui lòng thử lại.";
 }
 
 export default function OfficePage() {
   const mountRef = useRef<HTMLDivElement>(null);
-
   const controllerRef =
     useRef<OfficeSceneController | null>(null);
 
   const [agents, setAgents] = useState<AiAgent[]>([]);
   const [departments, setDepartments] =
     useState<Department[]>([]);
+  const [savedAssignments, setSavedAssignments] =
+    useState<OfficeDeskAssignment[]>([]);
 
   const [ready, setReady] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [sceneError, setSceneError] =
     useState<string | null>(null);
   const [dataError, setDataError] =
     useState<string | null>(null);
+  const [actionError, setActionError] =
+    useState<string | null>(null);
+  const [actionMessage, setActionMessage] =
+    useState<string | null>(null);
 
   const [selectedDeskId, setSelectedDeskId] =
     useState<string | null>(null);
-
+  const [selectedAgentId, setSelectedAgentId] =
+    useState("");
   const [showDeskList, setShowDeskList] =
     useState(true);
 
   const requestIdRef = useRef(0);
+  const savingRef = useRef(false);
 
   const mapping = useMemo(
-    () => mapAgentsToOffice(agents, departments),
-    [agents, departments],
+    () =>
+      mapAgentsToOffice(
+        agents,
+        departments,
+        savedAssignments,
+      ),
+    [agents, departments, savedAssignments],
   );
 
   const charactersRef = useRef(mapping.characters);
   charactersRef.current = mapping.characters;
 
+  const assignmentByDesk = useMemo(
+    () =>
+      new Map(
+        mapping.assignments.map((item) => [
+          item.deskId,
+          item,
+        ]),
+      ),
+    [mapping.assignments],
+  );
+
+  const deskByAgent = useMemo(
+    () =>
+      new Map(
+        mapping.assignments.map((item) => [
+          item.agent.id,
+          item.deskId,
+        ]),
+      ),
+    [mapping.assignments],
+  );
+
   const loadData = useCallback(async () => {
     const requestId = ++requestIdRef.current;
-
     setLoadingData(true);
     setDataError(null);
 
     try {
-      const [nextAgents, nextDepartments] =
+      const [nextAgents, nextDepartments, nextAssignments] =
         await Promise.all([
           workforceApi.listAgents(),
           workforceApi.listDepartments(),
+          officeApi.listAssignments(),
         ]);
 
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
+      if (requestId !== requestIdRef.current) return;
 
       setAgents(nextAgents);
       setDepartments(nextDepartments);
+      setSavedAssignments(nextAssignments);
     } catch (error) {
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
-
-      setDataError(
-        error instanceof Error
-          ? error.message
-          : "Không tải được dữ liệu AI Agent.",
-      );
+      if (requestId !== requestIdRef.current) return;
+      setDataError(errorMessage(error));
     } finally {
       if (requestId === requestIdRef.current) {
         setLoadingData(false);
@@ -173,11 +225,7 @@ export default function OfficePage() {
       } catch (error) {
         if (cancelled) return;
 
-        setSceneError(
-          error instanceof Error
-            ? error.message
-            : "Không thể khởi tạo văn phòng 3D.",
-        );
+        setSceneError(errorMessage(error));
       }
     }
 
@@ -199,17 +247,92 @@ export default function OfficePage() {
     );
   }, [mapping.characters]);
 
+  useEffect(() => {
+    setSelectedAgentId("");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedDeskId]);
+
   function selectDesk(deskId: string | null) {
     controllerRef.current?.selectDesk(deskId);
+    setSelectedDeskId(deskId);
+  }
+
+  async function assignAgent() {
+    if (
+      !selectedDeskId ||
+      !selectedAgentId ||
+      savingRef.current ||
+      loadingData
+    ) {
+      return;
+    }
+
+    savingRef.current = true;
+    setSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      await officeApi.assignDesk(
+        selectedDeskId,
+        selectedAgentId,
+      );
+
+      await loadData();
+      setSelectedAgentId("");
+      setActionMessage("Đã lưu vị trí bàn làm việc.");
+    } catch (error) {
+      setActionError(errorMessage(error));
+      await loadData();
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function unassignAgent() {
+    if (
+      !selectedDeskId ||
+      savingRef.current ||
+      loadingData
+    ) {
+      return;
+    }
+
+    savingRef.current = true;
+    setSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      await officeApi.unassignDesk(selectedDeskId);
+      await loadData();
+      setActionMessage("Đã giải phóng bàn làm việc.");
+    } catch (error) {
+      setActionError(errorMessage(error));
+      await loadData();
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   const selectedDesk = DESKS.find(
     (desk) => desk.id === selectedDeskId,
   );
 
-  const selectedAssignment = mapping.assignments.find(
-    (assignment) => assignment.deskId === selectedDeskId,
-  );
+  const selectedAssignment = selectedDeskId
+    ? assignmentByDesk.get(selectedDeskId)
+    : undefined;
+
+  const eligibleAgents = agents
+    .filter(isOfficeEligible)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const selectedAgentCurrentDesk = selectedAgentId
+    ? deskByAgent.get(selectedAgentId)
+    : undefined;
 
   return (
     <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-4 p-4 md:p-6">
@@ -223,20 +346,20 @@ export default function OfficePage() {
           <h1 className="mt-1 text-2xl font-bold">
             My AI Office{" "}
             <span className="text-sm font-normal text-muted-foreground">
-              3D · Real Agents
+              3D · Persistent Desks
             </span>
           </h1>
 
           <p className="text-sm text-muted-foreground">
-            Văn phòng hiển thị AI Agent từ hệ thống.
-            Click vào bàn để xem thông tin.
+            Chọn bàn để phân công nhân viên AI.
+            Vị trí được lưu trong database.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={loadingData}
+            disabled={loadingData || saving}
             onClick={() => void loadData()}
           >
             <RefreshCw
@@ -266,17 +389,15 @@ export default function OfficePage() {
         </div>
 
         <div className="rounded-lg border bg-card px-4 py-2">
-          Đang có chỗ ngồi:{" "}
+          Có chỗ ngồi:{" "}
           <strong>{mapping.assignments.length}</strong>
           /{DESKS.length}
         </div>
 
-        {mapping.unassignedAgents.length > 0 && (
-          <div className="rounded-lg border bg-card px-4 py-2">
-            Chưa có bàn:{" "}
-            <strong>{mapping.unassignedAgents.length}</strong>
-          </div>
-        )}
+        <div className="rounded-lg border bg-card px-4 py-2">
+          Chưa có bàn:{" "}
+          <strong>{mapping.unassignedAgents.length}</strong>
+        </div>
       </div>
 
       {dataError && (
@@ -309,7 +430,7 @@ export default function OfficePage() {
           </div>
         )}
 
-        <div className="absolute left-4 top-4 flex flex-col gap-2">
+        <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
           <div className="rounded-lg bg-white/90 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm">
             WORKSPACE · {mapping.assignments.length} Agent
           </div>
@@ -338,9 +459,7 @@ export default function OfficePage() {
                     selectedDeskId === desk.id;
 
                   const assignment =
-                    mapping.assignments.find(
-                      (item) => item.deskId === desk.id,
-                    );
+                    assignmentByDesk.get(desk.id);
 
                   return (
                     <button
@@ -383,7 +502,7 @@ export default function OfficePage() {
         </div>
 
         {selectedDesk && (
-          <div className="absolute bottom-20 left-4 right-4 z-10 rounded-xl border bg-white/95 p-4 text-slate-800 shadow-xl backdrop-blur-sm sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:w-[310px]">
+          <div className="absolute bottom-20 left-4 right-4 z-20 max-h-[70%] overflow-y-auto rounded-xl border bg-white/95 p-4 text-slate-800 shadow-xl backdrop-blur-sm sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:w-[330px]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
@@ -407,18 +526,14 @@ export default function OfficePage() {
 
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">
-                  Mã bàn
-                </span>
+                <span className="text-slate-500">Mã bàn</span>
                 <span className="font-mono font-medium">
                   {selectedDesk.id}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">
-                  Vị trí
-                </span>
+                <span className="text-slate-500">Vị trí</span>
                 <span className="font-mono text-xs">
                   X: {selectedDesk.position[0]},
                   Z: {selectedDesk.position[1]}
@@ -453,7 +568,7 @@ export default function OfficePage() {
 
                   <div className="flex justify-between gap-3">
                     <span className="text-slate-500">
-                      Trạng thái cấu hình
+                      Trạng thái
                     </span>
                     <span className="font-medium">
                       {STATUS_LABELS[
@@ -468,11 +583,14 @@ export default function OfficePage() {
                     </p>
                   )}
 
-                  <p className="text-xs text-slate-500">
-                    Trạng thái trên chỉ phản ánh cấu hình
-                    Agent, chưa phải trạng thái thực thi
-                    từ worker.
-                  </p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={saving || loadingData}
+                    onClick={() => void unassignAgent()}
+                  >
+                    {saving ? "Đang lưu..." : "Giải phóng bàn"}
+                  </Button>
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed bg-slate-50 p-3">
@@ -484,9 +602,91 @@ export default function OfficePage() {
                   </div>
 
                   <p className="mt-2 text-xs text-slate-500">
-                    Chưa có Agent được phân vào vị trí này.
+                    Chọn một Agent để phân công vào bàn này.
                   </p>
                 </div>
+              )}
+
+              {!selectedAssignment && (
+                <div className="space-y-2 border-t pt-3">
+                  <label
+                    htmlFor="office-agent-select"
+                    className="block text-xs font-semibold"
+                  >
+                    Phân công nhân viên AI
+                  </label>
+
+                  <select
+                    id="office-agent-select"
+                    value={selectedAgentId}
+                    disabled={saving || loadingData}
+                    onChange={(event) =>
+                      setSelectedAgentId(event.target.value)
+                    }
+                    className="h-10 w-full rounded-md border bg-white px-3 text-sm"
+                  >
+                    <option value="">
+                      -- Chọn AI Agent --
+                    </option>
+
+                    {eligibleAgents.map((agent) => {
+                      const currentDesk =
+                        deskByAgent.get(agent.id);
+
+                      return (
+                        <option
+                          key={agent.id}
+                          value={agent.id}
+                        >
+                          {agent.name}
+                          {currentDesk
+                            ? ` (đang ở ${deskLabel(currentDesk)})`
+                            : " (chưa có bàn)"}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {selectedAgentCurrentDesk && (
+                    <p className="text-xs text-amber-700">
+                      Agent sẽ được chuyển từ{" "}
+                      {deskLabel(selectedAgentCurrentDesk)}
+                      {" "}sang bàn này.
+                    </p>
+                  )}
+
+                  <Button
+                    className="w-full"
+                    disabled={
+                      !selectedAgentId ||
+                      saving ||
+                      loadingData
+                    }
+                    onClick={() => void assignAgent()}
+                  >
+                    {saving
+                      ? "Đang lưu..."
+                      : "Gán Agent vào bàn"}
+                  </Button>
+                </div>
+              )}
+
+              {actionError && (
+                <p
+                  role="alert"
+                  className="rounded-md bg-red-50 p-2 text-xs text-red-700"
+                >
+                  {actionError}
+                </p>
+              )}
+
+              {actionMessage && (
+                <p
+                  role="status"
+                  className="rounded-md bg-emerald-50 p-2 text-xs text-emerald-700"
+                >
+                  {actionMessage}
+                </p>
               )}
 
               <Button
@@ -503,7 +703,7 @@ export default function OfficePage() {
           </div>
         )}
 
-        <div className="absolute bottom-4 right-4 flex gap-2">
+        <div className="absolute bottom-4 right-4 z-10 flex gap-2">
           <Button
             size="icon"
             variant="secondary"
@@ -543,9 +743,9 @@ export default function OfficePage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Office V0.6 — Agent thật từ API.
-        Vị trí bàn được tính ổn định theo Agent ID,
-        chưa được lưu vào database.
+        Office V0.7 — Vị trí bàn được lưu trong PostgreSQL.
+        Trạng thái nhân vật phản ánh cấu hình Agent,
+        chưa phải trạng thái thực thi từ worker.
       </p>
     </div>
   );

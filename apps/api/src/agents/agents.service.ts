@@ -13,12 +13,18 @@ import {
   aiProviderConnections,
   db,
   departments,
+  officeDeskAssignments,
 } from "@workspace/db/node";
 
 import type { RequestContext } from "../auth/request-context.js";
-import type { CreateAgentDto, UpdateAgentDto } from "./agents.dto.js";
+import type {
+  CreateAgentDto,
+  UpdateAgentDto,
+} from "./agents.dto.js";
 
-function databaseErrorCode(error: unknown): string | undefined {
+function databaseErrorCode(
+  error: unknown,
+): string | undefined {
   if (!error || typeof error !== "object") {
     return undefined;
   }
@@ -37,7 +43,10 @@ function databaseErrorCode(error: unknown): string | undefined {
 
 @Injectable()
 export class AgentsService {
-  private required(value: string, field: string): string {
+  private required(
+    value: string,
+    field: string,
+  ): string {
     const normalized = value.trim();
 
     if (!normalized) {
@@ -56,7 +65,9 @@ export class AgentsService {
     if (!departmentId) return;
 
     const [department] = await db
-      .select({ id: departments.id })
+      .select({
+        id: departments.id,
+      })
       .from(departments)
       .where(
         and(
@@ -131,7 +142,9 @@ export class AgentsService {
       .limit(1);
 
     if (!agent) {
-      throw new NotFoundException("AI agent not found");
+      throw new NotFoundException(
+        "AI agent not found",
+      );
     }
 
     return agent;
@@ -151,7 +164,10 @@ export class AgentsService {
       .limit(100);
   }
 
-  getById(context: RequestContext, id: string) {
+  getById(
+    context: RequestContext,
+    id: string,
+  ) {
     return this.getAgent(context, id);
   }
 
@@ -191,10 +207,17 @@ export class AgentsService {
         .insert(aiAgents)
         .values({
           id: randomUUID(),
-          organizationId: context.organizationId,
+          organizationId:
+            context.organizationId,
           templateId: templateId ?? null,
-          name: this.required(dto.name, "name"),
-          role: this.required(dto.role, "role"),
+          name: this.required(
+            dto.name,
+            "name",
+          ),
+          role: this.required(
+            dto.role,
+            "role",
+          ),
           systemPrompt: this.required(
             dto.systemPrompt,
             "systemPrompt",
@@ -345,25 +368,53 @@ export class AgentsService {
     }
 
     try {
-      const [updated] = await db
-        .update(aiAgents)
-        .set(changes)
-        .where(
-          and(
-            eq(aiAgents.id, id),
-            eq(
-              aiAgents.organizationId,
-              context.organizationId,
-            ),
-          ),
-        )
-        .returning();
+      const updated = await db.transaction(
+        async (tx) => {
+          const [agent] = await tx
+            .update(aiAgents)
+            .set(changes)
+            .where(
+              and(
+                eq(aiAgents.id, id),
+                eq(
+                  aiAgents.organizationId,
+                  context.organizationId,
+                ),
+              ),
+            )
+            .returning();
 
-      if (!updated) {
-        throw new NotFoundException(
-          "AI agent not found",
-        );
-      }
+          if (!agent) {
+            throw new NotFoundException(
+              "AI agent not found",
+            );
+          }
+
+          // Ineligible agents must not occupy
+          // desks in the virtual office.
+          if (
+            agent.status === "draft" ||
+            agent.status === "archived"
+          ) {
+            await tx
+              .delete(officeDeskAssignments)
+              .where(
+                and(
+                  eq(
+                    officeDeskAssignments.organizationId,
+                    context.organizationId,
+                  ),
+                  eq(
+                    officeDeskAssignments.agentId,
+                    id,
+                  ),
+                ),
+              );
+          }
+
+          return agent;
+        },
+      );
 
       return updated;
     } catch (error) {
