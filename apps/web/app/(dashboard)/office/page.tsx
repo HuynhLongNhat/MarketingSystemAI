@@ -12,11 +12,8 @@ import {
   Building2,
   Info,
   RefreshCw,
-  RotateCcw,
   Users,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 
 import { Button } from "@workspace/ui/components/button";
@@ -41,6 +38,7 @@ import {
   mapAgentsToOffice,
 } from "@/modules/office/config/office-agent-mapping";
 
+import { OfficeShell } from "@/modules/office/components/office-shell";
 import { OfficeWorkstationList } from "@/modules/office/components/office-workstation-list";
 
 import type {
@@ -351,7 +349,7 @@ export default function OfficePage() {
     : undefined;
 
   return (
-    <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-3 p-3 md:p-4">
+    <div className="flex min-h-[calc(100vh-5rem)] w-full min-w-0 flex-col gap-3 p-3 md:p-4">
       {/* OFFICE HEADER & TOOLBAR */}
       <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-xl md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-3">
@@ -434,298 +432,246 @@ export default function OfficePage() {
         </p>
       )}
 
-      {sceneError && (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
-        >
-          {sceneError}
-        </p>
-      )}
-
-      {/* 3D OFFICE */}
-      <div className="relative min-h-[560px] flex-1 overflow-hidden rounded-2xl border bg-slate-100">
-        <div
-          ref={mountRef}
-          className="absolute inset-0 touch-none"
-        />
-
-        {!ready && !sceneError && (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-slate-600">
-            Đang dựng văn phòng 3D...
-          </div>
-        )}
-
-        {/* WORKSTATION SIDEBAR */}
-        <OfficeWorkstationList
-          className="absolute left-4 top-4 z-10"
-          desks={DESKS}
-          assignmentByDesk={assignmentByDesk}
-          selectedDeskId={selectedDeskId}
-          getDeskLabel={deskLabel}
-          onSelectDesk={selectDesk}
-          disabled={!ready}
-        />
-
-        {/* DESK DETAILS PANEL */}
-        {selectedDesk && (
-          <div className="absolute bottom-20 left-4 right-4 z-20 max-h-[70%] overflow-y-auto rounded-xl border bg-white/95 p-4 text-slate-800 shadow-xl backdrop-blur-sm sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:w-[330px]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  Selected workstation
-                </p>
-
-                <h2 className="mt-1 text-lg font-bold">
-                  {deskLabel(selectedDesk.id)}
-                </h2>
-              </div>
-
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Đóng thông tin bàn"
-                onClick={() => selectDesk(null)}
-              >
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">
-                  Mã bàn
-                </span>
-
-                <span className="font-mono font-medium">
-                  {selectedDesk.id}
-                </span>
-              </div>
-
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">
-                  Vị trí
-                </span>
-
-                <span className="font-mono text-xs">
-                  X: {selectedDesk.position[0]},
-                  Z: {selectedDesk.position[1]}
-                </span>
-              </div>
-
-              {selectedAssignment ? (
-                <>
-                  <div className="rounded-lg bg-emerald-50 p-3">
-                    <p className="text-xs text-emerald-700">
-                      AI AGENT
-                    </p>
-
-                    <p className="mt-1 font-semibold">
-                      {selectedAssignment.agent.name}
-                    </p>
-
-                    <p className="text-xs text-slate-600">
-                      {selectedAssignment.agent.role}
-                    </p>
-                  </div>
-
-                  <div className="flex justify-between gap-3">
-                    <span className="text-slate-500">
-                      Phòng ban
-                    </span>
-
-                    <span className="text-right font-medium">
-                      {selectedAssignment.departmentName ??
-                        "Chưa phân phòng ban"}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between gap-3">
-                    <span className="text-slate-500">
-                      Trạng thái
-                    </span>
-
-                    <span className="font-medium">
-                      {
-                        STATUS_LABELS[
-                          selectedAssignment.agent.status
-                        ]
-                      }
-                    </span>
-                  </div>
-
-                  {selectedAssignment.agent.description && (
-                    <p className="text-xs leading-relaxed text-slate-600">
-                      {selectedAssignment.agent.description}
-                    </p>
-                  )}
-
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    disabled={saving || loadingData}
-                    onClick={() => void unassignAgent()}
-                  >
-                    {saving
-                      ? "Đang lưu..."
-                      : "Giải phóng bàn"}
-                  </Button>
-                </>
-              ) : (
-                <div className="rounded-lg border border-dashed bg-slate-50 p-3">
-                  <div className="flex items-center gap-2">
-                    <Info className="size-4 text-slate-500" />
-
-                    <span className="font-semibold">
-                      Bàn trống
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-xs text-slate-500">
-                    Chọn một Agent để phân công vào bàn này.
+      {/* OFFICE SHELL: canvas 3D + sidebar + panel chi tiết + camera */}
+      <OfficeShell
+        mountRef={mountRef}
+        ready={ready}
+        sceneError={sceneError}
+        onZoomIn={() => controllerRef.current?.zoom(1.25)}
+        onZoomOut={() => controllerRef.current?.zoom(0.8)}
+        onResetView={() => controllerRef.current?.reset()}
+        sidebar={
+          <OfficeWorkstationList
+            desks={DESKS}
+            assignmentByDesk={assignmentByDesk}
+            selectedDeskId={selectedDeskId}
+            getDeskLabel={deskLabel}
+            onSelectDesk={selectDesk}
+            disabled={!ready}
+          />
+        }
+        details={
+          selectedDesk ? (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    Bàn đang chọn
                   </p>
+
+                  <h2 className="mt-1 text-lg font-bold">
+                    {deskLabel(selectedDesk.id)}
+                  </h2>
                 </div>
-              )}
 
-              {!selectedAssignment && (
-                <div className="space-y-2 border-t pt-3">
-                  <label
-                    htmlFor="office-agent-select"
-                    className="block text-xs font-semibold"
-                  >
-                    Phân công nhân viên AI
-                  </label>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0"
+                  aria-label="Đóng thông tin bàn"
+                  onClick={() => selectDesk(null)}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
 
-                  <select
-                    id="office-agent-select"
-                    value={selectedAgentId}
-                    disabled={saving || loadingData}
-                    onChange={(event) =>
-                      setSelectedAgentId(
-                        event.target.value,
-                      )
-                    }
-                    className="h-10 w-full rounded-md border bg-white px-3 text-sm"
-                  >
-                    <option value="">
-                      -- Chọn AI Agent --
-                    </option>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">
+                    Mã bàn
+                  </span>
 
-                    {eligibleAgents.map((agent) => {
-                      const currentDesk =
-                        deskByAgent.get(agent.id);
+                  <span className="font-mono font-medium">
+                    {selectedDesk.id}
+                  </span>
+                </div>
 
-                      return (
-                        <option
-                          key={agent.id}
-                          value={agent.id}
-                        >
-                          {agent.name}
-                          {currentDesk
-                            ? ` (đang ở ${deskLabel(currentDesk)})`
-                            : " (chưa có bàn)"}
-                        </option>
-                      );
-                    })}
-                  </select>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">
+                    Vị trí
+                  </span>
 
-                  {selectedAgentCurrentDesk && (
-                    <p className="text-xs text-amber-700">
-                      Agent sẽ được chuyển từ{" "}
-                      {deskLabel(
-                        selectedAgentCurrentDesk,
-                      )}{" "}
-                      sang bàn này.
+                  <span className="font-mono text-xs">
+                    X: {selectedDesk.position[0]},
+                    Z: {selectedDesk.position[1]}
+                  </span>
+                </div>
+
+                {selectedAssignment ? (
+                  <>
+                    <div className="rounded-lg bg-primary/10 p-3">
+                      <p className="text-xs text-primary">
+                        AI AGENT
+                      </p>
+
+                      <p className="mt-1 break-words font-semibold">
+                        {selectedAssignment.agent.name}
+                      </p>
+
+                      <p className="break-words text-xs text-muted-foreground">
+                        {selectedAssignment.agent.role}
+                      </p>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        Phòng ban
+                      </span>
+
+                      <span className="text-right font-medium">
+                        {selectedAssignment.departmentName ??
+                          "Chưa phân phòng ban"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        Trạng thái
+                      </span>
+
+                      <span className="font-medium">
+                        {
+                          STATUS_LABELS[
+                            selectedAssignment.agent.status
+                          ]
+                        }
+                      </span>
+                    </div>
+
+                    {selectedAssignment.agent.description && (
+                      <p className="break-words text-xs leading-relaxed text-muted-foreground">
+                        {selectedAssignment.agent.description}
+                      </p>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      disabled={saving || loadingData}
+                      onClick={() => void unassignAgent()}
+                    >
+                      {saving
+                        ? "Đang lưu..."
+                        : "Giải phóng bàn"}
+                    </Button>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3">
+                    <div className="flex items-center gap-2">
+                      <Info className="size-4 text-muted-foreground" />
+
+                      <span className="font-semibold">
+                        Bàn trống
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Chọn một Agent để phân công vào bàn này.
                     </p>
-                  )}
+                  </div>
+                )}
 
-                  <Button
-                    className="w-full"
-                    disabled={
-                      !selectedAgentId ||
-                      saving ||
-                      loadingData
-                    }
-                    onClick={() => void assignAgent()}
+                {!selectedAssignment && (
+                  <div className="space-y-2 border-t border-border/60 pt-3">
+                    <label
+                      htmlFor="office-agent-select"
+                      className="block text-xs font-semibold"
+                    >
+                      Phân công nhân viên AI
+                    </label>
+
+                    <select
+                      id="office-agent-select"
+                      value={selectedAgentId}
+                      disabled={saving || loadingData}
+                      onChange={(event) =>
+                        setSelectedAgentId(
+                          event.target.value,
+                        )
+                      }
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    >
+                      <option value="">
+                        -- Chọn AI Agent --
+                      </option>
+
+                      {eligibleAgents.map((agent) => {
+                        const currentDesk =
+                          deskByAgent.get(agent.id);
+
+                        return (
+                          <option
+                            key={agent.id}
+                            value={agent.id}
+                          >
+                            {agent.name}
+                            {currentDesk
+                              ? ` (đang ở ${deskLabel(currentDesk)})`
+                              : " (chưa có bàn)"}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {selectedAgentCurrentDesk && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        Agent sẽ được chuyển từ{" "}
+                        {deskLabel(
+                          selectedAgentCurrentDesk,
+                        )}{" "}
+                        sang bàn này.
+                      </p>
+                    )}
+
+                    <Button
+                      className="w-full"
+                      disabled={
+                        !selectedAgentId ||
+                        saving ||
+                        loadingData
+                      }
+                      onClick={() => void assignAgent()}
+                    >
+                      {saving
+                        ? "Đang lưu..."
+                        : "Gán Agent vào bàn"}
+                    </Button>
+                  </div>
+                )}
+
+                {actionError && (
+                  <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 p-2 text-xs text-destructive"
                   >
-                    {saving
-                      ? "Đang lưu..."
-                      : "Gán Agent vào bàn"}
-                  </Button>
-                </div>
-              )}
+                    {actionError}
+                  </p>
+                )}
 
-              {actionError && (
-                <p
-                  role="alert"
-                  className="rounded-md bg-red-50 p-2 text-xs text-red-700"
+                {actionMessage && (
+                  <p
+                    role="status"
+                    className="rounded-md bg-emerald-500/10 p-2 text-xs text-emerald-700 dark:text-emerald-400"
+                  >
+                    {actionMessage}
+                  </p>
+                )}
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  asChild
                 >
-                  {actionError}
-                </p>
-              )}
-
-              {actionMessage && (
-                <p
-                  role="status"
-                  className="rounded-md bg-emerald-50 p-2 text-xs text-emerald-700"
-                >
-                  {actionMessage}
-                </p>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full"
-                asChild
-              >
-                <Link href="/workforce?tab=agents">
-                  <Users className="mr-2 size-4" />
-                  Quản lý AI Agent
-                </Link>
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* CAMERA CONTROLS */}
-        <div className="absolute bottom-4 right-4 z-10 flex gap-2">
-          <Button
-            size="icon"
-            variant="secondary"
-            aria-label="Thu nhỏ"
-            disabled={!ready}
-            onClick={() =>
-              controllerRef.current?.zoom(0.8)
-            }
-          >
-            <ZoomOut className="size-4" />
-          </Button>
-
-          <Button
-            size="icon"
-            variant="secondary"
-            aria-label="Phóng to"
-            disabled={!ready}
-            onClick={() =>
-              controllerRef.current?.zoom(1.25)
-            }
-          >
-            <ZoomIn className="size-4" />
-          </Button>
-
-          <Button
-            size="icon"
-            variant="secondary"
-            aria-label="Đặt lại góc nhìn"
-            disabled={!ready}
-            onClick={() =>
-              controllerRef.current?.reset()
-            }
-          >
-            <RotateCcw className="size-4" />
-          </Button>
-        </div>
-      </div>
+                  <Link href="/workforce?tab=agents">
+                    <Users className="mr-2 size-4" />
+                    Quản lý AI Agent
+                  </Link>
+                </Button>
+              </div>
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }
