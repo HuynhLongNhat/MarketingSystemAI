@@ -27,14 +27,6 @@ type CompanyModule = {
 
 const companyModules: CompanyModule[] = [
   {
-    title: "AI Office",
-    description:
-      "Quan sát trực quan trạng thái làm việc của từng nhân viên AI.",
-    href: "#ai-office",
-    status: "planned",
-    icon: Building2Icon,
-  },
-  {
     title: "Tasks & Workflows",
     description:
       "Giao nhiệm vụ, điều phối quy trình và theo dõi execution.",
@@ -45,6 +37,14 @@ const companyModules: CompanyModule[] = [
 ];
 
 const availableModules: CompanyModule[] = [
+  {
+    title: "AI Office",
+    description:
+      "Khám phá văn phòng 3D, xem vị trí và thông tin các nhân viên AI đã được kích hoạt.",
+    href: "/office",
+    status: "available",
+    icon: Building2Icon,
+  },
   {
     title: "AI Workforce",
     description:

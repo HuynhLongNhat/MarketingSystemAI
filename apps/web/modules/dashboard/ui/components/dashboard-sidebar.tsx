@@ -65,9 +65,8 @@ export const DashboardSidebar = () => {
         },
         {
           title: t.office,
-          url: "/#ai-office",
+          url: "/office",
           icon: Building2,
-          soon: true,
         },
         {
           title: t.agents,
@@ -245,6 +244,7 @@ export const DashboardSidebar = () => {
             >
               <SelectValue />
             </SelectTrigger>
+
             <SelectContent>
               <SelectItem value="vi">
                 Tiếng Việt

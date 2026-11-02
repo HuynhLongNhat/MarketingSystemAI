@@ -33,17 +33,21 @@ const COLORS = [
   "#2dd4bf",
 ] as const;
 
-// This is a visual approximation, NOT runtime execution state.
+function isOfficeEligible(agent: AiAgent): boolean {
+  return (
+    agent.status === "active" ||
+    agent.status === "paused"
+  );
+}
+
+// Visual state only, not worker execution status.
 export function mapAgentVisualStatus(
   agent: AiAgent,
 ): OfficeAgentStatus {
   switch (agent.status) {
     case "active":
       return "idle";
-    case "draft":
-      return "thinking";
     case "paused":
-    case "archived":
       return "offline";
     default:
       return "offline";
@@ -61,21 +65,22 @@ export function mapAgentsToOffice(
     ]),
   );
 
-  // Stable ordering, independent of API response order.
-  const sortedAgents = [...agents].sort((a, b) =>
-    a.id.localeCompare(b.id),
-  );
+  // Draft and archived agents do not occupy desks.
+  const eligibleAgents = agents
+    .filter(isOfficeEligible)
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   const assignments: OfficeAgentAssignment[] = [];
   const characters: OfficeCharacterData[] = [];
 
-  const seatedAgents = sortedAgents.slice(
+  const seatedAgents = eligibleAgents.slice(
     0,
     OFFICE_LAYOUT.desks.length,
   );
 
   for (const [index, agent] of seatedAgents.entries()) {
     const desk = OFFICE_LAYOUT.desks[index];
+
     if (!desk) continue;
 
     const visualStatus = mapAgentVisualStatus(agent);
@@ -101,7 +106,7 @@ export function mapAgentsToOffice(
   return {
     assignments,
     characters,
-    unassignedAgents: sortedAgents.slice(
+    unassignedAgents: eligibleAgents.slice(
       OFFICE_LAYOUT.desks.length,
     ),
   };
