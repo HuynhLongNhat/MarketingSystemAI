@@ -1,16 +1,23 @@
 
 import * as THREE from "three";
 
+import { OFFICE_LAYOUT } from "../config/office-layout";
 import { createOfficeObjects } from "../objects/office-objects";
+
+export interface OfficeSceneOptions {
+  onDeskSelect?: (deskId: string | null) => void;
+}
 
 export interface OfficeSceneController {
   zoom: (factor: number) => void;
   reset: () => void;
+  selectDesk: (deskId: string | null) => void;
   dispose: () => void;
 }
 
 export function createOfficeScene(
   container: HTMLDivElement,
+  options: OfficeSceneOptions = {},
 ): OfficeSceneController {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#dbe6ec");
@@ -27,28 +34,28 @@ export function createOfficeScene(
   renderer.setPixelRatio(
     Math.min(window.devicePixelRatio, 2),
   );
-
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.35;
 
   const canvas = renderer.domElement;
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.style.display = "block";
+  canvas.style.cursor = "grab";
   container.appendChild(canvas);
 
   const officeObjects = createOfficeObjects(scene);
 
-  // Soft ambient illumination
   const hemisphere = new THREE.HemisphereLight(
     0xeaf5ff,
     0xb9a58b,
-    2.0,
+    2,
   );
   scene.add(hemisphere);
 
-  // Main sunlight
   const sun = new THREE.DirectionalLight(
     0xfff0d7,
     2.8,
@@ -68,7 +75,6 @@ export function createOfficeScene(
   sun.shadow.radius = 3;
   scene.add(sun);
 
-  // Fill light
   const fill = new THREE.DirectionalLight(
     0xd3eaff,
     0.8,
@@ -76,8 +82,45 @@ export function createOfficeScene(
   fill.position.set(8, 9, -5);
   scene.add(fill);
 
+  // Selection highlight
+  const highlightGeometry =
+    new THREE.BoxGeometry(2.05, 0.045, 2.35);
+
+  const highlightMaterial =
+    new THREE.MeshBasicMaterial({
+      color: "#22c55e",
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+    });
+
+  const highlight = new THREE.Mesh(
+    highlightGeometry,
+    highlightMaterial,
+  );
+
+  highlight.name = "selected-desk-highlight";
+  highlight.visible = false;
+  highlight.renderOrder = 10;
+  scene.add(highlight);
+
+  const deskGroups = new Map<string, THREE.Group>();
+
+  for (const child of officeObjects.group.children) {
+    if (
+      child instanceof THREE.Group &&
+      child.userData.type === "desk" &&
+      typeof child.userData.deskId === "string"
+    ) {
+      deskGroups.set(child.userData.deskId, child);
+    }
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
   const target = new THREE.Vector3(0, 0, 0);
 
+  let selectedDeskId: string | null = null;
   let azimuth = Math.PI / 4;
   const elevation = 0.9;
   let zoomLevel = 1;
@@ -112,8 +155,8 @@ export function createOfficeScene(
 
     const width = Math.max(container.clientWidth, 1);
     const height = Math.max(container.clientHeight, 1);
-    const halfHeight = 9;
     const aspect = width / height;
+    const halfHeight = 9;
 
     camera.left = -halfHeight * aspect;
     camera.right = halfHeight * aspect;
@@ -135,20 +178,106 @@ export function createOfficeScene(
     updateCamera();
   }
 
+  function selectDesk(deskId: string | null) {
+    if (disposed) return;
+
+    const nextId =
+      deskId && deskGroups.has(deskId)
+        ? deskId
+        : null;
+
+    if (selectedDeskId === nextId) return;
+
+    selectedDeskId = nextId;
+
+    const desk = nextId
+      ? deskGroups.get(nextId)
+      : undefined;
+
+    if (desk) {
+      highlight.position.set(
+        desk.position.x,
+        0.035,
+        desk.position.z + 0.48,
+      );
+      highlight.visible = true;
+    } else {
+      highlight.visible = false;
+    }
+
+    options.onDeskSelect?.(nextId);
+    requestRender();
+  }
+
+  function findDeskId(
+    object: THREE.Object3D,
+  ): string | null {
+    let current: THREE.Object3D | null = object;
+
+    while (current) {
+      if (
+        current.userData.type === "desk" &&
+        typeof current.userData.deskId === "string"
+      ) {
+        return current.userData.deskId;
+      }
+
+      current = current.parent;
+    }
+
+    return null;
+  }
+
+  function pickDesk(event: PointerEvent) {
+    const rect = canvas.getBoundingClientRect();
+
+    if (!rect.width || !rect.height) return;
+
+    pointer.x =
+      ((event.clientX - rect.left) / rect.width) * 2 -
+      1;
+
+    pointer.y =
+      -((event.clientY - rect.top) / rect.height) * 2 +
+      1;
+
+    raycaster.setFromCamera(pointer, camera);
+
+    // Only raycast workstation groups.
+    const hits = raycaster.intersectObjects(
+      Array.from(deskGroups.values()),
+      true,
+    );
+
+    const deskId =
+      hits.length > 0
+        ? findDeskId(hits[0]!.object)
+        : null;
+
+    selectDesk(deskId);
+  }
+
   const observer = new ResizeObserver(resize);
   observer.observe(container);
 
   let dragging = false;
   let activePointer: number | null = null;
+  let startX = 0;
+  let startY = 0;
   let lastX = 0;
+  let moved = false;
 
   function onPointerDown(event: PointerEvent) {
     if (event.button !== 0) return;
 
     dragging = true;
+    moved = false;
     activePointer = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
     lastX = event.clientX;
 
+    canvas.style.cursor = "grabbing";
     canvas.setPointerCapture(event.pointerId);
   }
 
@@ -160,18 +289,42 @@ export function createOfficeScene(
       return;
     }
 
-    azimuth +=
-      (event.clientX - lastX) * 0.005;
+    const distance = Math.hypot(
+      event.clientX - startX,
+      event.clientY - startY,
+    );
+
+    if (distance > 5) {
+      moved = true;
+    }
+
+    if (moved) {
+      azimuth +=
+        (event.clientX - lastX) * 0.005;
+      updateCamera();
+    }
 
     lastX = event.clientX;
-    updateCamera();
   }
 
   function onPointerUp(event: PointerEvent) {
     if (activePointer !== event.pointerId) return;
 
+    const shouldSelect =
+      event.type === "pointerup" &&
+      !moved &&
+      Math.hypot(
+        event.clientX - startX,
+        event.clientY - startY,
+      ) <= 5;
+
     dragging = false;
     activePointer = null;
+    canvas.style.cursor = "grab";
+
+    if (shouldSelect) {
+      pickDesk(event);
+    }
   }
 
   function zoom(factor: number) {
@@ -198,6 +351,12 @@ export function createOfficeScene(
     updateCamera();
   }
 
+  function onKeyDown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      selectDesk(null);
+    }
+  }
+
   canvas.addEventListener(
     "pointerdown",
     onPointerDown,
@@ -221,12 +380,14 @@ export function createOfficeScene(
   canvas.addEventListener("wheel", onWheel, {
     passive: false,
   });
+  window.addEventListener("keydown", onKeyDown);
 
   resize();
 
   return {
     zoom,
     reset,
+    selectDesk,
 
     dispose() {
       if (disposed) return;
@@ -263,9 +424,16 @@ export function createOfficeScene(
         "wheel",
         onWheel,
       );
+      window.removeEventListener(
+        "keydown",
+        onKeyDown,
+      );
+
+      highlightGeometry.dispose();
+      highlightMaterial.dispose();
+      highlight.removeFromParent();
 
       officeObjects.dispose();
-
       sun.shadow.dispose();
       renderer.dispose();
 
@@ -273,6 +441,7 @@ export function createOfficeScene(
         container.removeChild(canvas);
       }
 
+      deskGroups.clear();
       scene.clear();
     },
   };
