@@ -13,7 +13,7 @@ export function createOfficeScene(
   container: HTMLDivElement,
 ): OfficeSceneController {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#dce8f1");
+  scene.background = new THREE.Color("#dbe6ec");
 
   const camera = new THREE.OrthographicCamera(
     -13, 13, 9, -9, 0.1, 150,
@@ -21,37 +21,60 @@ export function createOfficeScene(
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
+    powerPreference: "high-performance",
   });
 
   renderer.setPixelRatio(
     Math.min(window.devicePixelRatio, 2),
   );
+
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.35;
 
   const canvas = renderer.domElement;
   container.appendChild(canvas);
 
   const officeObjects = createOfficeObjects(scene);
 
-  scene.add(
-    new THREE.AmbientLight(0xffffff, 1.45),
+  // Soft ambient illumination
+  const hemisphere = new THREE.HemisphereLight(
+    0xeaf5ff,
+    0xb9a58b,
+    2.0,
   );
+  scene.add(hemisphere);
 
+  // Main sunlight
   const sun = new THREE.DirectionalLight(
-    0xffffff,
-    2.3,
+    0xfff0d7,
+    2.8,
   );
 
-  sun.position.set(-6, 16, 9);
+  sun.position.set(-7, 16, 9);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -20;
-  sun.shadow.camera.right = 20;
-  sun.shadow.camera.top = 20;
-  sun.shadow.camera.bottom = -20;
+  sun.shadow.camera.left = -18;
+  sun.shadow.camera.right = 18;
+  sun.shadow.camera.top = 18;
+  sun.shadow.camera.bottom = -18;
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 55;
+  sun.shadow.bias = -0.0002;
+  sun.shadow.normalBias = 0.025;
+  sun.shadow.radius = 3;
   scene.add(sun);
+
+  // Fill light
+  const fill = new THREE.DirectionalLight(
+    0xd3eaff,
+    0.8,
+  );
+  fill.position.set(8, 9, -5);
+  scene.add(fill);
 
   const target = new THREE.Vector3(0, 0, 0);
 
