@@ -2,7 +2,12 @@
 import * as THREE from "three";
 
 import { createOfficeObjects } from "../objects/office-objects";
-import { createOfficeCharacters } from "../characters/office-characters";
+
+import {
+  createOfficeCharacters,
+  type OfficeCharacterData,
+  type OfficeCharactersController,
+} from "../characters/office-characters";
 
 export interface OfficeSceneOptions {
   onDeskSelect?: (deskId: string | null) => void;
@@ -12,6 +17,9 @@ export interface OfficeSceneController {
   zoom: (factor: number) => void;
   reset: () => void;
   selectDesk: (deskId: string | null) => void;
+  setCharacters: (
+    characters: readonly OfficeCharacterData[],
+  ) => void;
   dispose: () => void;
 }
 
@@ -48,7 +56,10 @@ export function createOfficeScene(
   container.appendChild(canvas);
 
   const officeObjects = createOfficeObjects(scene);
-  const officeCharacters = createOfficeCharacters(scene);
+
+  // Start empty: never render the old demo agents.
+  let officeCharacters: OfficeCharactersController =
+    createOfficeCharacters(scene, []);
 
   const hemisphere = new THREE.HemisphereLight(
     0xeaf5ff,
@@ -126,7 +137,6 @@ export function createOfficeScene(
   let zoomLevel = 1;
   let disposed = false;
 
-  // Animation runs only while the page is visible.
   const clock = new THREE.Clock();
   const frameInterval = 1000 / 30;
 
@@ -161,6 +171,21 @@ export function createOfficeScene(
     if (document.hidden || frameId !== null) return;
 
     frameId = window.requestAnimationFrame(renderFrame);
+  }
+
+  function setCharacters(
+    characters: readonly OfficeCharacterData[],
+  ) {
+    if (disposed) return;
+
+    officeCharacters.dispose();
+
+    officeCharacters = createOfficeCharacters(
+      scene,
+      characters,
+    );
+
+    requestRender();
   }
 
   function onVisibilityChange() {
@@ -280,7 +305,6 @@ export function createOfficeScene(
 
     raycaster.setFromCamera(pointer, camera);
 
-    // Both furniture and characters are selectable.
     const hits = raycaster.intersectObjects(
       [
         ...deskGroups.values(),
@@ -431,6 +455,7 @@ export function createOfficeScene(
     zoom,
     reset,
     selectDesk,
+    setCharacters,
 
     dispose() {
       if (disposed) return;
