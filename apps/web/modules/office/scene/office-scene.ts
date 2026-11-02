@@ -340,7 +340,7 @@ export function createOfficeScene(
       renderer.dispose();
       if (canvas.parentNode === container) container.removeChild(canvas);
       deskGroups.clear();
-      scene.clear();
+    scene.clear();
     },
   };
 }
