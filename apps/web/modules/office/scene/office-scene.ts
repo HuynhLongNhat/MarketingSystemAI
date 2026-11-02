@@ -1,8 +1,8 @@
 
 import * as THREE from "three";
 
-import { OFFICE_LAYOUT } from "../config/office-layout";
 import { createOfficeObjects } from "../objects/office-objects";
+import { createOfficeCharacters } from "../characters/office-characters";
 
 export interface OfficeSceneOptions {
   onDeskSelect?: (deskId: string | null) => void;
@@ -48,6 +48,7 @@ export function createOfficeScene(
   container.appendChild(canvas);
 
   const officeObjects = createOfficeObjects(scene);
+  const officeCharacters = createOfficeCharacters(scene);
 
   const hemisphere = new THREE.HemisphereLight(
     0xeaf5ff,
@@ -82,7 +83,6 @@ export function createOfficeScene(
   fill.position.set(8, 9, -5);
   scene.add(fill);
 
-  // Selection highlight
   const highlightGeometry =
     new THREE.BoxGeometry(2.05, 0.045, 2.35);
 
@@ -125,18 +125,56 @@ export function createOfficeScene(
   const elevation = 0.9;
   let zoomLevel = 1;
   let disposed = false;
+
+  // Animation runs only while the page is visible.
+  const clock = new THREE.Clock();
+  const frameInterval = 1000 / 30;
+
   let frameId: number | null = null;
+  let lastFrameTime = 0;
+  let needsRender = true;
+
+  function renderFrame(time: number) {
+    frameId = null;
+
+    if (disposed || document.hidden) return;
+
+    if (
+      time - lastFrameTime >= frameInterval ||
+      needsRender
+    ) {
+      lastFrameTime = time;
+      needsRender = false;
+
+      officeCharacters.update(clock.getElapsedTime());
+      renderer.render(scene, camera);
+    }
+
+    frameId = window.requestAnimationFrame(renderFrame);
+  }
 
   function requestRender() {
-    if (disposed || frameId !== null) return;
+    if (disposed) return;
 
-    frameId = window.requestAnimationFrame(() => {
-      frameId = null;
+    needsRender = true;
 
-      if (!disposed) {
-        renderer.render(scene, camera);
+    if (document.hidden || frameId !== null) return;
+
+    frameId = window.requestAnimationFrame(renderFrame);
+  }
+
+  function onVisibilityChange() {
+    if (disposed) return;
+
+    if (document.hidden) {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+        frameId = null;
       }
-    });
+    } else {
+      lastFrameTime = 0;
+      requestRender();
+    }
   }
 
   function updateCamera() {
@@ -216,7 +254,6 @@ export function createOfficeScene(
 
     while (current) {
       if (
-        current.userData.type === "desk" &&
         typeof current.userData.deskId === "string"
       ) {
         return current.userData.deskId;
@@ -243,9 +280,12 @@ export function createOfficeScene(
 
     raycaster.setFromCamera(pointer, camera);
 
-    // Only raycast workstation groups.
+    // Both furniture and characters are selectable.
     const hits = raycaster.intersectObjects(
-      Array.from(deskGroups.values()),
+      [
+        ...deskGroups.values(),
+        officeCharacters.group,
+      ],
       true,
     );
 
@@ -294,13 +334,12 @@ export function createOfficeScene(
       event.clientY - startY,
     );
 
-    if (distance > 5) {
-      moved = true;
-    }
+    if (distance > 5) moved = true;
 
     if (moved) {
       azimuth +=
         (event.clientX - lastX) * 0.005;
+
       updateCamera();
     }
 
@@ -322,9 +361,7 @@ export function createOfficeScene(
     activePointer = null;
     canvas.style.cursor = "grab";
 
-    if (shouldSelect) {
-      pickDesk(event);
-    }
+    if (shouldSelect) pickDesk(event);
   }
 
   function zoom(factor: number) {
@@ -380,9 +417,15 @@ export function createOfficeScene(
   canvas.addEventListener("wheel", onWheel, {
     passive: false,
   });
+
   window.addEventListener("keydown", onKeyDown);
+  document.addEventListener(
+    "visibilitychange",
+    onVisibilityChange,
+  );
 
   resize();
+  requestRender();
 
   return {
     zoom,
@@ -424,16 +467,23 @@ export function createOfficeScene(
         "wheel",
         onWheel,
       );
+
       window.removeEventListener(
         "keydown",
         onKeyDown,
+      );
+      document.removeEventListener(
+        "visibilitychange",
+        onVisibilityChange,
       );
 
       highlightGeometry.dispose();
       highlightMaterial.dispose();
       highlight.removeFromParent();
 
+      officeCharacters.dispose();
       officeObjects.dispose();
+
       sun.shadow.dispose();
       renderer.dispose();
 
