@@ -105,3 +105,12 @@ export type {
   CustomerSupportAssignment,
   NewCustomerSupportAssignment,
 } from "./support-assignment-schema.js";
+
+export {
+  officeDeskAssignments,
+} from "./office-schema.js";
+
+export type {
+  OfficeDeskAssignment,
+  NewOfficeDeskAssignment,
+} from "./office-schema.js";
