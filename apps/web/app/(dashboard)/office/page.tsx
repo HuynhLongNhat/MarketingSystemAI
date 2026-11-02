@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -11,10 +10,7 @@ import {
 import Link from "next/link";
 import {
   Building2,
-  CheckCircle2,
-  ChevronRight,
   Info,
-  Monitor,
   RefreshCw,
   RotateCcw,
   Users,
@@ -44,6 +40,8 @@ import {
   isOfficeEligible,
   mapAgentsToOffice,
 } from "@/modules/office/config/office-agent-mapping";
+
+import { OfficeWorkstationList } from "@/modules/office/components/office-workstation-list";
 
 import type {
   OfficeSceneController,
@@ -121,8 +119,6 @@ export default function OfficePage() {
     useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] =
     useState("");
-  const [showDeskList, setShowDeskList] =
-    useState(true);
 
   const requestIdRef = useRef(0);
   const savingRef = useRef(false);
@@ -460,77 +456,16 @@ export default function OfficePage() {
           </div>
         )}
 
-        {/* WORKSTATION LIST */}
-        <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
-          <div className="rounded-lg bg-white/90 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm">
-            WORKSPACE · {mapping.assignments.length} Agent
-          </div>
-
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!ready}
-            onClick={() => setShowDeskList((v) => !v)}
-          >
-            <Monitor className="mr-2 size-4" />
-            {showDeskList
-              ? "Ẩn danh sách bàn"
-              : "Hiện danh sách bàn"}
-          </Button>
-
-          {showDeskList && (
-            <div className="max-h-[300px] w-[235px] overflow-y-auto rounded-xl border bg-white/95 p-2 shadow-lg">
-              <p className="px-2 pb-2 text-xs font-semibold text-slate-500">
-                WORKSTATIONS
-              </p>
-
-              <div className="space-y-1">
-                {DESKS.map((desk) => {
-                  const active =
-                    selectedDeskId === desk.id;
-
-                  const assignment =
-                    assignmentByDesk.get(desk.id);
-
-                  return (
-                    <button
-                      key={desk.id}
-                      type="button"
-                      disabled={!ready}
-                      onClick={() => selectDesk(desk.id)}
-                      className={`flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs transition-colors ${
-                        active
-                          ? "bg-emerald-100 text-emerald-900"
-                          : "text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <Monitor className="size-3.5 shrink-0" />
-
-                        <span className="min-w-0">
-                          <span className="block font-semibold">
-                            {deskLabel(desk.id)}
-                          </span>
-
-                          <span className="block truncate text-[11px] opacity-70">
-                            {assignment?.agent.name ??
-                              "Bàn trống"}
-                          </span>
-                        </span>
-                      </span>
-
-                      {active ? (
-                        <CheckCircle2 className="size-4 shrink-0" />
-                      ) : (
-                        <ChevronRight className="size-3.5 shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* WORKSTATION SIDEBAR */}
+        <OfficeWorkstationList
+          className="absolute left-4 top-4 z-10"
+          desks={DESKS}
+          assignmentByDesk={assignmentByDesk}
+          selectedDeskId={selectedDeskId}
+          getDeskLabel={deskLabel}
+          onSelectDesk={selectDesk}
+          disabled={!ready}
+        />
 
         {/* DESK DETAILS PANEL */}
         {selectedDesk && (
