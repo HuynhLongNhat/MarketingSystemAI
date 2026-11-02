@@ -21,7 +21,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-
+import { AgentStatusBadge } from "@/modules/workforce/agent-status-badge";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
 import { Input } from "@workspace/ui/components/input";
@@ -66,13 +66,6 @@ const categories: Record<AgentCategory, string> = {
   research: "Nghiên cứu",
   operations: "Vận hành",
   other: "Khác",
-};
-
-const statuses: Record<AiAgent["status"], string> = {
-  draft: "Bản nháp",
-  active: "Đang hoạt động",
-  paused: "Tạm dừng",
-  archived: "Đã lưu trữ",
 };
 
 function errorMessage(error: unknown): string {
@@ -601,10 +594,7 @@ export default function WorkforcePage() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      <Badge variant="outline" className="text-foreground">
-                        {statuses[agent.status]}
-                      </Badge>
-
+                     <AgentStatusBadge status={agent.status} />
                       <Button
                         type="button"
                         variant="edit"
