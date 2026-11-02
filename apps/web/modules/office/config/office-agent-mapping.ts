@@ -29,13 +29,28 @@ export interface OfficeAgentMapping {
 }
 
 const COLORS = [
-  "#60a5fa",
-  "#c084fc",
-  "#34d399",
-  "#fbbf24",
-  "#fb7185",
-  "#2dd4bf",
+  "#79aee8",
+  "#b89cde",
+  "#78bda5",
+  "#e5b878",
+  "#df9caa",
+  "#79c6c4",
 ] as const;
+
+/**
+ * Stable color identity based on Agent ID.
+ * Moving an Agent to another desk must not change its color.
+ */
+function agentColor(agentId: string): string {
+  let hash = 2166136261;
+
+  for (let i = 0; i < agentId.length; i++) {
+    hash ^= agentId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return COLORS[(hash >>> 0) % COLORS.length]!;
+}
 
 export function isOfficeEligible(
   agent: AiAgent,
@@ -77,6 +92,8 @@ export function mapAgentsToOffice(
 
   const assignments: OfficeAgentAssignment[] = [];
   const characters: OfficeCharacterData[] = [];
+  const unassignedAgents: AiAgent[] = [];
+
   const seatedAgentIds = new Set<string>();
   const occupiedDeskIds = new Set<string>();
 
@@ -92,9 +109,6 @@ export function mapAgentsToOffice(
     }
 
     const visualStatus = mapAgentVisualStatus(agent);
-    const deskIndex = OFFICE_LAYOUT.desks.findIndex(
-      (desk) => desk.id === saved.deskId,
-    );
 
     assignments.push({
       deskId: saved.deskId,
@@ -109,7 +123,7 @@ export function mapAgentsToOffice(
       id: agent.id,
       deskId: saved.deskId,
       name: agent.name,
-      color: COLORS[deskIndex % COLORS.length]!,
+      color: agentColor(agent.id),
       status: visualStatus,
     });
 
@@ -117,13 +131,18 @@ export function mapAgentsToOffice(
     occupiedDeskIds.add(saved.deskId);
   }
 
-  const unassignedAgents = agents
-    .filter(
-      (agent) =>
-        isOfficeEligible(agent) &&
-        !seatedAgentIds.has(agent.id),
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
+  for (const agent of agents) {
+    if (
+      isOfficeEligible(agent) &&
+      !seatedAgentIds.has(agent.id)
+    ) {
+      unassignedAgents.push(agent);
+    }
+  }
+
+  unassignedAgents.sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   return {
     assignments,

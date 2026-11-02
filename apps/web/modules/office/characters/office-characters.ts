@@ -83,13 +83,10 @@ interface CharacterRuntime {
   phase: number;
 }
 
-const STATUS_COLORS: Record<
-  OfficeAgentStatus,
-  string
-> = {
-  idle: "#38bdf8",
-  working: "#22c55e",
-  thinking: "#f59e0b",
+const STATUS_COLORS: Record<OfficeAgentStatus, string> = {
+  idle: "#60a5fa",
+  working: "#34d399",
+  thinking: "#fbbf24",
   offline: "#94a3b8",
 };
 
@@ -102,22 +99,37 @@ export function createOfficeCharacters(
   group.name = "office-characters";
   scene.add(group);
 
-  const geometries = new Set<THREE.BufferGeometry>();
+  const geometries = new Map<string, THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const runtimes = new Map<string, CharacterRuntime>();
+
+  function geometry(
+    key: string,
+    factory: () => THREE.BufferGeometry,
+  ): THREE.BufferGeometry {
+    const existing = geometries.get(key);
+    if (existing) return existing;
+
+    const result = factory();
+    geometries.set(key, result);
+    return result;
+  }
 
   function material(
     color: string,
     options: {
+      roughness?: number;
+      metalness?: number;
       emissive?: string;
       emissiveIntensity?: number;
     } = {},
-  ) {
+  ): THREE.MeshStandardMaterial {
     const value = new THREE.MeshStandardMaterial({
       color,
-      roughness: 0.65,
-      metalness: 0.12,
-      ...options,
+      roughness: options.roughness ?? 0.72,
+      metalness: options.metalness ?? 0.06,
+      emissive: options.emissive ?? "#000000",
+      emissiveIntensity: options.emissiveIntensity ?? 0,
     });
 
     materials.add(value);
@@ -125,33 +137,35 @@ export function createOfficeCharacters(
   }
 
   function addMesh(
-    geometry: THREE.BufferGeometry,
-    mat: THREE.Material,
+    shape: THREE.BufferGeometry,
+    surface: THREE.Material,
     parent: THREE.Group,
     x: number,
     y: number,
     z: number,
-  ) {
-    geometries.add(geometry);
-
-    const mesh = new THREE.Mesh(geometry, mat);
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    parent.add(mesh);
-
-    return mesh;
+  ): THREE.Mesh {
+    const object = new THREE.Mesh(shape, surface);
+    object.position.set(x, y, z);
+    object.castShadow = true;
+    object.receiveShadow = true;
+    parent.add(object);
+    return object;
   }
 
   function box(
     parent: THREE.Group,
     size: [number, number, number],
     position: [number, number, number],
-    mat: THREE.Material,
-  ) {
+    surface: THREE.Material,
+  ): THREE.Mesh {
+    const [w, h, d] = size;
+
     return addMesh(
-      new THREE.BoxGeometry(...size),
-      mat,
+      geometry(
+        `box:${w}:${h}:${d}`,
+        () => new THREE.BoxGeometry(w, h, d),
+      ),
+      surface,
       parent,
       ...position,
     );
@@ -161,11 +175,32 @@ export function createOfficeCharacters(
     parent: THREE.Group,
     radius: number,
     position: [number, number, number],
-    mat: THREE.Material,
-  ) {
+    surface: THREE.Material,
+  ): THREE.Mesh {
     return addMesh(
-      new THREE.IcosahedronGeometry(radius, 1),
-      mat,
+      geometry(
+        `sphere:${radius}`,
+        () => new THREE.SphereGeometry(radius, 12, 8),
+      ),
+      surface,
+      parent,
+      ...position,
+    );
+  }
+
+  function capsule(
+    parent: THREE.Group,
+    radius: number,
+    length: number,
+    position: [number, number, number],
+    surface: THREE.Material,
+  ): THREE.Mesh {
+    return addMesh(
+      geometry(
+        `capsule:${radius}:${length}`,
+        () => new THREE.CapsuleGeometry(radius, length, 4, 8),
+      ),
+      surface,
       parent,
       ...position,
     );
@@ -176,167 +211,138 @@ export function createOfficeCharacters(
       (item) => item.id === character.deskId,
     );
 
-    if (!desk) continue;
+    if (!desk || runtimes.has(character.id)) continue;
 
     const root = new THREE.Group();
     root.name = character.id;
-
-    root.userData = {
-      type: "office-character",
-      characterId: character.id,
-      deskId: character.deskId,
-    };
-
-    // Characters sit behind the desk.
     root.position.set(
       desk.position[0],
       0,
       desk.position[1] + 1.05,
     );
-
+    root.userData = {
+      type: "office-character",
+      characterId: character.id,
+      deskId: character.deskId,
+    };
     group.add(root);
 
+    // Individual identity color, supplied by mapping.
     const shell = material(character.color);
-    const dark = material("#263445");
-    const face = material("#dbeafe");
-    const eye = material("#0f172a");
-    const accent = material("#f8fafc");
+    const shellLight = material(
+      new THREE.Color(character.color)
+        .lerp(new THREE.Color("#ffffff"), 0.32)
+        .getStyle(),
+    );
+    const dark = material("#435363");
+    const face = material("#f2f6f7");
+    const visor = material("#344b5e", {
+      roughness: 0.35,
+      metalness: 0.12,
+    });
+    const eye = material("#c3edf4", {
+      emissive: "#70c5e1",
+      emissiveIntensity: 0.18,
+    });
+    const joint = material("#9aaeb8");
+    const chest = material("#e2f2f0");
 
+    // Character sits at the existing chair location.
     const body = new THREE.Group();
     body.position.y = 0.66;
     root.add(body);
 
-    // Robot torso
-    box(
-      body,
-      [0.42, 0.47, 0.28],
-      [0, 0, 0],
-      shell,
-    );
+    // Rounded torso with a soft, toy-like silhouette.
+    capsule(body, 0.23, 0.18, [0, 0, 0], shell);
+    box(body, [0.34, 0.12, 0.04], [0, 0.05, -0.218], shellLight);
+    box(body, [0.22, 0.12, 0.028], [0, 0.02, -0.243], chest);
 
-    // Chest panel
-    box(
-      body,
-      [0.22, 0.14, 0.025],
-      [0, 0.04, -0.153],
-      dark,
-    );
+    // Small chest indicator.
+    sphere(body, 0.035, [0, 0.02, -0.264], eye);
 
-    box(
-      body,
-      [0.13, 0.035, 0.027],
-      [0, 0.04, -0.17],
-      accent,
-    );
-
-    // Neck and head
-    box(
-      body,
-      [0.13, 0.13, 0.13],
-      [0, 0.3, 0],
-      dark,
-    );
+    // Neck.
+    capsule(body, 0.065, 0.045, [0, 0.3, 0], joint);
 
     const head = new THREE.Group();
-    head.position.set(0, 0.47, 0);
+    head.position.set(0, 0.48, 0);
     body.add(head);
 
-    box(
-      head,
-      [0.42, 0.37, 0.34],
-      [0, 0, 0],
-      face,
-    );
+    // Larger, friendly robot head.
+    sphere(head, 0.285, [0, 0, 0], face);
+    box(head, [0.42, 0.2, 0.06], [0, -0.015, -0.245], visor);
 
-    box(
-      head,
-      [0.35, 0.22, 0.025],
-      [0, 0, -0.187],
-      dark,
-    );
+    // Eyes facing the desk monitor.
+    for (const x of [-0.115, 0.115]) {
+      sphere(head, 0.045, [x, 0.005, -0.284], eye);
+    }
 
-    for (const x of [-0.1, 0.1]) {
-      box(
+    // Small antenna and colored tip.
+    capsule(head, 0.022, 0.09, [0, 0.32, 0], dark);
+    sphere(head, 0.07, [0, 0.405, 0], shell);
+
+    // Side ear panels.
+    for (const direction of [-1, 1]) {
+      sphere(
         head,
-        [0.055, 0.065, 0.015],
-        [x, 0.025, -0.206],
-        eye,
+        0.09,
+        [direction * 0.275, 0, 0],
+        shellLight,
       );
     }
 
-    // Antenna
-    box(
-      head,
-      [0.035, 0.15, 0.035],
-      [0, 0.255, 0],
-      dark,
-    );
-
-    sphere(
-      head,
-      0.075,
-      [0, 0.35, 0],
-      shell,
-    );
-
-    // Arms, pivoted at shoulders
+    // Arms pivot at the shoulders.
     const leftArm = new THREE.Group();
-    leftArm.position.set(-0.28, 0.14, 0);
+    leftArm.position.set(-0.27, 0.12, 0);
     body.add(leftArm);
 
     const rightArm = new THREE.Group();
-    rightArm.position.set(0.28, 0.14, 0);
+    rightArm.position.set(0.27, 0.12, 0);
     body.add(rightArm);
 
     for (const [arm, direction] of [
       [leftArm, -1],
       [rightArm, 1],
     ] as const) {
-      box(
+      sphere(arm, 0.105, [0, 0, 0], shellLight);
+      capsule(
         arm,
-        [0.15, 0.32, 0.16],
-        [direction * 0.015, -0.17, -0.05],
+        0.09,
+        0.15,
+        [direction * 0.015, -0.18, -0.035],
         shell,
       );
-
-      box(
+      sphere(
         arm,
-        [0.16, 0.13, 0.17],
-        [direction * 0.015, -0.37, -0.1],
+        0.09,
+        [direction * 0.015, -0.33, -0.075],
         face,
       );
     }
 
-    // Legs
+    // Legs and feet.
     for (const x of [-0.12, 0.12]) {
+      capsule(root, 0.09, 0.12, [x, 0.29, -0.1], dark);
       box(
         root,
-        [0.15, 0.32, 0.16],
-        [x, 0.26, -0.1],
-        dark,
-      );
-
-      box(
-        root,
-        [0.18, 0.11, 0.27],
-        [x, 0.07, -0.18],
+        [0.2, 0.1, 0.29],
+        [x, 0.08, -0.17],
         shell,
       );
     }
 
-    // Floating status indicator
-    const statusMaterial = material(
-      STATUS_COLORS[character.status],
-      {
-        emissive: STATUS_COLORS[character.status],
-        emissiveIntensity: 0.5,
-      },
-    );
+    // Status indicator: represents mapped visual status,
+    // not a live task execution state.
+    const statusColor = STATUS_COLORS[character.status];
+    const statusMaterial = material(statusColor, {
+      emissive: statusColor,
+      emissiveIntensity:
+        character.status === "offline" ? 0 : 0.35,
+    });
 
     const statusLight = sphere(
       root,
-      0.105,
-      [0.38, 1.55, 0],
+      0.095,
+      [0.39, 1.58, 0],
       statusMaterial,
     );
 
@@ -357,7 +363,7 @@ export function createOfficeCharacters(
   function setStatus(
     characterId: string,
     status: OfficeAgentStatus,
-  ) {
+  ): void {
     if (disposed) return;
 
     const runtime = runtimes.get(characterId);
@@ -365,50 +371,51 @@ export function createOfficeCharacters(
 
     runtime.status = status;
 
-    const mat = runtime.statusLight.material;
+    const surface = runtime.statusLight.material;
 
-    if (mat instanceof THREE.MeshStandardMaterial) {
-      mat.color.set(STATUS_COLORS[status]);
-      mat.emissive.set(STATUS_COLORS[status]);
-      mat.emissiveIntensity =
-        status === "offline" ? 0 : 0.5;
+    if (surface instanceof THREE.MeshStandardMaterial) {
+      surface.color.set(STATUS_COLORS[status]);
+      surface.emissive.set(STATUS_COLORS[status]);
+      surface.emissiveIntensity =
+        status === "offline" ? 0 : 0.35;
     }
   }
 
-  function update(elapsed: number) {
+  function update(elapsed: number): void {
     if (disposed) return;
 
     for (const runtime of runtimes.values()) {
       const t = elapsed + runtime.phase;
       const active = runtime.status !== "offline";
 
+      // Calm idle movement.
       runtime.body.position.y = active
-        ? 0.66 + Math.sin(t * 1.6) * 0.012
-        : 0.64;
+        ? 0.66 + Math.sin(t * 1.4) * 0.008
+        : 0.65;
 
-      runtime.head.rotation.y =
-        runtime.status === "thinking"
-          ? Math.sin(t * 0.9) * 0.2
-          : Math.sin(t * 0.6) * 0.06;
+      runtime.head.rotation.y = active
+        ? Math.sin(t * 0.65) * 0.055
+        : 0;
 
       runtime.head.rotation.z =
-        runtime.status === "thinking" ? 0.1 : 0;
+        runtime.status === "thinking"
+          ? Math.sin(t * 0.6) * 0.09
+          : 0;
 
+      // Only animate typing for explicitly supplied working state.
       if (runtime.status === "working") {
         runtime.leftArm.rotation.x =
-          Math.sin(t * 7) * 0.22;
-
+          Math.sin(t * 5) * 0.14;
         runtime.rightArm.rotation.x =
-          Math.sin(t * 7 + Math.PI) * 0.22;
+          Math.sin(t * 5 + Math.PI) * 0.14;
       } else {
         runtime.leftArm.rotation.x = 0;
         runtime.rightArm.rotation.x = 0;
       }
 
-      const scale =
-        active
-          ? 1 + Math.sin(t * 2.5) * 0.12
-          : 0.8;
+      const scale = active
+        ? 1 + Math.sin(t * 2) * 0.07
+        : 0.85;
 
       runtime.statusLight.scale.setScalar(scale);
     }
@@ -426,12 +433,12 @@ export function createOfficeCharacters(
       group.removeFromParent();
       group.clear();
 
-      for (const geometry of geometries) {
-        geometry.dispose();
+      for (const shape of geometries.values()) {
+        shape.dispose();
       }
 
-      for (const mat of materials) {
-        mat.dispose();
+      for (const surface of materials) {
+        surface.dispose();
       }
 
       geometries.clear();
