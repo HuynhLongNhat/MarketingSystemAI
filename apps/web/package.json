@@ -32,12 +32,14 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.61.1",
     "sonner": "^2.0.6",
+    "three": "^0.187.0",
     "zod": "3.25.67"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.187.0",
     "@workspace/eslint-config": "workspace:^",
     "@workspace/typescript-config": "workspace:*",
     "eslint": "^9",
