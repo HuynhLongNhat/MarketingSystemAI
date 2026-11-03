@@ -117,7 +117,6 @@ export class PublicWidgetOriginGuard implements CanActivate {
       (allowedOrigin: string) =>
         normalizeOrigin(allowedOrigin) === requestOrigin,
     );
-
     if (!isAllowed) {
       throw new ForbiddenException("Widget origin is not allowed");
     }

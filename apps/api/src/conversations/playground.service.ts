@@ -25,15 +25,44 @@ export type PlaygroundChatResponse =
   | { ok: false; error: { code: AiFailureCode; message: string } };
 
 const AI_ERROR_MESSAGES: Record<AiFailureCode, string> = {
-  no_user_message: "Không có tin nhắn hợp lệ để xử lý.",
+  no_user_message:
+    "Không có tin nhắn hợp lệ để xử lý.",
+
   agent_ambiguous:
     "Có nhiều nhân viên CSKH đang hoạt động. Hãy để lại đúng một nhân viên ở trạng thái hoạt động.",
+
   not_configured:
     "Chưa cấu hình mô hình AI khả dụng cho nhân viên CSKH.",
+
   provider_error:
-    "Nhà cung cấp AI trả về lỗi. Hãy kiểm tra kết nối và mô hình rồi thử lại.",
-  timeout: "Nhà cung cấp AI phản hồi quá chậm (quá 20 giây).",
-  empty_response: "Mô hình trả về nội dung rỗng.",
+    "Không thể kết nối tới nhà cung cấp AI. Vui lòng thử lại.",
+
+  provider_auth_failed:
+    "API key của nhà cung cấp AI không hợp lệ. Hãy kiểm tra lại cấu hình.",
+
+  provider_forbidden:
+    "API key không có quyền sử dụng dịch vụ hoặc mô hình này.",
+
+  quota_exceeded:
+    "Tài khoản nhà cung cấp AI đã hết hạn mức sử dụng hoặc tín dụng.",
+
+  rate_limited:
+    "Nhà cung cấp AI đang giới hạn số lượng yêu cầu. Vui lòng thử lại sau.",
+
+  invalid_model:
+    "Không tìm thấy mô hình AI đã cấu hình. Hãy kiểm tra lại Model ID.",
+
+  provider_request_error:
+    "Yêu cầu gửi tới nhà cung cấp AI không hợp lệ. Hãy kiểm tra cấu hình mô hình.",
+
+  provider_unavailable:
+    "Nhà cung cấp AI đang gặp sự cố. Hệ thống đã thử kết nối lại.",
+
+  timeout:
+    "Nhà cung cấp AI phản hồi quá chậm (quá 20 giây).",
+
+  empty_response:
+    "Mô hình trả về nội dung rỗng.",
 };
 
 const LIMIT_MESSAGES = {
