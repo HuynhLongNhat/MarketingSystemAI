@@ -23,6 +23,7 @@ export const widgetSettings = pgTable("widget_settings", {
     .notNull(),
   vapiAssistantId: text("vapi_assistant_id"),
   vapiPhoneNumber: text("vapi_phone_number"),
+  allowedOrigins: text("allowed_origins").array().notNull().default([]),
 });
 
 export const user = pgTable(

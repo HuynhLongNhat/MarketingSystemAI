@@ -1,3 +1,4 @@
+
 import "reflect-metadata";
 import "./env.js";
 import { environment, validateServerEnvironment } from "./env.js";
@@ -27,6 +28,17 @@ async function bootstrap(): Promise<void> {
   app.useLogger(["log", "error", "warn", "debug"]);
 
   app.enableShutdownHooks();
+
+  /**
+   * Production topology:
+   * Client -> Cloudflare -> API origin.
+   *
+   * Trust exactly one proxy hop. This is safe only when the origin is
+   * protected so that clients cannot bypass Cloudflare and connect directly.
+   */
+  if (environment === "production") {
+    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  }
 
   app.setGlobalPrefix("v1");
 

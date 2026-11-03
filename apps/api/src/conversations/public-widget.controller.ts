@@ -27,6 +27,7 @@ import {
   PublicWidgetRateLimitGuard,
   WIDGET_RATE_LIMIT_KEY,
 } from "./public-widget-rate-limit.guard.js";
+import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
 class CreatePublicSessionDto {
   @IsString()
@@ -80,7 +81,10 @@ class SendPublicMessageDto {
 
 @ApiTags("Public Widget")
 @Controller("public/widget")
-@UseGuards(PublicWidgetRateLimitGuard)
+@UseGuards(
+  PublicWidgetOriginGuard,
+  PublicWidgetRateLimitGuard,
+)
 export class PublicWidgetController {
   constructor(private readonly service: PublicWidgetService) {}
 

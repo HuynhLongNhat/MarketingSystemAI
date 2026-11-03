@@ -20,6 +20,7 @@ import { PublicWidgetController } from "./public-widget.controller.js";
 import { PublicWidgetService } from "./public-widget.service.js";
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
 import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js";
+import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
 @Module({
   controllers: [
@@ -38,6 +39,7 @@ import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js"
     PublicWidgetService,
     PublicWidgetAiService,
     PublicWidgetRateLimitGuard,
+    PublicWidgetOriginGuard,
     AuthGuard,
     PermissionsGuard,
   ],

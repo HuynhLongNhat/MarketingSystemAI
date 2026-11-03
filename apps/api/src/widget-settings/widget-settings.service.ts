@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Injectable,
@@ -17,6 +16,35 @@ import type { UpdateWidgetSettingsDto } from "./widget-settings.dto.js";
 
 const DEFAULT_GREETING =
   "Xin chào! Chúng tôi có thể giúp gì cho bạn?";
+
+function normalizeOrigin(value: string): string {
+  const trimmed = value.trim();
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new BadRequestException(
+      `Invalid allowed origin: ${value}`,
+    );
+  }
+
+  if (
+    !["http:", "https:"].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new BadRequestException(
+      `Allowed origin must be a valid HTTP(S) origin: ${value}`,
+    );
+  }
+
+  return parsed.origin;
+}
 
 @Injectable()
 export class WidgetSettingsService {
@@ -44,8 +72,6 @@ export class WidgetSettingsService {
       )
       .limit(1);
 
-    // Luôn trả về JSON hợp lệ kể cả khi Organization
-    // chưa từng lưu cấu hình Widget.
     if (!settings) {
       return {
         organizationId,
@@ -59,6 +85,7 @@ export class WidgetSettingsService {
           assistantId: undefined,
           phoneNumber: undefined,
         },
+        allowedOrigins: [],
       };
     }
 
@@ -67,11 +94,10 @@ export class WidgetSettingsService {
       greetMessage: settings.greetMessage,
       defaultSuggestions: settings.defaultSuggestions,
       vapiSettings: {
-        assistantId:
-          settings.vapiAssistantId ?? undefined,
-        phoneNumber:
-          settings.vapiPhoneNumber ?? undefined,
+        assistantId: settings.vapiAssistantId ?? undefined,
+        phoneNumber: settings.vapiPhoneNumber ?? undefined,
       },
+      allowedOrigins: settings.allowedOrigins ?? [],
     };
   }
 
@@ -96,19 +122,34 @@ export class WidgetSettingsService {
         dto.defaultSuggestions.suggestion3?.trim() ?? "",
     };
 
+    const allowedOrigins =
+      dto.allowedOrigins === undefined
+        ? undefined
+        : [
+            ...new Set(
+              dto.allowedOrigins.map(normalizeOrigin),
+            ),
+          ];
+
+    const updateValues = {
+      greetMessage,
+      defaultSuggestions,
+      ...(allowedOrigins !== undefined
+        ? { allowedOrigins }
+        : {}),
+    };
+
     await db
       .insert(widgetSettings)
       .values({
         organizationId: context.organizationId,
         greetMessage,
         defaultSuggestions,
+        allowedOrigins: allowedOrigins ?? [],
       })
       .onConflictDoUpdate({
         target: widgetSettings.organizationId,
-        set: {
-          greetMessage,
-          defaultSuggestions,
-        },
+        set: updateValues,
       });
 
     return this.getCurrent(context);

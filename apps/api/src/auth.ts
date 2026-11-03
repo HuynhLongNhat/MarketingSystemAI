@@ -1,3 +1,4 @@
+
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { organization, phoneNumber } from "better-auth/plugins";
@@ -95,10 +96,39 @@ function buildSocialProviders() {
   };
 }
 
+/**
+ * Resolve client IP.
+ *
+ * Production:
+ * - Only trust CF-Connecting-IP supplied by Cloudflare.
+ * - Never fall back to X-Forwarded-For or X-Real-IP.
+ * - The origin must be protected against direct access that bypasses Cloudflare.
+ *
+ * Development:
+ * - Allow local proxy headers for development/testing.
+ */
 function clientIp(headers: Headers | undefined): string {
-  // Yêu cầu reverse proxy tin cậy ghi đè X-Forwarded-For; không dùng khi lộ trực tiếp ra internet.
-  const forwarded = headers?.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || headers?.get("x-real-ip") || "unknown";
+  if (!headers) {
+    return "unknown";
+  }
+
+  if (isProduction) {
+    const cloudflareIp = headers.get("cf-connecting-ip")?.trim();
+
+    return cloudflareIp || "unknown";
+  }
+
+  const forwarded = headers
+    .get("x-forwarded-for")
+    ?.split(",")[0]
+    ?.trim();
+
+  return (
+    forwarded ||
+    headers.get("x-real-ip")?.trim() ||
+    headers.get("cf-connecting-ip")?.trim() ||
+    "unknown"
+  );
 }
 
 export const auth = betterAuth({

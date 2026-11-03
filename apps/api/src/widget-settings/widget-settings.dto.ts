@@ -1,6 +1,7 @@
-
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  IsArray,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -36,4 +37,10 @@ export class UpdateWidgetSettingsDto {
   @ValidateNested()
   @Type(() => DefaultSuggestionsDto)
   defaultSuggestions!: DefaultSuggestionsDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  allowedOrigins?: string[];
 }
