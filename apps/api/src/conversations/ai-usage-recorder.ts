@@ -33,19 +33,25 @@ function validInteger(value: unknown): number | null {
 export class AiUsageRecorder {
   private readonly logger = new Logger(AiUsageRecorder.name);
 
-  async record(input: AiUsageInput): Promise<void> {
+  /**
+   * Returns true only when usage was persisted successfully
+   * and a valid total token count is available.
+   *
+   * The boolean is used by quota settlement:
+   * uncertain usage must keep its reservation until month end.
+   */
+  async record(input: AiUsageInput): Promise<boolean> {
     try {
       const inputTokens = validInteger(input.inputTokens);
       const outputTokens = validInteger(input.outputTokens);
       const reportedTotal = validInteger(input.totalTokens);
 
-      const totalTokens =
-        reportedTotal ??
-        (
-          inputTokens !== null && outputTokens !== null
-            ? inputTokens + outputTokens
-            : null
-        );
+      const calculatedTotal =
+        inputTokens !== null && outputTokens !== null
+          ? inputTokens + outputTokens
+          : null;
+
+      const totalTokens = reportedTotal ?? calculatedTotal;
 
       await db.insert(aiUsageLogs).values({
         id: randomUUID(),
@@ -60,9 +66,12 @@ export class AiUsageRecorder {
         latencyMs: validInteger(input.latencyMs),
         errorCode: input.errorCode ?? null,
       });
+
+      return totalTokens !== null;
     } catch {
-      // Usage logging không được làm gián đoạn chatbot.
+      // Usage logging must not interrupt chatbot behavior.
       this.logger.error("Could not persist AI usage record");
+      return false;
     }
   }
 }

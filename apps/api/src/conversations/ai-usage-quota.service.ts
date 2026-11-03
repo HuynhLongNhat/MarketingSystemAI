@@ -7,16 +7,8 @@ import {
   aiUsageReservations,
   db,
 } from "@workspace/db/node";
-import {
-  and,
-  eq,
-  gt,
-  gte,
-  lt,
-  sql,
-} from "drizzle-orm";
+import { and, eq, gt, gte, lt, sql } from "drizzle-orm";
 
-const TEMPORARY_RESERVATION_MS = 2 * 60 * 1000;
 const MAX_DATABASE_INTEGER = 2_147_483_647;
 
 export type AiQuotaReservationResult =
@@ -43,53 +35,29 @@ export type AiQuotaReservationResult =
       requestedTokens: number;
     };
 
-export type AiQuotaSettlement =
-  | {
-      reservationId: string;
-      organizationId: string;
-      outcome: "release";
-    }
-  | {
-      reservationId: string;
-      organizationId: string;
-      outcome: "retain";
-    };
+export type AiQuotaSettlement = {
+  reservationId: string;
+  organizationId: string;
+  outcome: "release" | "retain";
+};
 
 function getUtcMonthPeriod(now: Date): {
   periodStart: Date;
   periodEnd: Date;
 } {
-  const periodStart = new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    ),
-  );
-
-  const periodEnd = new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth() + 1,
-      1,
-      0,
-      0,
-      0,
-      0,
-    ),
-  );
-
   return {
-    periodStart,
-    periodEnd,
+    periodStart: new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    ),
+    periodEnd: new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    ),
   };
 }
 
-function parseAggregate(value: string | number | null | undefined): number {
+function parseAggregate(
+  value: string | number | null | undefined,
+): number {
   const parsed = Number(value ?? 0);
 
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -164,14 +132,8 @@ export class AiUsageQuotaService {
         .from(aiUsageReservations)
         .where(
           and(
-            eq(
-              aiUsageReservations.organizationId,
-              organizationId,
-            ),
-            eq(
-              aiUsageReservations.periodStart,
-              periodStart,
-            ),
+            eq(aiUsageReservations.organizationId, organizationId),
+            eq(aiUsageReservations.periodStart, periodStart),
             gt(aiUsageReservations.expiresAt, now),
           ),
         );
@@ -196,21 +158,15 @@ export class AiUsageQuotaService {
 
       const reservationId = randomUUID();
 
-      const temporaryExpiry = new Date(
-        now.getTime() + TEMPORARY_RESERVATION_MS,
-      );
-
-      const expiresAt =
-        temporaryExpiry < periodEnd
-          ? temporaryExpiry
-          : periodEnd;
-
+      // Keep the reservation until settlement or month end.
+      // If the process crashes after the provider has processed the
+      // request, the reservation still prevents quota undercounting.
       await tx.insert(aiUsageReservations).values({
         id: reservationId,
         organizationId,
         periodStart,
         reservedTokens: tokenEstimate,
-        expiresAt,
+        expiresAt: periodEnd,
       });
 
       return {
@@ -226,9 +182,6 @@ export class AiUsageQuotaService {
     });
   }
 
-  /**
-   * Release a reservation after usage has been safely recorded.
-   */
   async release(
     organizationId: string,
     reservationId: string,
@@ -240,13 +193,6 @@ export class AiUsageQuotaService {
     });
   }
 
-  /**
-   * Keep a reservation until the end of its billing month.
-   *
-   * Use this when usage cannot be reliably recorded or measured.
-   * This intentionally favors preventing quota bypass over
-   * undercounting provider usage.
-   */
   async retainUntilPeriodEnd(
     organizationId: string,
     reservationId: string,
@@ -258,9 +204,7 @@ export class AiUsageQuotaService {
     });
   }
 
-  private async settle(
-    input: AiQuotaSettlement,
-  ): Promise<void> {
+  private async settle(input: AiQuotaSettlement): Promise<void> {
     await db.transaction(async (tx) => {
       // Serialize settlement with new reservations for this organization.
       await tx
@@ -268,24 +212,13 @@ export class AiUsageQuotaService {
           id: aiUsageQuotas.id,
         })
         .from(aiUsageQuotas)
-        .where(
-          eq(
-            aiUsageQuotas.organizationId,
-            input.organizationId,
-          ),
-        )
+        .where(eq(aiUsageQuotas.organizationId, input.organizationId))
         .for("update")
         .limit(1);
 
       const conditions = and(
-        eq(
-          aiUsageReservations.id,
-          input.reservationId,
-        ),
-        eq(
-          aiUsageReservations.organizationId,
-          input.organizationId,
-        ),
+        eq(aiUsageReservations.id, input.reservationId),
+        eq(aiUsageReservations.organizationId, input.organizationId),
       );
 
       if (input.outcome === "release") {
@@ -313,18 +246,12 @@ export class AiUsageQuotaService {
           reservation.periodStart.getUTCFullYear(),
           reservation.periodStart.getUTCMonth() + 1,
           1,
-          0,
-          0,
-          0,
-          0,
         ),
       );
 
       await tx
         .update(aiUsageReservations)
-        .set({
-          expiresAt: periodEnd,
-        })
+        .set({ expiresAt: periodEnd })
         .where(conditions);
     });
   }

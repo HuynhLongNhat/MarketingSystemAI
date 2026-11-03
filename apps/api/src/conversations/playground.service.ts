@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   HttpException,
@@ -44,7 +45,7 @@ const AI_ERROR_MESSAGES: Record<AiFailureCode, string> = {
     "API key không có quyền sử dụng dịch vụ hoặc mô hình này.",
 
   quota_exceeded:
-    "Tài khoản nhà cung cấp AI đã hết hạn mức sử dụng hoặc tín dụng.",
+    "Tổ chức đã đạt hạn mức token AI trong tháng. Hãy liên hệ quản trị viên để tăng hạn mức hoặc chờ sang tháng mới.",
 
   rate_limited:
     "Nhà cung cấp AI đang giới hạn số lượng yêu cầu. Vui lòng thử lại sau.",

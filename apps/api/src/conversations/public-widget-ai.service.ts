@@ -17,6 +17,7 @@ import {
 } from "./customer-support-agent.js";
 import { selectKnowledge } from "./knowledge-ranking.js";
 import { AiUsageRecorder } from "./ai-usage-recorder.js";
+import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
 
 type ChatMessage = {
   role: string;
@@ -151,6 +152,8 @@ const AI_TIMEOUT_MS = 20000;
 const MAX_AI_ATTEMPTS = 2;
 const RETRY_BASE_DELAY_MS = 400;
 const MAX_RETRY_AFTER_MS = 2000;
+const MAX_DATABASE_INTEGER = 2_147_483_647;
+const MAX_COMPLETION_TOKENS = 600;
 
 function isTimeoutError(error: unknown): boolean {
   return (
@@ -262,12 +265,42 @@ function isRetryableNetworkError(error: unknown): boolean {
   return error instanceof TypeError;
 }
 
+/**
+ * Estimate a conservative reservation before calling the provider.
+ *
+ * This is not an exact tokenizer. It uses UTF-8 input size as a rough
+ * estimate, adds the configured completion allowance, then reserves
+ * for the maximum number of attempts.
+ */
+function estimateReservationTokens(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string }>,
+): number {
+  const inputText = [
+    systemPrompt,
+    ...messages.map((message) => message.content),
+  ].join("\n");
+
+  const estimatedInputTokens = Math.ceil(
+    Buffer.byteLength(inputText, "utf8") / 2,
+  );
+
+  const estimatedPerAttempt =
+    estimatedInputTokens + MAX_COMPLETION_TOKENS;
+
+  return Math.min(
+    MAX_DATABASE_INTEGER,
+    Math.max(1, estimatedPerAttempt) * MAX_AI_ATTEMPTS,
+  );
+}
+
 @Injectable()
 export class PublicWidgetAiService {
   private readonly logger = new Logger(PublicWidgetAiService.name);
 
   constructor(
     private readonly usageRecorder: AiUsageRecorder,
+    private readonly usageQuota: AiUsageQuotaService,
   ) {}
 
   private async recordUsage(
@@ -277,10 +310,10 @@ export class PublicWidgetAiService {
     startedAt: number,
     errorCode?: string,
     usage?: ProviderUsage,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const tokenUsage = extractProviderUsage(usage);
 
-    await this.usageRecorder.record({
+    return this.usageRecorder.record({
       organizationId,
       provider: runtime.provider,
       modelId: runtime.modelId,
@@ -572,6 +605,31 @@ export class PublicWidgetAiService {
     return instructions.join("\n");
   }
 
+  private async settleQuotaReservation(
+    organizationId: string,
+    reservationId: string | null,
+    usageReliable: boolean,
+  ): Promise<void> {
+    if (!reservationId) {
+      return;
+    }
+
+    try {
+      if (usageReliable) {
+        await this.usageQuota.release(organizationId, reservationId);
+      } else {
+        await this.usageQuota.retainUntilPeriodEnd(
+          organizationId,
+          reservationId,
+        );
+      }
+    } catch {
+      // Reservation mặc định hết hạn vào cuối kỳ.
+      // Nếu settlement lỗi, không xóa reservation bằng cách khác.
+      this.logger.error("Could not settle AI quota reservation");
+    }
+  }
+
   private async run(
     history: ChatMessage[],
     organizationId: string,
@@ -633,46 +691,184 @@ export class PublicWidgetAiService {
     );
 
     const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
+    const requestedTokens = estimateReservationTokens(systemPrompt, messages);
+
+    let reservationId: string | null = null;
+
+    try {
+      const reservation = await this.usageQuota.reserve(
+        organizationId,
+        requestedTokens,
+      );
+
+      if (reservation.limited && !reservation.allowed) {
+        this.logger.warn(
+          `Organization AI token quota exceeded: ` +
+            `org=${organizationId}, ` +
+            `used=${reservation.usedTokens}, ` +
+            `reserved=${reservation.reservedTokens}, ` +
+            `requested=${reservation.requestedTokens}, ` +
+            `limit=${reservation.monthlyTokenLimit}`,
+        );
+
+        return { ok: false, code: "quota_exceeded" };
+      }
+
+      if (reservation.limited && reservation.allowed) {
+        reservationId = reservation.reservationId;
+      }
+    } catch {
+      // Fail closed: nếu không xác minh được quota thì không gọi provider.
+      this.logger.error("Could not reserve organization AI token quota");
+      return { ok: false, code: "provider_error" };
+    }
+
+    let usageReliable = true;
     let lastFailure: ProviderErrorCode = "provider_error";
 
-    for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt += 1) {
-      const attemptStartedAt = Date.now();
+    try {
+      for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt += 1) {
+        const attemptStartedAt = Date.now();
 
-      try {
-        const response = await fetch(runtime.endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${runtime.apiKey}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            model: runtime.modelId,
-            temperature: 0.3,
-            max_completion_tokens: 600,
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt,
-              },
-              ...messages,
-            ],
-          }),
-          signal: AbortSignal.timeout(AI_TIMEOUT_MS),
-          redirect: "error",
-        });
+        try {
+          const response = await fetch(runtime.endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${runtime.apiKey}`,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              model: runtime.modelId,
+              temperature: 0.3,
+              max_completion_tokens: MAX_COMPLETION_TOKENS,
+              messages: [
+                {
+                  role: "system",
+                  content: systemPrompt,
+                },
+                ...messages,
+              ],
+            }),
+            signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+            redirect: "error",
+          });
 
-        if (!response.ok) {
-          const retryAfterMs = getRetryAfterMs(response);
+          if (!response.ok) {
+            const retryAfterMs = getRetryAfterMs(response);
 
-          const payload = await response
-            .clone()
-            .json()
-            .catch(() => null);
+            const payload = await response
+              .clone()
+              .json()
+              .catch(() => null);
 
-          lastFailure = getProviderErrorCode(response.status, payload);
+            lastFailure = getProviderErrorCode(response.status, payload);
 
-          await this.recordUsage(
+            const usageRecorded = await this.recordUsage(
+              organizationId,
+              runtime,
+              "failed",
+              attemptStartedAt,
+              lastFailure,
+            );
+
+            usageReliable = usageReliable && usageRecorded;
+
+            await response.body?.cancel();
+
+            const canRetry =
+              attempt < MAX_AI_ATTEMPTS &&
+              shouldRetryProviderError(lastFailure) &&
+              (lastFailure !== "rate_limited" || retryAfterMs !== null);
+
+            this.logger.warn(
+              `Customer support AI request failed: ` +
+                `HTTP ${response.status}, ` +
+                `code=${lastFailure}, attempt=${attempt}`,
+            );
+
+            if (!canRetry) {
+              return {
+                ok: false,
+                code: lastFailure,
+              };
+            }
+
+            await sleep(retryAfterMs ?? getRetryDelay(attempt));
+            continue;
+          }
+
+          const data = (await response.json()) as ChatCompletionResponse;
+          const reply = data.choices?.[0]?.message?.content?.trim();
+
+          if (!reply) {
+            const usageRecorded = await this.recordUsage(
+              organizationId,
+              runtime,
+              "failed",
+              attemptStartedAt,
+              "empty_response",
+              data.usage,
+            );
+
+            usageReliable = usageReliable && usageRecorded;
+
+            this.logger.warn("Customer support AI returned an empty response");
+
+            return {
+              ok: false,
+              code: "empty_response",
+            };
+          }
+
+          const usageRecorded = await this.recordUsage(
+            organizationId,
+            runtime,
+            "success",
+            attemptStartedAt,
+            undefined,
+            data.usage,
+          );
+
+          usageReliable = usageReliable && usageRecorded;
+
+          return {
+            ok: true,
+            reply: reply.slice(0, MAX_REPLY_LENGTH),
+            meta: {
+              agentName: agent?.name ?? null,
+              provider: runtime.provider,
+              modelId: runtime.modelId,
+              source: runtime.source,
+              knowledgeMatched: knowledge.count,
+              latencyMs: Date.now() - startedAt,
+            },
+          };
+        } catch (error) {
+          if (isTimeoutError(error)) {
+            lastFailure = "timeout";
+          } else if (isRetryableNetworkError(error)) {
+            lastFailure = "provider_error";
+          } else {
+            const usageRecorded = await this.recordUsage(
+              organizationId,
+              runtime,
+              "failed",
+              attemptStartedAt,
+              "provider_error",
+            );
+
+            usageReliable = usageReliable && usageRecorded;
+
+            this.logger.error("Customer support AI generation failed");
+
+            return {
+              ok: false,
+              code: "provider_error",
+            };
+          }
+
+          const usageRecorded = await this.recordUsage(
             organizationId,
             runtime,
             "failed",
@@ -680,128 +876,41 @@ export class PublicWidgetAiService {
             lastFailure,
           );
 
-          await response.body?.cancel();
-
-          const canRetry =
-            attempt < MAX_AI_ATTEMPTS &&
-            shouldRetryProviderError(lastFailure) &&
-            (lastFailure !== "rate_limited" || retryAfterMs !== null);
+          usageReliable = usageReliable && usageRecorded;
 
           this.logger.warn(
-            `Customer support AI request failed: ` +
-              `HTTP ${response.status}, ` +
+            `Customer support AI attempt failed: ` +
               `code=${lastFailure}, attempt=${attempt}`,
           );
 
+          const canRetry =
+            attempt < MAX_AI_ATTEMPTS &&
+            shouldRetryProviderError(lastFailure);
+
           if (!canRetry) {
-            return {
-              ok: false,
-              code: lastFailure,
-            };
+            break;
           }
 
-          await sleep(retryAfterMs ?? getRetryDelay(attempt));
-          continue;
+          await sleep(getRetryDelay(attempt));
         }
-
-        const data = (await response.json()) as ChatCompletionResponse;
-        const reply = data.choices?.[0]?.message?.content?.trim();
-
-        if (!reply) {
-          await this.recordUsage(
-            organizationId,
-            runtime,
-            "failed",
-            attemptStartedAt,
-            "empty_response",
-            data.usage,
-          );
-
-          this.logger.warn("Customer support AI returned an empty response");
-
-          return {
-            ok: false,
-            code: "empty_response",
-          };
-        }
-
-        await this.recordUsage(
-          organizationId,
-          runtime,
-          "success",
-          attemptStartedAt,
-          undefined,
-          data.usage,
-        );
-
-        return {
-          ok: true,
-          reply: reply.slice(0, MAX_REPLY_LENGTH),
-          meta: {
-            agentName: agent?.name ?? null,
-            provider: runtime.provider,
-            modelId: runtime.modelId,
-            source: runtime.source,
-            knowledgeMatched: knowledge.count,
-            latencyMs: Date.now() - startedAt,
-          },
-        };
-      } catch (error) {
-        if (isTimeoutError(error)) {
-          lastFailure = "timeout";
-        } else if (isRetryableNetworkError(error)) {
-          lastFailure = "provider_error";
-        } else {
-          await this.recordUsage(
-            organizationId,
-            runtime,
-            "failed",
-            attemptStartedAt,
-            "provider_error",
-          );
-
-          this.logger.error("Customer support AI generation failed");
-
-          return {
-            ok: false,
-            code: "provider_error",
-          };
-        }
-
-        await this.recordUsage(
-          organizationId,
-          runtime,
-          "failed",
-          attemptStartedAt,
-          lastFailure,
-        );
-
-        this.logger.warn(
-          `Customer support AI attempt failed: ` +
-            `code=${lastFailure}, attempt=${attempt}`,
-        );
-
-        const canRetry =
-          attempt < MAX_AI_ATTEMPTS &&
-          shouldRetryProviderError(lastFailure);
-
-        if (!canRetry) {
-          break;
-        }
-
-        await sleep(getRetryDelay(attempt));
       }
+
+      this.logger.error(
+        `Customer support AI failed after ${MAX_AI_ATTEMPTS} attempts: ` +
+          `code=${lastFailure}`,
+      );
+
+      return {
+        ok: false,
+        code: lastFailure,
+      };
+    } finally {
+      await this.settleQuotaReservation(
+        organizationId,
+        reservationId,
+        usageReliable,
+      );
     }
-
-    this.logger.error(
-      `Customer support AI failed after ${MAX_AI_ATTEMPTS} attempts: ` +
-        `code=${lastFailure}`,
-    );
-
-    return {
-      ok: false,
-      code: lastFailure,
-    };
   }
 
   async generateReply(
