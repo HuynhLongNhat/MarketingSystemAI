@@ -7,6 +7,13 @@ import { createTenantJobData } from "./tenant-job.js";
 
 import { DEFAULT_QUEUE, JOB_NAMES } from "./jobs.constants.js";
 
+export interface CustomerSupportReplyJobData {
+  organizationId: string;
+  conversationId: string;
+  triggerMessageId: string;
+  createdAt: string;
+}
+
 @Injectable()
 export class JobsService {
   constructor(
@@ -57,6 +64,64 @@ export class JobsService {
       jobId: job.id,
       jobName: job.name,
       organizationId: context.organizationId,
+    };
+  }
+
+  async enqueueCustomerSupportReply(input: {
+    organizationId: string;
+    conversationId: string;
+    triggerMessageId: string;
+  }) {
+    const {
+      organizationId,
+      conversationId,
+      triggerMessageId,
+    } = input;
+
+    if (!organizationId || !conversationId || !triggerMessageId) {
+      throw new Error("Invalid customer support reply job identity");
+    }
+
+    // Stable ID: cùng một tin nhắn khách chỉ có một job đang được lưu.
+    const jobId =
+      `widget-ai-${organizationId}-${conversationId}-${triggerMessageId}`;
+
+    const data: CustomerSupportReplyJobData = {
+      organizationId,
+      conversationId,
+      triggerMessageId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const job = await this.queue.add(
+      JOB_NAMES.CUSTOMER_SUPPORT_REPLY,
+      data,
+      {
+        jobId,
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        // Giữ job đã hoàn tất một thời gian để request retry
+        // không tạo thêm job mới cho cùng một tin nhắn.
+        removeOnComplete: {
+          age: 86400,
+          count: 1000,
+        },
+        removeOnFail: {
+          age: 604800,
+          count: 1000,
+        },
+      },
+    );
+
+    return {
+      jobId: job.id,
+      jobName: job.name,
+      organizationId,
+      conversationId,
+      triggerMessageId,
     };
   }
 }

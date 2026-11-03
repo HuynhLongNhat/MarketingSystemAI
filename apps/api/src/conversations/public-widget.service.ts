@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -16,11 +17,15 @@ import {
   conversationMessages,
   widgetSettings,
 } from "@workspace/db/node";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt, or } from "drizzle-orm";
 
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
-import { decideReplyAction, ReplyDecision, safeErrorSummary } from "./reply-guard.js";
-
+import { JobsService } from "../jobs/jobs.service.js";
+import {
+  decideReplyAction,
+  type ReplyDecision,
+  safeErrorSummary,
+} from "./reply-guard.js";
 type ContactDetails = {
   name?: string;
   email?: string;
@@ -40,7 +45,10 @@ const HUMAN_HANDOFF_MESSAGE =
 export class PublicWidgetService {
   private readonly logger = new Logger(PublicWidgetService.name);
 
-  constructor(private readonly aiService: PublicWidgetAiService) {}
+  constructor(
+    private readonly aiService: PublicWidgetAiService,
+    private readonly jobsService: JobsService,
+  ) {}
 
   private hashToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
@@ -291,22 +299,42 @@ export class PublicWidgetService {
   }
 
   /**
-   * Tạo phản hồi AI cho tin nhắn `triggerMessageId`.
+   * Worker entry point.
    *
-   * Chống trùng lặp và sai thứ tự:
-   * - Chỉ lượt AI của tin khách MỚI NHẤT được ghi kết quả.
-   *   Nếu có tin mới hơn, kết quả cũ bị bỏ.
-   * - Kiểm tra lại trạng thái sau khi khóa hội thoại, nên
-   *   nhân viên tiếp quản hoặc đóng hội thoại khi AI đang
-   *   chạy thì kết quả AI không được ghi.
+   * Chỉ xử lý tin nhắn thuộc đúng organization/conversation.
+   * Lỗi database được throw lại để BullMQ thực hiện retry.
    */
-  private async replyWithAi(
-    organizationId: string,
-    conversationId: string,
-    triggerMessageId: string,
-  ): Promise<void> {
+  async processAiReply(input: {
+    organizationId: string;
+    conversationId: string;
+    triggerMessageId: string;
+  }): Promise<void> {
+    const { organizationId, conversationId, triggerMessageId } = input;
+
     try {
-      // 1. Chỉ gọi AI khi hội thoại đang được AI xử lý.
+      const [triggerMessage] = await db
+        .select({
+          id: conversationMessages.id,
+          createdAt: conversationMessages.createdAt,
+        })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.id, triggerMessageId),
+            eq(conversationMessages.organizationId, organizationId),
+            eq(conversationMessages.conversationId, conversationId),
+            eq(conversationMessages.role, "user"),
+          ),
+        )
+        .limit(1);
+
+      if (!triggerMessage) {
+        this.logger.warn(
+          `Customer support trigger message not found: ${triggerMessageId}`,
+        );
+        return;
+      }
+
       const [beforeGeneration] = await db
         .select({
           status: conversations.status,
@@ -324,9 +352,10 @@ export class PublicWidgetService {
         return;
       }
 
-      // 2. Nếu đã có tin khách mới hơn thì không tốn chi phí gọi AI.
       const [latestBefore] = await db
-        .select({ id: conversationMessages.id })
+        .select({
+          id: conversationMessages.id,
+        })
         .from(conversationMessages)
         .where(
           and(
@@ -345,7 +374,32 @@ export class PublicWidgetService {
         return;
       }
 
-      // 3. Đọc lịch sử trong đúng Organization.
+      // Nếu phản hồi đã tồn tại sau trigger thì không gọi AI lần nữa.
+      const [alreadyProcessed] = await db
+        .select({
+          id: conversationMessages.id,
+        })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.organizationId, organizationId),
+            eq(conversationMessages.conversationId, conversationId),
+            eq(conversationMessages.role, "assistant"),
+            or(
+              gt(conversationMessages.createdAt, triggerMessage.createdAt),
+              and(
+                eq(conversationMessages.createdAt, triggerMessage.createdAt),
+                gt(conversationMessages.id, triggerMessageId),
+              ),
+            ),
+          ),
+        )
+        .limit(1);
+
+      if (alreadyProcessed) {
+        return;
+      }
+
       const history = await db
         .select({
           role: conversationMessages.role,
@@ -364,14 +418,11 @@ export class PublicWidgetService {
         )
         .limit(12);
 
-      // 4. Gọi AI (Knowledge Base được nạp trong aiService).
       const reply = await this.aiService.generateReply(
         history.reverse(),
         organizationId,
       );
 
-      // 5. Ghi kết quả trong transaction, khóa hội thoại để
-      //    tránh AI và nhân viên cùng thay đổi trạng thái.
       const decision: ReplyDecision = await db.transaction(async (tx) => {
         const [current] = await tx
           .select({
@@ -388,7 +439,9 @@ export class PublicWidgetService {
           .limit(1);
 
         const [latestUser] = await tx
-          .select({ id: conversationMessages.id })
+          .select({
+            id: conversationMessages.id,
+          })
           .from(conversationMessages)
           .where(
             and(
@@ -403,11 +456,35 @@ export class PublicWidgetService {
           )
           .limit(1);
 
+        // Kiểm tra lại trong transaction để tránh hai worker
+        // cùng ghi câu trả lời cho một trigger.
+        const [assistantAfterTrigger] = await tx
+          .select({
+            id: conversationMessages.id,
+          })
+          .from(conversationMessages)
+          .where(
+            and(
+              eq(conversationMessages.organizationId, organizationId),
+              eq(conversationMessages.conversationId, conversationId),
+              eq(conversationMessages.role, "assistant"),
+              or(
+                gt(conversationMessages.createdAt, triggerMessage.createdAt),
+                and(
+                  eq(conversationMessages.createdAt, triggerMessage.createdAt),
+                  gt(conversationMessages.id, triggerMessageId),
+                ),
+              ),
+            ),
+          )
+          .limit(1);
+
         const action = decideReplyAction({
           status: current?.status,
           latestUserMessageId: latestUser?.id,
           triggerMessageId,
           reply,
+          alreadyProcessed: Boolean(assistantAfterTrigger),
         });
 
         if (action === "save_reply" && reply) {
@@ -421,7 +498,6 @@ export class PublicWidgetService {
         }
 
         if (action === "handoff_fallback") {
-          // AI lỗi: chuyển sang nhân viên.
           await tx
             .update(conversations)
             .set({
@@ -436,7 +512,6 @@ export class PublicWidgetService {
               ),
             );
 
-          // Thông báo rõ ràng cho khách.
           await tx.insert(conversationMessages).values({
             id: randomUUID(),
             organizationId,
@@ -457,13 +532,19 @@ export class PublicWidgetService {
         this.logger.debug(
           `Discarded superseded AI result for conversation ${conversationId}`,
         );
+      } else if (decision === "skip_already_processed") {
+        this.logger.debug(
+          `Skipped duplicate AI result for conversation ${conversationId}`,
+        );
       }
     } catch (error) {
-      // Không log error.message/stack: lỗi DB có thể chứa
-      // câu SQL kèm nội dung tin nhắn của khách.
       this.logger.error(
         `Could not process AI reply or fallback: ${safeErrorSummary(error)}`,
       );
+
+      // Quan trọng: không nuốt lỗi.
+      // BullMQ cần nhận lỗi để thực hiện retry.
+      throw error;
     }
   }
 
@@ -545,6 +626,28 @@ export class PublicWidgetService {
     }
   }
 
+  private async enqueueAiReply(
+    organizationId: string,
+    conversationId: string,
+    triggerMessageId: string,
+  ): Promise<void> {
+    try {
+      await this.jobsService.enqueueCustomerSupportReply({
+        organizationId,
+        conversationId,
+        triggerMessageId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not enqueue customer support reply: ${safeErrorSummary(error)}`,
+      );
+
+      throw new ServiceUnavailableException(
+        "Message was saved but AI processing could not be queued. Retry using the same clientMessageId.",
+      );
+    }
+  }
+
   async sendMessage(
     token: string,
     conversationId: string,
@@ -565,7 +668,6 @@ export class PublicWidgetService {
       eq(conversationMessages.clientMessageId, clientMessageId),
     );
 
-    // Request gửi lại do mạng chậm: trả lại tin đã lưu, không xử lý lần hai.
     const [existing] = await db
       .select()
       .from(conversationMessages)
@@ -579,12 +681,22 @@ export class PublicWidgetService {
         );
       }
 
+      // Nếu lần gửi trước lưu DB thành công nhưng Redis enqueue lỗi,
+      // request retry cùng clientMessageId sẽ enqueue lại job.
+      if (
+        conversation.status === "unresolved" &&
+        !this.isHumanSupportRequest(existing.content)
+      ) {
+        await this.enqueueAiReply(
+          conversation.organizationId,
+          conversationId,
+          existing.id,
+        );
+      }
+
       return existing;
     }
 
-    // Khóa hội thoại, kiểm tra trạng thái và lưu tin trong một
-    // transaction: không ghi tin vào hội thoại vừa bị đóng, và
-    // các tin gửi đồng thời được xếp hàng theo thứ tự.
     const result = await db.transaction(async (tx) => {
       const [locked] = await tx
         .select({
@@ -647,15 +759,16 @@ export class PublicWidgetService {
     }
 
     if (result.kind === "inserted") {
-      // Dùng trạng thái đã khóa, không dùng trạng thái đọc từ trước.
       if (result.status === "unresolved") {
         if (this.isHumanSupportRequest(trimmed)) {
+          // Human handoff vẫn được xử lý ngay, không đưa vào AI queue.
           await this.handoffToHuman(
             conversation.organizationId,
             conversationId,
           );
         } else {
-          await this.replyWithAi(
+          // API chỉ enqueue và trả tin nhắn, không chờ AI hoàn thành.
+          await this.enqueueAiReply(
             conversation.organizationId,
             conversationId,
             result.message.id,
@@ -666,7 +779,6 @@ export class PublicWidgetService {
       return result.message;
     }
 
-    // Request trùng đến đồng thời: tin đã được request khác lưu.
     const [saved] = await db
       .select()
       .from(conversationMessages)
@@ -680,6 +792,18 @@ export class PublicWidgetService {
     if (saved.role !== "user" || saved.content !== trimmed) {
       throw new ConflictException(
         "Client message ID already used with different content",
+      );
+    }
+
+    // Xử lý trường hợp request đồng thời cùng lưu một message.
+    if (
+      conversation.status === "unresolved" &&
+      !this.isHumanSupportRequest(saved.content)
+    ) {
+      await this.enqueueAiReply(
+        conversation.organizationId,
+        conversationId,
+        saved.id,
       );
     }
 

@@ -1,8 +1,8 @@
-
 import { Module } from "@nestjs/common";
 
 import { AuthGuard } from "../auth/auth.guard.js";
 import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
+import { JobsModule } from "../jobs/jobs.module.js";
 
 import { ConversationsController } from "./conversations.controller.js";
 import { ConversationsRepository } from "./conversations.repository.js";
@@ -26,6 +26,7 @@ import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js"
 import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
 @Module({
+  imports: [JobsModule],
   controllers: [
     ConversationsController,
     MessagesController,
@@ -48,5 +49,6 @@ import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
     AuthGuard,
     PermissionsGuard,
   ],
+  exports: [PublicWidgetService],
 })
 export class ConversationsModule {}

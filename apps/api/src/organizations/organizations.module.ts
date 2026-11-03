@@ -1,4 +1,3 @@
-
 import { Module } from "@nestjs/common";
 
 import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
