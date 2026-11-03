@@ -21,6 +21,7 @@ import { PublicWidgetController } from "./public-widget.controller.js";
 import { PublicWidgetService } from "./public-widget.service.js";
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
 import { AiUsageRecorder } from "./ai-usage-recorder.js";
+import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
 import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js";
 import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
@@ -41,6 +42,7 @@ import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
     PublicWidgetService,
     PublicWidgetAiService,
     AiUsageRecorder,
+    AiUsageQuotaService,
     PublicWidgetRateLimitGuard,
     PublicWidgetOriginGuard,
     AuthGuard,

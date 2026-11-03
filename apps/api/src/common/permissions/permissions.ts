@@ -1,3 +1,4 @@
+
 import type { OrganizationRole } from "../../auth/request-context.js";
 
 export const PERMISSIONS = {
@@ -21,6 +22,9 @@ export const PERMISSIONS = {
 
   AI_PROVIDER_READ: "ai_provider:read",
   AI_PROVIDER_MANAGE: "ai_provider:manage",
+
+  AI_USAGE_QUOTA_READ: "ai_usage_quota:read",
+  AI_USAGE_QUOTA_MANAGE: "ai_usage_quota:manage",
 
   DEPARTMENT_READ: "department:read",
   DEPARTMENT_MANAGE: "department:manage",
