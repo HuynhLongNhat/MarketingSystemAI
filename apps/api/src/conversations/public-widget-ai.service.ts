@@ -1,3 +1,4 @@
+
 import { Injectable, Logger } from "@nestjs/common";
 import {
   aiModelDefaults,
@@ -15,10 +16,19 @@ import {
   type CustomerSupportAgentConfig,
 } from "./customer-support-agent.js";
 import { selectKnowledge } from "./knowledge-ranking.js";
+import { AiUsageRecorder } from "./ai-usage-recorder.js";
 
 type ChatMessage = {
   role: string;
   content: string;
+};
+
+type ProviderUsage = {
+  prompt_tokens?: unknown;
+  completion_tokens?: unknown;
+  total_tokens?: unknown;
+  input_tokens?: unknown;
+  output_tokens?: unknown;
 };
 
 type ChatCompletionResponse = {
@@ -27,7 +37,51 @@ type ChatCompletionResponse = {
       content?: string | null;
     };
   }>;
+  usage?: ProviderUsage;
 };
+
+function parseTokenCount(value: unknown): number | null {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    value > 2_147_483_647
+  ) {
+    return null;
+  }
+
+  return value;
+}
+
+function extractProviderUsage(
+  usage: ProviderUsage | undefined,
+): {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+} {
+  const inputTokens = parseTokenCount(
+    usage?.prompt_tokens ?? usage?.input_tokens,
+  );
+
+  const outputTokens = parseTokenCount(
+    usage?.completion_tokens ?? usage?.output_tokens,
+  );
+
+  const reportedTotal = parseTokenCount(usage?.total_tokens);
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens:
+      reportedTotal ??
+      (
+        inputTokens !== null && outputTokens !== null
+          ? inputTokens + outputTokens
+          : null
+      ),
+  };
+}
 
 export type RuntimeSource = "agent" | "default" | "legacy";
 
@@ -94,6 +148,9 @@ export type PlaygroundOverview = {
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_REPLY_LENGTH = 5000;
 const AI_TIMEOUT_MS = 20000;
+const MAX_AI_ATTEMPTS = 2;
+const RETRY_BASE_DELAY_MS = 400;
+const MAX_RETRY_AFTER_MS = 2000;
 
 function isTimeoutError(error: unknown): boolean {
   return (
@@ -101,9 +158,6 @@ function isTimeoutError(error: unknown): boolean {
     (error.name === "TimeoutError" || error.name === "AbortError")
   );
 }
-const MAX_AI_ATTEMPTS = 2;
-const RETRY_BASE_DELAY_MS = 400;
-const MAX_RETRY_AFTER_MS = 2000;
 
 type ProviderErrorCode =
   | "provider_error"
@@ -133,7 +187,6 @@ function getRetryAfterMs(response: Response): number | null {
     return null;
   }
 
-  // Không retry nếu provider yêu cầu chờ quá lâu.
   if (delay > MAX_RETRY_AFTER_MS) {
     return null;
   }
@@ -153,7 +206,6 @@ function getProviderErrorCode(
   } | null;
 
   const errorCode = String(body?.error?.code ?? "").toLowerCase();
-
   const errorType = String(body?.error?.type ?? "").toLowerCase();
 
   if (status === 401) return "provider_auth_failed";
@@ -161,9 +213,11 @@ function getProviderErrorCode(
 
   if (
     status === 429 &&
-    (errorCode.includes("quota") ||
+    (
+      errorCode.includes("quota") ||
       errorType.includes("quota") ||
-      errorCode.includes("insufficient"))
+      errorCode.includes("insufficient")
+    )
   ) {
     return "quota_exceeded";
   }
@@ -193,7 +247,6 @@ function shouldRetryProviderError(code: ProviderErrorCode): boolean {
 
 function getRetryDelay(attempt: number): number {
   const exponential = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
-
   const jitter = Math.floor(Math.random() * 200);
 
   return exponential + jitter;
@@ -212,6 +265,34 @@ function isRetryableNetworkError(error: unknown): boolean {
 @Injectable()
 export class PublicWidgetAiService {
   private readonly logger = new Logger(PublicWidgetAiService.name);
+
+  constructor(
+    private readonly usageRecorder: AiUsageRecorder,
+  ) {}
+
+  private async recordUsage(
+    organizationId: string,
+    runtime: RuntimeConfig,
+    status: "success" | "failed",
+    startedAt: number,
+    errorCode?: string,
+    usage?: ProviderUsage,
+  ): Promise<void> {
+    const tokenUsage = extractProviderUsage(usage);
+
+    await this.usageRecorder.record({
+      organizationId,
+      provider: runtime.provider,
+      modelId: runtime.modelId,
+      purpose: "customer_support",
+      status,
+      inputTokens: tokenUsage.inputTokens,
+      outputTokens: tokenUsage.outputTokens,
+      totalTokens: tokenUsage.totalTokens,
+      latencyMs: Date.now() - startedAt,
+      errorCode: errorCode ?? null,
+    });
+  }
 
   /**
    * Chỉ lấy FAQ của đúng Organization, sau đó lọc theo
@@ -362,7 +443,7 @@ export class PublicWidgetAiService {
     }
 
     return {
-      endpoint: `${provider.baseUrl.replace(/\/$/, "")}` + "/chat/completions",
+      endpoint: `${provider.baseUrl.replace(/\/$/, "")}/chat/completions`,
       apiKey,
       modelId,
       provider: connection.provider,
@@ -396,24 +477,13 @@ export class PublicWidgetAiService {
     };
   }
 
-  /**
-   * Thứ tự cấu hình:
-   * 1. Connection + Model riêng của Agent CSKH active.
-   * 2. Model Default customer_support của Organization.
-   * 3. Legacy OpenRouter nếu chưa có hai cấu hình trên.
-   *
-   * Connection không hợp lệ không được tự chuyển sang
-   * một API key khác.
-   */
   private async resolveRuntime(
     organizationId: string,
     agent: CustomerSupportAgentConfig | null,
   ): Promise<RuntimeConfig | null> {
     const agentHasConnection = Boolean(agent?.connectionId);
-
     const agentHasModel = Boolean(agent?.modelId?.trim());
 
-    // Cấu hình riêng của Agent phải đủ cả hai trường.
     if (agentHasConnection !== agentHasModel) {
       this.logger.warn(
         "Customer support Agent has incomplete model configuration",
@@ -502,10 +572,6 @@ export class PublicWidgetAiService {
     return instructions.join("\n");
   }
 
-  /**
-   * Lõi sinh phản hồi, dùng chung cho chatbot thật
-   * và Playground. Không ghi gì vào database.
-   */
   private async run(
     history: ChatMessage[],
     organizationId: string,
@@ -570,6 +636,8 @@ export class PublicWidgetAiService {
     let lastFailure: ProviderErrorCode = "provider_error";
 
     for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt += 1) {
+      const attemptStartedAt = Date.now();
+
       try {
         const response = await fetch(runtime.endpoint, {
           method: "POST",
@@ -604,6 +672,14 @@ export class PublicWidgetAiService {
 
           lastFailure = getProviderErrorCode(response.status, payload);
 
+          await this.recordUsage(
+            organizationId,
+            runtime,
+            "failed",
+            attemptStartedAt,
+            lastFailure,
+          );
+
           await response.body?.cancel();
 
           const canRetry =
@@ -625,15 +701,22 @@ export class PublicWidgetAiService {
           }
 
           await sleep(retryAfterMs ?? getRetryDelay(attempt));
-
           continue;
         }
 
         const data = (await response.json()) as ChatCompletionResponse;
-
         const reply = data.choices?.[0]?.message?.content?.trim();
 
         if (!reply) {
+          await this.recordUsage(
+            organizationId,
+            runtime,
+            "failed",
+            attemptStartedAt,
+            "empty_response",
+            data.usage,
+          );
+
           this.logger.warn("Customer support AI returned an empty response");
 
           return {
@@ -641,6 +724,15 @@ export class PublicWidgetAiService {
             code: "empty_response",
           };
         }
+
+        await this.recordUsage(
+          organizationId,
+          runtime,
+          "success",
+          attemptStartedAt,
+          undefined,
+          data.usage,
+        );
 
         return {
           ok: true,
@@ -660,6 +752,14 @@ export class PublicWidgetAiService {
         } else if (isRetryableNetworkError(error)) {
           lastFailure = "provider_error";
         } else {
+          await this.recordUsage(
+            organizationId,
+            runtime,
+            "failed",
+            attemptStartedAt,
+            "provider_error",
+          );
+
           this.logger.error("Customer support AI generation failed");
 
           return {
@@ -668,13 +768,22 @@ export class PublicWidgetAiService {
           };
         }
 
+        await this.recordUsage(
+          organizationId,
+          runtime,
+          "failed",
+          attemptStartedAt,
+          lastFailure,
+        );
+
         this.logger.warn(
           `Customer support AI attempt failed: ` +
             `code=${lastFailure}, attempt=${attempt}`,
         );
 
         const canRetry =
-          attempt < MAX_AI_ATTEMPTS && shouldRetryProviderError(lastFailure);
+          attempt < MAX_AI_ATTEMPTS &&
+          shouldRetryProviderError(lastFailure);
 
         if (!canRetry) {
           break;
@@ -704,7 +813,6 @@ export class PublicWidgetAiService {
     return result.ok ? result.reply : null;
   }
 
-  /** Dùng cho Playground: trả kết quả có mã lỗi và metadata. */
   generatePlaygroundReply(
     history: ChatMessage[],
     organizationId: string,
@@ -712,10 +820,6 @@ export class PublicWidgetAiService {
     return this.run(history, organizationId);
   }
 
-  /**
-   * Tóm tắt cấu hình CSKH hiện tại của Organization.
-   * Chỉ trả thông tin an toàn, không có API key.
-   */
   async getPlaygroundOverview(
     organizationId: string,
   ): Promise<PlaygroundOverview> {

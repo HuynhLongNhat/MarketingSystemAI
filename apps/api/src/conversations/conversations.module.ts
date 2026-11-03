@@ -1,3 +1,4 @@
+
 import { Module } from "@nestjs/common";
 
 import { AuthGuard } from "../auth/auth.guard.js";
@@ -19,6 +20,7 @@ import { PlaygroundService } from "./playground.service.js";
 import { PublicWidgetController } from "./public-widget.controller.js";
 import { PublicWidgetService } from "./public-widget.service.js";
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
+import { AiUsageRecorder } from "./ai-usage-recorder.js";
 import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js";
 import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
@@ -38,6 +40,7 @@ import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
     PlaygroundService,
     PublicWidgetService,
     PublicWidgetAiService,
+    AiUsageRecorder,
     PublicWidgetRateLimitGuard,
     PublicWidgetOriginGuard,
     AuthGuard,

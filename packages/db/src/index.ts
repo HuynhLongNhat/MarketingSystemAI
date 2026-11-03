@@ -66,7 +66,9 @@ export type {
 export {
   aiProviderConnections,
   aiModelDefaults,
+  aiUsageLogs,
   AI_PROVIDER_TYPES,
+  AI_USAGE_STATUSES,
 } from "./ai-schema.js";
 
 export type {
@@ -75,6 +77,9 @@ export type {
   NewAiProviderConnection,
   AiModelDefault,
   NewAiModelDefault,
+  AiUsageLog,
+  NewAiUsageLog,
+  AiUsageStatus,
 } from "./ai-schema.js";
 
 export {
