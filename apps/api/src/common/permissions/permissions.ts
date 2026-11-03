@@ -1,4 +1,3 @@
-
 import type { OrganizationRole } from "../../auth/request-context.js";
 
 export const PERMISSIONS = {
@@ -16,6 +15,9 @@ export const PERMISSIONS = {
 
   CONVERSATION_READ: "conversation:read",
   CONVERSATION_UPDATE: "conversation:update",
+  CONVERSATION_CLAIM: "conversation:claim",
+  CONVERSATION_ASSIGN: "conversation:assign",
+  CONVERSATION_REPLY: "conversation:reply",
 
   KNOWLEDGE_READ: "knowledge:read",
   KNOWLEDGE_UPDATE: "knowledge:update",
@@ -54,6 +56,8 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
       PERMISSIONS.ORGANIZATION_READ,
       PERMISSIONS.WIDGET_READ,
       PERMISSIONS.CONVERSATION_READ,
+      PERMISSIONS.CONVERSATION_CLAIM,
+      PERMISSIONS.CONVERSATION_REPLY,
       PERMISSIONS.KNOWLEDGE_READ,
       PERMISSIONS.DEPARTMENT_READ,
       PERMISSIONS.AGENT_READ,

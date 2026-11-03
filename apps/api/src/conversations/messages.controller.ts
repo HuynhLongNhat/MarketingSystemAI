@@ -1,4 +1,3 @@
-
 import {
   Body,
   Controller,
@@ -9,49 +8,19 @@ import {
   UseGuards,
 } from "@nestjs/common";
 
-import {
-  ApiOperation,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
 import { AuthGuard } from "../auth/auth.guard.js";
+import { CurrentContext } from "../auth/current-context.decorator.js";
+import type { RequestContext } from "../auth/request-context.js";
+import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
+import { RequirePermissions } from "../common/permissions/permissions.decorator.js";
+import { PERMISSIONS } from "../common/permissions/permissions.js";
 
-import {
-  CurrentContext,
-} from "../auth/current-context.decorator.js";
-
-import type {
-  RequestContext,
-} from "../auth/request-context.js";
-
-import {
-  PermissionsGuard,
-} from "../common/permissions/permissions.guard.js";
-
-import {
-  RequirePermissions,
-} from "../common/permissions/permissions.decorator.js";
-
-import {
-  PERMISSIONS,
-} from "../common/permissions/permissions.js";
-
-import {
-  MessagesService,
-} from "./messages.service.js";
-
-import {
-  MessageEnhancementService,
-} from "./message-enhancement.service.js";
-
-import {
-  CreateMessageDto,
-  ListMessagesQueryDto,
-} from "./messages.dto.js";
-
-import {
-  EnhanceMessageDto,
-} from "./enhance-message.dto.js";
+import { MessagesService } from "./messages.service.js";
+import { MessageEnhancementService } from "./message-enhancement.service.js";
+import { CreateMessageDto, ListMessagesQueryDto } from "./messages.dto.js";
+import { EnhanceMessageDto } from "./enhance-message.dto.js";
 
 @ApiTags("Messages")
 @Controller("conversations/:conversationId/messages")
@@ -72,15 +41,11 @@ export class MessagesController {
     @Param("conversationId") conversationId: string,
     @Query() query: ListMessagesQueryDto,
   ) {
-    return this.service.listMessages(
-      context,
-      conversationId,
-      query,
-    );
+    return this.service.listMessages(context, conversationId, query);
   }
 
   @Post()
-  @RequirePermissions(PERMISSIONS.CONVERSATION_UPDATE)
+  @RequirePermissions(PERMISSIONS.CONVERSATION_REPLY)
   @ApiOperation({
     summary: "Send an operator message",
   })
@@ -89,15 +54,11 @@ export class MessagesController {
     @Param("conversationId") conversationId: string,
     @Body() dto: CreateMessageDto,
   ) {
-    return this.service.createOperatorMessage(
-      context,
-      conversationId,
-      dto,
-    );
+    return this.service.createOperatorMessage(context, conversationId, dto);
   }
 
   @Post("enhance")
-  @RequirePermissions(PERMISSIONS.CONVERSATION_UPDATE)
+  @RequirePermissions(PERMISSIONS.CONVERSATION_REPLY)
   @ApiOperation({
     summary: "Enhance operator message with AI",
   })
@@ -106,12 +67,7 @@ export class MessagesController {
     @Param("conversationId") conversationId: string,
     @Body() dto: EnhanceMessageDto,
   ) {
-    // Verify the conversation belongs to the active organization.
-    // Also reject requests for missing conversations.
-    await this.service.getAccessibleConversation(
-      context,
-      conversationId,
-    );
+    await this.service.getAccessibleConversation(context, conversationId);
 
     return this.enhancementService.enhance(dto.prompt);
   }

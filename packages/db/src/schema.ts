@@ -34,7 +34,6 @@ export const user = pgTable(
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
-    // Better Auth phoneNumber plugin. E.164, ví dụ +84912345678.
     phoneNumber: text("phone_number"),
     phoneNumberVerified: boolean("phone_number_verified")
       .notNull()
@@ -44,7 +43,6 @@ export const user = pgTable(
   },
   (table) => [
     uniqueIndex("user_email_unique").on(table.email),
-    // Postgres cho phép nhiều NULL trong unique index nên user chưa có SĐT không bị ảnh hưởng.
     uniqueIndex("user_phone_number_unique").on(table.phoneNumber),
   ],
 );
@@ -279,6 +277,15 @@ export const conversations = pgTable(
     })
       .notNull()
       .default("unresolved"),
+
+    assignedToUserId: text("assigned_to_user_id").references(
+      () => user.id,
+      { onDelete: "set null" },
+    ),
+    assignedAt: timestamp("assigned_at", {
+      withTimezone: true,
+    }),
+
     createdAt: timestamp("created_at", {
       withTimezone: true,
     })
@@ -308,6 +315,10 @@ export const conversations = pgTable(
     index("conversations_org_created_idx").on(
       table.organizationId,
       table.createdAt,
+    ),
+    index("conversations_org_assignee_idx").on(
+      table.organizationId,
+      table.assignedToUserId,
     ),
   ],
 );
@@ -343,7 +354,6 @@ export const conversationMessages = pgTable(
       .notNull()
       .defaultNow(),
   },
-
   (table) => [
     foreignKey({
       name: "conversation_messages_conversation_org_fk",

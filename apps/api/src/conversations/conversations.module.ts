@@ -25,6 +25,9 @@ import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
 import { PublicWidgetRateLimitGuard } from "./public-widget-rate-limit.guard.js";
 import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
+import { HandoffController } from "./handoff.controller.js";
+import { HandoffService } from "./handoff.service.js";
+
 @Module({
   imports: [JobsModule],
   controllers: [
@@ -32,6 +35,7 @@ import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
     MessagesController,
     PlaygroundController,
     PublicWidgetController,
+    HandoffController,
   ],
   providers: [
     ConversationsRepository,
@@ -46,6 +50,7 @@ import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
     AiUsageQuotaService,
     PublicWidgetRateLimitGuard,
     PublicWidgetOriginGuard,
+    HandoffService,
     AuthGuard,
     PermissionsGuard,
   ],

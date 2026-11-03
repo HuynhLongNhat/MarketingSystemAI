@@ -1,5 +1,7 @@
-
-import { Injectable } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 
 import {
   db,
@@ -91,8 +93,6 @@ export class MessagesRepository {
     data: NewConversationMessage,
   ) {
     return db.transaction(async (tx) => {
-      // Lock conversation để tránh gửi vào hội thoại
-      // vừa bị resolved bởi request khác.
       const [conversation] = await tx
         .select()
         .from(conversations)
@@ -115,6 +115,15 @@ export class MessagesRepository {
         return {
           outcome: "resolved" as const,
         };
+      }
+
+      if (
+        !conversation.assignedToUserId ||
+        conversation.assignedToUserId !== data.senderId
+      ) {
+        throw new ForbiddenException(
+          "Claim this conversation before replying",
+        );
       }
 
       const [message] = await tx

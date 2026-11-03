@@ -26,6 +26,7 @@ import {
   type ReplyDecision,
   safeErrorSummary,
 } from "./reply-guard.js";
+
 type ContactDetails = {
   name?: string;
   email?: string;
@@ -302,6 +303,7 @@ export class PublicWidgetService {
    * Worker entry point.
    *
    * Chỉ xử lý tin nhắn thuộc đúng organization/conversation.
+   * Không gọi AI nếu hội thoại đã được nhân viên nhận.
    * Lỗi database được throw lại để BullMQ thực hiện retry.
    */
   async processAiReply(input: {
@@ -338,6 +340,7 @@ export class PublicWidgetService {
       const [beforeGeneration] = await db
         .select({
           status: conversations.status,
+          assignedToUserId: conversations.assignedToUserId,
         })
         .from(conversations)
         .where(
@@ -348,7 +351,10 @@ export class PublicWidgetService {
         )
         .limit(1);
 
-      if (beforeGeneration?.status !== "unresolved") {
+      if (
+        beforeGeneration?.status !== "unresolved" ||
+        beforeGeneration.assignedToUserId
+      ) {
         return;
       }
 
@@ -374,7 +380,6 @@ export class PublicWidgetService {
         return;
       }
 
-      // Nếu phản hồi đã tồn tại sau trigger thì không gọi AI lần nữa.
       const [alreadyProcessed] = await db
         .select({
           id: conversationMessages.id,
@@ -427,6 +432,7 @@ export class PublicWidgetService {
         const [current] = await tx
           .select({
             status: conversations.status,
+            assignedToUserId: conversations.assignedToUserId,
           })
           .from(conversations)
           .where(
@@ -437,6 +443,12 @@ export class PublicWidgetService {
           )
           .for("update")
           .limit(1);
+
+        // Nếu nhân viên đã claim trong lúc AI đang generate,
+        // bỏ kết quả AI thay vì ghi đè luồng hỗ trợ của nhân viên.
+        if (current?.assignedToUserId) {
+          return "skip_superseded";
+        }
 
         const [latestUser] = await tx
           .select({
@@ -456,8 +468,6 @@ export class PublicWidgetService {
           )
           .limit(1);
 
-        // Kiểm tra lại trong transaction để tránh hai worker
-        // cùng ghi câu trả lời cho một trigger.
         const [assistantAfterTrigger] = await tx
           .select({
             id: conversationMessages.id,
@@ -542,8 +552,7 @@ export class PublicWidgetService {
         `Could not process AI reply or fallback: ${safeErrorSummary(error)}`,
       );
 
-      // Quan trọng: không nuốt lỗi.
-      // BullMQ cần nhận lỗi để thực hiện retry.
+      // Không nuốt lỗi: BullMQ cần nhận lỗi để thực hiện retry.
       throw error;
     }
   }
@@ -578,8 +587,8 @@ export class PublicWidgetService {
   }
 
   /**
-   * Chuyển hội thoại sang nhân viên. Cập nhật trạng thái và
-   * lưu thông báo trong cùng một transaction.
+   * Chuyển hội thoại sang nhân viên.
+   * Cập nhật trạng thái và lưu thông báo trong cùng transaction.
    */
   private async handoffToHuman(
     organizationId: string,
@@ -681,10 +690,9 @@ export class PublicWidgetService {
         );
       }
 
-      // Nếu lần gửi trước lưu DB thành công nhưng Redis enqueue lỗi,
-      // request retry cùng clientMessageId sẽ enqueue lại job.
       if (
         conversation.status === "unresolved" &&
+        !conversation.assignedToUserId &&
         !this.isHumanSupportRequest(existing.content)
       ) {
         await this.enqueueAiReply(
@@ -701,6 +709,7 @@ export class PublicWidgetService {
       const [locked] = await tx
         .select({
           status: conversations.status,
+          assignedToUserId: conversations.assignedToUserId,
         })
         .from(conversations)
         .where(
@@ -747,6 +756,7 @@ export class PublicWidgetService {
         kind: "inserted" as const,
         message: row,
         status: locked.status,
+        assignedToUserId: locked.assignedToUserId,
       };
     });
 
@@ -759,15 +769,16 @@ export class PublicWidgetService {
     }
 
     if (result.kind === "inserted") {
-      if (result.status === "unresolved") {
+      if (
+        result.status === "unresolved" &&
+        !result.assignedToUserId
+      ) {
         if (this.isHumanSupportRequest(trimmed)) {
-          // Human handoff vẫn được xử lý ngay, không đưa vào AI queue.
           await this.handoffToHuman(
             conversation.organizationId,
             conversationId,
           );
         } else {
-          // API chỉ enqueue và trả tin nhắn, không chờ AI hoàn thành.
           await this.enqueueAiReply(
             conversation.organizationId,
             conversationId,
@@ -795,9 +806,9 @@ export class PublicWidgetService {
       );
     }
 
-    // Xử lý trường hợp request đồng thời cùng lưu một message.
     if (
       conversation.status === "unresolved" &&
+      !conversation.assignedToUserId &&
       !this.isHumanSupportRequest(saved.content)
     ) {
       await this.enqueueAiReply(
