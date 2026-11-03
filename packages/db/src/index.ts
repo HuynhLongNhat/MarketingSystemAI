@@ -67,6 +67,8 @@ export {
   aiProviderConnections,
   aiModelDefaults,
   aiUsageLogs,
+  aiUsageQuotas,
+  aiUsageReservations,
   AI_PROVIDER_TYPES,
   AI_USAGE_STATUSES,
 } from "./ai-schema.js";
@@ -79,6 +81,10 @@ export type {
   NewAiModelDefault,
   AiUsageLog,
   NewAiUsageLog,
+  AiUsageQuota,
+  NewAiUsageQuota,
+  AiUsageReservation,
+  NewAiUsageReservation,
   AiUsageStatus,
 } from "./ai-schema.js";
 

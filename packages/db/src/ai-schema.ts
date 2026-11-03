@@ -184,6 +184,81 @@ export const aiUsageLogs = pgTable(
   ],
 );
 
+/**
+ * Monthly AI token quota configuration.
+ *
+ * No row means the Organization has no configured quota.
+ * Existing Organizations therefore remain unaffected.
+ */
+export const aiUsageQuotas = pgTable(
+  "ai_usage_quotas",
+  {
+    id: text("id").primaryKey(),
+
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+
+    monthlyTokenLimit: integer("monthly_token_limit")
+      .notNull(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ai_usage_quotas_org_uq")
+      .on(table.organizationId),
+  ],
+);
+
+/**
+ * Temporary token reservations.
+ *
+ * A reservation is created before calling an AI provider.
+ * It expires automatically if the API process crashes.
+ */
+export const aiUsageReservations = pgTable(
+  "ai_usage_reservations",
+  {
+    id: text("id").primaryKey(),
+
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+
+    periodStart: timestamp("period_start", {
+      withTimezone: true,
+    }).notNull(),
+
+    reservedTokens: integer("reserved_tokens")
+      .notNull(),
+
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+    }).notNull(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("ai_usage_reservations_org_period_idx")
+      .on(table.organizationId, table.periodStart),
+
+    index("ai_usage_reservations_expires_idx")
+      .on(table.expiresAt),
+  ],
+);
+
 export type AiProviderConnection =
   typeof aiProviderConnections.$inferSelect;
 
@@ -201,3 +276,15 @@ export type AiUsageLog =
 
 export type NewAiUsageLog =
   typeof aiUsageLogs.$inferInsert;
+
+export type AiUsageQuota =
+  typeof aiUsageQuotas.$inferSelect;
+
+export type NewAiUsageQuota =
+  typeof aiUsageQuotas.$inferInsert;
+
+export type AiUsageReservation =
+  typeof aiUsageReservations.$inferSelect;
+
+export type NewAiUsageReservation =
+  typeof aiUsageReservations.$inferInsert;
