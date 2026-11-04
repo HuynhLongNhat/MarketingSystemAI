@@ -95,3 +95,4 @@ Thumbs.db
 # Generated security test builds
 # ==========================================
 **/dist-security-test/
+.clerk/

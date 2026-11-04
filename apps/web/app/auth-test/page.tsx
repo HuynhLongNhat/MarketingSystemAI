@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent } from "react";
@@ -106,7 +107,8 @@ export default function AuthTestPage() {
           </h1>
 
           <p className="mt-2 text-sm text-gray-500">
-            Trang thử nghiệm độc lập, chưa thay thế Clerk.
+            Trang kiểm thử đăng ký, đăng nhập và quản lý
+            session bằng Better Auth.
           </p>
 
           <div className="mt-6 flex gap-2">
@@ -239,7 +241,9 @@ export default function AuthTestPage() {
         </section>
 
         <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Session hiện tại</h2>
+          <h2 className="text-xl font-semibold">
+            Session hiện tại
+          </h2>
 
           <p className="mt-2 text-sm text-gray-500">
             Trạng thái phiên đăng nhập được lấy từ Better Auth.
