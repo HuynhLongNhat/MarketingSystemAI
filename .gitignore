@@ -1,62 +1,97 @@
 
+# ==========================================
 # Dependencies
+# ==========================================
 node_modules/
 .pnp/
 .pnp.js
 
+# ==========================================
 # Environment files
+# ==========================================
 .env
 .env.*
-!.env.example
 **/.env
 **/.env.*
-!**/.env.example
 
+# Allow safe environment templates
+!.env.example
+!.env.*.example
+!**/.env.example
+!**/.env.*.example
+
+# ==========================================
 # Secrets and certificates
+# ==========================================
 *.pem
 *.key
 *.p12
 *.pfx
 *.crt
 *.cer
+*.keystore
 
+# ==========================================
 # Logs and debug artifacts
+# ==========================================
 *.log
+*.log.*
+**/logs/
+**/debug/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 lerna-debug.log*
-migration-audit.txt
 
+migration-audit.txt
+migrate-debug.log
+migration-error.log
+
+# ==========================================
 # Testing
+# ==========================================
 coverage/
 .nyc_output/
 
+# ==========================================
 # Turbo
+# ==========================================
 .turbo/
 
+# ==========================================
 # Next.js
+# ==========================================
 .next/
 out/
 
+# ==========================================
 # Build outputs
+# ==========================================
 build/
 dist/
 
+# ==========================================
 # Vercel
+# ==========================================
 .vercel/
 
+# ==========================================
 # Backups
+# ==========================================
 /backups/
 *.dump
 *.sql.gz
 
+# ==========================================
 # IDE and OS
+# ==========================================
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
 
-# Generated test builds
+# ==========================================
+# Generated security test builds
+# ==========================================
 **/dist-security-test/
