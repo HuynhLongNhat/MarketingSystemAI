@@ -1,7 +1,10 @@
+
 import { atomWithStorage } from "jotai/utils";
-import { Doc } from "@workspace/backend/_generated/dataModel";
+
+import type { ConversationStatus } from "@/lib/conversations-api";
+
 import { STATUS_FILTER_KEY } from "./constants";
 
 export const statusFilterAtom = atomWithStorage<
-  Doc<"conversations">["status"] | "all"
+  ConversationStatus | "all"
 >(STATUS_FILTER_KEY, "all");
