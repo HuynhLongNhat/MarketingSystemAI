@@ -6,10 +6,6 @@ export type PublicWidgetSettings = {
   organizationId: string;
   greetMessage: string;
   defaultSuggestions: Record<string, string>;
-  vapiSettings: {
-    assistantId?: string;
-    phoneNumber?: string;
-  };
 };
 
 export type PublicWidgetConfiguration = {
@@ -91,9 +87,7 @@ export const widgetSession = {
 export const widgetConversationStorage = {
   get(organizationId: string): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem(
-      activeConversationKey(organizationId),
-    );
+    return localStorage.getItem(activeConversationKey(organizationId));
   },
 
   set(organizationId: string, conversationId: string): void {
@@ -106,9 +100,7 @@ export const widgetConversationStorage = {
 
   clear(organizationId: string): void {
     if (typeof window === "undefined") return;
-    localStorage.removeItem(
-      activeConversationKey(organizationId),
-    );
+    localStorage.removeItem(activeConversationKey(organizationId));
   },
 };
 
@@ -120,10 +112,7 @@ async function request<T>(
   const headers = new Headers(options.headers);
 
   if (options.body) {
-    headers.set(
-      "Content-Type",
-      "application/json; charset=utf-8",
-    );
+    headers.set("Content-Type", "application/json; charset=utf-8");
   }
 
   if (token) {
@@ -168,7 +157,6 @@ export const widgetApi = {
     });
   },
 
-  // Giữ API cũ để tương thích.
   createSession(input: {
     organizationId: string;
     name: string;
@@ -217,11 +205,7 @@ export const widgetApi = {
     );
   },
 
-  listMessages(
-    token: string,
-    id: string,
-    before?: string,
-  ) {
+  listMessages(token: string, id: string, before?: string) {
     const query = before
       ? `?before=${encodeURIComponent(before)}`
       : "";

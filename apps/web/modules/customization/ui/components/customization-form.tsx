@@ -57,15 +57,6 @@ export const CustomizationForm = ({
         suggestion3:
           initialData?.defaultSuggestions?.suggestion3 ?? "",
       },
-
-      // Giữ cấu trúc form cũ để tương thích type.
-      // Không gửi các giá trị này lên API trong MVP-01.
-      vapiSettings: {
-        assistantId:
-          initialData?.vapiSettings?.assistantId ?? "",
-        phoneNumber:
-          initialData?.vapiSettings?.phoneNumber ?? "",
-      },
     },
   });
 
@@ -85,14 +76,8 @@ export const CustomizationForm = ({
 
       toast.success("Đã lưu cấu hình chatbot.");
     } catch (error) {
-      console.error(
-        "Failed to save widget settings:",
-        error,
-      );
-
-      toast.error(
-        "Không thể lưu cấu hình. Vui lòng thử lại.",
-      );
+      console.error("Failed to save widget settings:", error);
+      toast.error("Không thể lưu cấu hình. Vui lòng thử lại.");
     }
   };
 
@@ -104,13 +89,9 @@ export const CustomizationForm = ({
       >
         <Card>
           <CardHeader>
-            <CardTitle>
-              General Chat Settings
-            </CardTitle>
-
+            <CardTitle>General Chat Settings</CardTitle>
             <CardDescription>
-              Thiết lập lời chào và nội dung gợi ý
-              cho khách hàng.
+              Thiết lập lời chào và nội dung gợi ý cho khách hàng.
             </CardDescription>
           </CardHeader>
 
@@ -120,10 +101,7 @@ export const CustomizationForm = ({
               name="greetMessage"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    Greeting Message
-                  </FormLabel>
-
+                  <FormLabel>Greeting Message</FormLabel>
                   <FormControl>
                     <Textarea
                       {...field}
@@ -132,12 +110,9 @@ export const CustomizationForm = ({
                       rows={3}
                     />
                   </FormControl>
-
                   <FormDescription>
-                    Tin nhắn đầu tiên khách nhận được
-                    khi bắt đầu hội thoại mới.
+                    Tin nhắn đầu tiên khách nhận được khi bắt đầu hội thoại mới.
                   </FormDescription>
-
                   <FormMessage />
                 </FormItem>
               )}
@@ -150,10 +125,8 @@ export const CustomizationForm = ({
                 <h3 className="text-sm font-medium">
                   Default Suggestions
                 </h3>
-
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Cấu hình tối đa 3 câu hỏi gợi ý
-                  cho khách hàng.
+                  Cấu hình tối đa 3 câu hỏi gợi ý cho khách hàng.
                 </p>
               </div>
 
@@ -162,10 +135,7 @@ export const CustomizationForm = ({
                 name="defaultSuggestions.suggestion1"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Suggestion 1
-                    </FormLabel>
-
+                    <FormLabel>Suggestion 1</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -173,7 +143,6 @@ export const CustomizationForm = ({
                         placeholder="Ví dụ: Chính sách đổi trả như thế nào?"
                       />
                     </FormControl>
-
                     <FormMessage />
                   </FormItem>
                 )}
@@ -184,10 +153,7 @@ export const CustomizationForm = ({
                 name="defaultSuggestions.suggestion2"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Suggestion 2
-                    </FormLabel>
-
+                    <FormLabel>Suggestion 2</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -195,7 +161,6 @@ export const CustomizationForm = ({
                         placeholder="Ví dụ: Shop có giao hàng toàn quốc không?"
                       />
                     </FormControl>
-
                     <FormMessage />
                   </FormItem>
                 )}
@@ -206,10 +171,7 @@ export const CustomizationForm = ({
                 name="defaultSuggestions.suggestion3"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Suggestion 3
-                    </FormLabel>
-
+                    <FormLabel>Suggestion 3</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -217,7 +179,6 @@ export const CustomizationForm = ({
                         placeholder="Ví dụ: Tôi muốn gặp nhân viên tư vấn."
                       />
                     </FormControl>
-
                     <FormMessage />
                   </FormItem>
                 )}

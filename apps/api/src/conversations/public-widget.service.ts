@@ -769,10 +769,7 @@ export class PublicWidgetService {
     }
 
     if (result.kind === "inserted") {
-      if (
-        result.status === "unresolved" &&
-        !result.assignedToUserId
-      ) {
+      if (result.status === "unresolved" && !result.assignedToUserId) {
         if (this.isHumanSupportRequest(trimmed)) {
           await this.handoffToHuman(
             conversation.organizationId,
@@ -839,8 +836,6 @@ export class PublicWidgetService {
       .select({
         greetMessage: widgetSettings.greetMessage,
         defaultSuggestions: widgetSettings.defaultSuggestions,
-        vapiAssistantId: widgetSettings.vapiAssistantId,
-        vapiPhoneNumber: widgetSettings.vapiPhoneNumber,
       })
       .from(widgetSettings)
       .where(eq(widgetSettings.organizationId, organizationId))
@@ -848,22 +843,13 @@ export class PublicWidgetService {
 
     return {
       organization: org,
-      settings: settings
-        ? {
-            organizationId,
-            greetMessage: settings.greetMessage,
-            defaultSuggestions: settings.defaultSuggestions,
-            vapiSettings: {
-              assistantId: settings.vapiAssistantId ?? undefined,
-              phoneNumber: settings.vapiPhoneNumber ?? undefined,
-            },
-          }
-        : {
-            organizationId,
-            greetMessage: "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
-            defaultSuggestions: {},
-            vapiSettings: {},
-          },
+      settings: {
+        organizationId,
+        greetMessage:
+          settings?.greetMessage ??
+          "Xin chào! Chúng tôi có thể giúp gì cho bạn?",
+        defaultSuggestions: settings?.defaultSuggestions ?? {},
+      },
     };
   }
 }

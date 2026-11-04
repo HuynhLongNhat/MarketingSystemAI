@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useAtomValue } from "jotai";
@@ -8,8 +7,6 @@ import { screenAtom } from "@/modules/widget/atoms/widget-atoms";
 import { WidgetAuthScreen } from "../screens/widget-auth-screen";
 import { WidgetErrorScreen } from "../screens/widget-error-screen";
 import { WidgetLoadingScreen } from "../screens/widget-loading-screen";
-import { WidgetVoiceScreen } from "../screens/widget-voice-screen";
-import { WidgetContactScreen } from "../screens/widget-contact-screen";
 import { WidgetChatWorkspace } from "./widget-chat-workspace";
 
 interface Props {
@@ -31,12 +28,6 @@ export const WidgetView = ({ organizationId }: Props) => {
 
       case "auth":
         return <WidgetAuthScreen />;
-
-      case "voice":
-        return <WidgetVoiceScreen />;
-
-      case "contact":
-        return <WidgetContactScreen />;
 
       case "selection":
       case "inbox":

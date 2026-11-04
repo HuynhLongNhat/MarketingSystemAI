@@ -11,10 +11,6 @@ export interface WidgetSettings {
   organizationId: string;
   greetMessage: string;
   defaultSuggestions: DefaultSuggestions;
-  vapiSettings: {
-    assistantId?: string;
-    phoneNumber?: string;
-  };
 }
 
 export interface UpdateWidgetSettingsInput {

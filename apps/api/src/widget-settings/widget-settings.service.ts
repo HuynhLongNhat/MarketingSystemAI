@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   Injectable,
@@ -81,10 +82,6 @@ export class WidgetSettingsService {
           suggestion2: "",
           suggestion3: "",
         },
-        vapiSettings: {
-          assistantId: undefined,
-          phoneNumber: undefined,
-        },
         allowedOrigins: [],
       };
     }
@@ -93,10 +90,6 @@ export class WidgetSettingsService {
       organizationId: settings.organizationId,
       greetMessage: settings.greetMessage,
       defaultSuggestions: settings.defaultSuggestions,
-      vapiSettings: {
-        assistantId: settings.vapiAssistantId ?? undefined,
-        phoneNumber: settings.vapiPhoneNumber ?? undefined,
-      },
       allowedOrigins: settings.allowedOrigins ?? [],
     };
   }

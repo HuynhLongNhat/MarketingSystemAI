@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -12,7 +11,6 @@ import {
   Inbox,
   LayoutDashboard,
   LibraryBig,
-  Mic,
   Network,
   Palette,
   Settings2,
@@ -119,11 +117,6 @@ export const DashboardSidebar = () => {
           url: "/integrations",
           icon: Headset,
         },
-        {
-          title: t.voice,
-          url: "/plugins/vapi",
-          icon: Mic,
-        },
       ],
     },
     {
@@ -211,12 +204,11 @@ export const DashboardSidebar = () => {
                             {item.title}
                           </span>
 
-                          {"soon" in item &&
-                            item.soon && (
-                              <span className="ml-auto text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-                                {t.soon}
-                              </span>
-                            )}
+                          {"soon" in item && item.soon && (
+                            <span className="ml-auto text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+                              {t.soon}
+                            </span>
+                          )}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

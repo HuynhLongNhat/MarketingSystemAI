@@ -24,12 +24,4 @@ export const widgetSettingsSchema = z.object({
       .max(160, "Tối đa 160 ký tự.")
       .optional(),
   }),
-
-  // Giữ schema Vapi để không phá type đang được
-  // sử dụng bởi các component cũ.
-  // MVP-01 không chỉnh sửa hoặc lưu Vapi.
-  vapiSettings: z.object({
-    assistantId: z.string().optional(),
-    phoneNumber: z.string().optional(),
-  }),
 });

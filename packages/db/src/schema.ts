@@ -21,8 +21,6 @@ export const widgetSettings = pgTable("widget_settings", {
   defaultSuggestions: jsonb("default_suggestions")
     .$type<DefaultSuggestions>()
     .notNull(),
-  vapiAssistantId: text("vapi_assistant_id"),
-  vapiPhoneNumber: text("vapi_phone_number"),
   allowedOrigins: text("allowed_origins").array().notNull().default([]),
 });
 

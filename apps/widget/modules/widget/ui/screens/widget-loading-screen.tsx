@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -11,7 +10,6 @@ import {
   errorMessageAtom,
   organizationIdAtom,
   screenAtom,
-  vapiSecretsAtom,
   widgetSettingsAtom,
 } from "@/modules/widget/atoms/widget-atoms";
 
@@ -35,7 +33,6 @@ export const WidgetLoadingScreen = ({
   const setConversationId = useSetAtom(conversationIdAtom);
   const setErrorMessage = useSetAtom(errorMessageAtom);
   const setScreen = useSetAtom(screenAtom);
-  const setVapiSecrets = useSetAtom(vapiSecretsAtom);
 
   const setContactSessionId = useSetAtom(
     contactSessionIdAtomFamily(organizationId ?? ""),
@@ -55,26 +52,19 @@ export const WidgetLoadingScreen = ({
         setLoadingMessage("Đang tải cấu hình...");
 
         const configuration =
-          await widgetApi.getPublicConfiguration(
-            organizationId,
-          );
+          await widgetApi.getPublicConfiguration(organizationId);
 
         if (cancelled) return;
 
-        if (
-          configuration.organization.id !== organizationId
-        ) {
+        if (configuration.organization.id !== organizationId) {
           throw new Error("Organization không hợp lệ");
         }
 
         setOrganizationId(organizationId);
         setWidgetSettings(configuration.settings);
-        setVapiSecrets(null);
 
         const token = widgetSession.get(organizationId);
 
-        // Khách mới: mở thẳng giao diện chat.
-        // Session sẽ được tạo khi gửi tin đầu tiên.
         if (!token) {
           setContactSessionId(null);
           setConversationId(null);
@@ -91,8 +81,6 @@ export const WidgetLoadingScreen = ({
         } catch (error) {
           if (cancelled) return;
 
-          // Chỉ xóa token nếu backend xác nhận
-          // phiên không còn hợp lệ.
           if (
             error instanceof WidgetApiError &&
             error.status === 401
@@ -122,9 +110,7 @@ export const WidgetLoadingScreen = ({
 
         setContactSessionId(session.contactSessionId);
 
-        setLoadingMessage(
-          "Đang tải lịch sử trò chuyện...",
-        );
+        setLoadingMessage("Đang tải lịch sử trò chuyện...");
 
         const conversations =
           await widgetApi.listConversations(token);
@@ -136,14 +122,11 @@ export const WidgetLoadingScreen = ({
 
         const selected =
           conversations.find(
-            (conversation) =>
-              conversation.id === savedId,
+            (conversation) => conversation.id === savedId,
           ) ?? conversations[0];
 
         if (!selected) {
-          widgetConversationStorage.clear(
-            organizationId,
-          );
+          widgetConversationStorage.clear(organizationId);
           setConversationId(null);
           setScreen("selection");
           return;
@@ -159,10 +142,7 @@ export const WidgetLoadingScreen = ({
       } catch (error) {
         if (cancelled) return;
 
-        console.error(
-          "Widget initialization failed",
-          error,
-        );
+        console.error("Widget initialization failed", error);
 
         setErrorMessage(
           "Không thể khởi tạo Widget. Vui lòng thử lại.",
@@ -181,7 +161,6 @@ export const WidgetLoadingScreen = ({
     organizationId,
     setOrganizationId,
     setWidgetSettings,
-    setVapiSecrets,
     setContactSessionId,
     setConversationId,
     setErrorMessage,

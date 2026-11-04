@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.0",
-    "@vapi-ai/web": "^2.3.8",
     "@workspace/math": "workspace:*",
     "@workspace/ui": "workspace:*",
     "date-fns": "^4.1.0",
