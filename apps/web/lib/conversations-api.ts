@@ -42,6 +42,8 @@ export interface Conversation {
   contactSessionId: string;
   threadId: string | null;
   status: ConversationStatus;
+  assignedToUserId: string | null;
+  assignedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,24 +72,17 @@ export interface ListConversationsOptions {
 // ==========================================
 
 export const conversationsApi = {
-  // GET /v1/conversations
   list() {
-    return apiFetch<Conversation[]>(
-      "/conversations",
-    );
+    return apiFetch<Conversation[]>("/conversations");
   },
 
-  // GET /v1/conversations/:id
   get(id: string) {
     return apiFetch<Conversation>(
       `/conversations/${encodeURIComponent(id)}`,
     );
   },
 
-  // GET /v1/conversations/page
-  listPage(
-    options: ListConversationsOptions = {},
-  ) {
+  listPage(options: ListConversationsOptions = {}) {
     const params = new URLSearchParams();
 
     if (options.status) {
@@ -98,21 +93,14 @@ export const conversationsApi = {
       params.set("cursor", options.cursor);
     }
 
-    params.set(
-      "limit",
-      String(options.limit ?? 20),
-    );
+    params.set("limit", String(options.limit ?? 20));
 
     return apiFetch<ConversationPage>(
       `/conversations/page?${params.toString()}`,
     );
   },
 
-  // PATCH /v1/conversations/:id/status
-  updateStatus(
-    id: string,
-    status: ConversationStatus,
-  ) {
+  updateStatus(id: string, status: ConversationStatus) {
     return apiFetch<Conversation>(
       `/conversations/${encodeURIComponent(id)}/status`,
       {
@@ -122,17 +110,11 @@ export const conversationsApi = {
     );
   },
 
-  // GET /v1/contact-sessions
   listContactSessions() {
-    return apiFetch<ContactSession[]>(
-      "/contact-sessions",
-    );
+    return apiFetch<ContactSession[]>("/contact-sessions");
   },
 
-  // GET /v1/conversations/:id/contact-session
-  getContactSessionByConversation(
-    id: string,
-  ) {
+  getContactSessionByConversation(id: string) {
     return apiFetch<ContactSession>(
       `/conversations/${encodeURIComponent(id)}/contact-session`,
     );

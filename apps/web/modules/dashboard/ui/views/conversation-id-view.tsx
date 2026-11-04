@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -44,6 +45,7 @@ import {
 import { messagesApi, type ConversationMessage } from "@/lib/messages-api";
 
 import { ConversationStatusButton } from "../components/conversation-status-button";
+import { HandoffControls } from "../components/handoff-controls";
 
 const PAGE_SIZE = 20;
 const POLLING_INTERVAL = 5000;
@@ -92,22 +94,30 @@ export const ConversationIdView = ({
   conversationId,
 }: ConversationIdViewProps) => {
   const [conversation, setConversation] = useState<Conversation | null>(null);
-
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-
   const [isSending, setIsSending] = useState(false);
-
   const [isEnhancing, setIsEnhancing] = useState(false);
+
+  const requestGeneration = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const sendingRef = useRef(false);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    mode: "onChange",
+    defaultValues: {
+      message: "",
+    },
+  });
 
   const handleEnhanceResponse = async () => {
     if (
@@ -144,18 +154,6 @@ export const ConversationIdView = ({
       setIsEnhancing(false);
     }
   };
-
-  const requestGeneration = useRef(0);
-  const loadingMoreRef = useRef(false);
-  const sendingRef = useRef(false);
-
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    mode: "onChange",
-    defaultValues: {
-      message: "",
-    },
-  });
 
   const loadInitialData = useCallback(async () => {
     const generation = ++requestGeneration.current;
@@ -222,7 +220,6 @@ export const ConversationIdView = ({
       }
 
       setConversation(latestConversation);
-
       setMessages((current) => mergeMessages(current, latestMessages.items));
     } catch (error) {
       console.error("Failed to refresh messages:", error);
@@ -264,7 +261,6 @@ export const ConversationIdView = ({
       }
 
       setMessages((current) => mergeMessages(current, page.items));
-
       setNextCursor(page.nextCursor);
       setHasMore(page.hasMore);
     } catch (error) {
@@ -327,7 +323,6 @@ export const ConversationIdView = ({
       const created = await messagesApi.create(conversationId, content);
 
       setMessages((current) => mergeMessages(current, [created]));
-
       form.reset({ message: "" });
 
       await refreshLatest();
@@ -370,6 +365,13 @@ export const ConversationIdView = ({
           disabled={isUpdatingStatus}
         />
       </header>
+
+      <HandoffControls
+        conversationId={conversationId}
+        status={conversation.status}
+        assignedToUserId={conversation.assignedToUserId ?? null}
+        onUpdated={refreshLatest}
+      />
 
       <AIConversation className="max-h-[calc(100vh-180px)]">
         <AIConversationContent>
@@ -432,7 +434,6 @@ export const ConversationIdView = ({
                       !event.nativeEvent.isComposing
                     ) {
                       event.preventDefault();
-
                       void form.handleSubmit(onSubmit)();
                     }
                   }}
