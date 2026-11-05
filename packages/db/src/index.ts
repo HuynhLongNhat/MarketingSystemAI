@@ -17,6 +17,7 @@ export {
   MESSAGE_ROLES,
 } from "./schema.js";
 
+
 export { knowledgeEntries } from "./knowledge-schema.js";
 
 export { eq, sql } from "drizzle-orm";
@@ -125,3 +126,13 @@ export type {
   OfficeDeskAssignment,
   NewOfficeDeskAssignment,
 } from "./office-schema.js";
+export {
+  notifications,
+  NOTIFICATION_TYPES,
+} from "./notifications-schema.js";
+
+export type {
+  NotificationType,
+  Notification,
+  NewNotification,
+} from "./notifications-schema.js";
