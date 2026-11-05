@@ -17,9 +17,6 @@ export {
   MESSAGE_ROLES,
 } from "./schema.js";
 
-
-export { knowledgeEntries } from "./knowledge-schema.js";
-
 export { eq, sql } from "drizzle-orm";
 
 export type {
@@ -51,11 +48,22 @@ export type {
   NewConversationMessage,
 } from "./schema.js";
 
+export {
+  knowledgeEntries,
+  knowledgeDocuments,
+  knowledgeChunks,
+  KNOWLEDGE_DOCUMENT_STATUSES,
+} from "./knowledge-schema.js";
+
 export type {
   KnowledgeEntry,
   NewKnowledgeEntry,
+  KnowledgeDocument,
+  NewKnowledgeDocument,
+  KnowledgeDocumentStatus,
+  KnowledgeChunk,
+  NewKnowledgeChunk,
 } from "./knowledge-schema.js";
-
 export {
   verifyDatabaseEnvironment,
 } from "./environment-guard.js";
@@ -136,3 +144,4 @@ export type {
   Notification,
   NewNotification,
 } from "./notifications-schema.js";
+

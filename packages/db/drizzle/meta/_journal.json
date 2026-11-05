@@ -134,6 +134,20 @@
       "when": 1793809500000,
       "tag": "0019_notification_events",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793892846184,
+      "tag": "0020_wise_komodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793893160186,
+      "tag": "0021_milky_sentinels",
+      "breakpoints": true
     }
   ]
 }

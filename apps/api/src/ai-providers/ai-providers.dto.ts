@@ -17,6 +17,7 @@ export const AI_MODEL_PURPOSES = [
   "customer_support",
   "message_enhancement",
   "general",
+  "embedding",
 ] as const;
 
 export type AiModelPurpose =
