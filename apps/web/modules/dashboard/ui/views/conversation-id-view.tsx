@@ -90,6 +90,22 @@ function mergeMessages(
   return sortMessages(Array.from(byId.values()));
 }
 
+function getMessageSender(message: ConversationMessage) {
+  if (message.role === "user") {
+    return "Khách hàng";
+  }
+
+  if (message.role === "assistant" && message.senderId) {
+    return "Nhân viên hỗ trợ";
+  }
+
+  if (message.role === "assistant") {
+    return "Trợ lý AI";
+  }
+
+  return message.role;
+}
+
 export const ConversationIdView = ({
   conversationId,
 }: ConversationIdViewProps) => {
@@ -394,23 +410,32 @@ export const ConversationIdView = ({
             </p>
           )}
 
-          {messages.map((message) => (
-            <AIMessage
-              key={message.id}
-              from={message.role === "user" ? "assistant" : "user"}
-            >
-              <AIMessageContent>
-                <AIResponse>{message.content}</AIResponse>
-              </AIMessageContent>
+          {messages.map((message) => {
+            const isCustomerMessage = message.role === "user";
+            const senderLabel = getMessageSender(message);
 
-              {message.role === "user" && (
-                <DicebearAvatar
-                  seed={conversation.contactSessionId}
-                  size={32}
-                />
-              )}
-            </AIMessage>
-          ))}
+            return (
+              <AIMessage
+                key={message.id}
+                from={isCustomerMessage ? "assistant" : "user"}
+              >
+                <AIMessageContent>
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">
+                    {senderLabel}
+                  </div>
+
+                  <AIResponse>{message.content}</AIResponse>
+                </AIMessageContent>
+
+                {isCustomerMessage && (
+                  <DicebearAvatar
+                    seed={conversation.contactSessionId}
+                    size={32}
+                  />
+                )}
+              </AIMessage>
+            );
+          })}
         </AIConversationContent>
 
         <AIConversationScrollButton />

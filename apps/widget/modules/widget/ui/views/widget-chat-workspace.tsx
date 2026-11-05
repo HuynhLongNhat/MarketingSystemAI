@@ -1,12 +1,6 @@
-
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
   ArrowUp,
@@ -48,8 +42,7 @@ type PendingMessage = {
 const sortMessages = (items: WidgetMessage[]) =>
   [...items].sort(
     (a, b) =>
-      new Date(a.createdAt).getTime() -
-        new Date(b.createdAt).getTime() ||
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
       a.id.localeCompare(b.id),
   );
 
@@ -79,8 +72,9 @@ export const WidgetChatWorkspace = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
-  const [conversation, setConversation] =
-    useState<WidgetConversation | null>(null);
+  const [conversation, setConversation] = useState<WidgetConversation | null>(
+    null,
+  );
 
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
@@ -89,9 +83,7 @@ export const WidgetChatWorkspace = () => {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [nextBefore, setNextBefore] = useState<string | null>(
-    null,
-  );
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -100,21 +92,16 @@ export const WidgetChatWorkspace = () => {
   const pendingMessageRef = useRef<PendingMessage | null>(null);
 
   // MVP-01.2: Lấy câu hỏi gợi ý đã lưu từ Dashboard.
-  const suggestions = Object.values(
-    settings?.defaultSuggestions ?? {},
-  )
+  const suggestions = Object.values(settings?.defaultSuggestions ?? {})
     .filter(
       (value): value is string =>
-        typeof value === "string" &&
-        value.trim().length > 0,
+        typeof value === "string" && value.trim().length > 0,
     )
     .map((value) => value.trim())
     .slice(0, 3);
 
   const getToken = useCallback(() => {
-    return organizationId
-      ? widgetSession.get(organizationId)
-      : null;
+    return organizationId ? widgetSession.get(organizationId) : null;
   }, [organizationId]);
 
   const loadChats = useCallback(async () => {
@@ -129,18 +116,14 @@ export const WidgetChatWorkspace = () => {
     setLoadingChats(true);
 
     try {
-      const conversations =
-        await widgetApi.listConversations(token);
+      const conversations = await widgetApi.listConversations(token);
 
       const results = await Promise.all(
         conversations.map(async (item) => {
           let title = "Cuộc trò chuyện mới";
 
           try {
-            const page = await widgetApi.listMessages(
-              token,
-              item.id,
-            );
+            const page = await widgetApi.listMessages(token, item.id);
 
             const firstMessage = page.items.find(
               (message) => message.role === "user",
@@ -159,8 +142,7 @@ export const WidgetChatWorkspace = () => {
 
       results.sort(
         (a, b) =>
-          new Date(b.createdAt).getTime() -
-          new Date(a.createdAt).getTime(),
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
       setChats(results);
@@ -203,9 +185,7 @@ export const WidgetChatWorkspace = () => {
       widgetConversationStorage.clear(organizationId);
     }
 
-    requestAnimationFrame(() =>
-      textareaRef.current?.focus(),
-    );
+    requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
   useEffect(() => {
@@ -272,10 +252,7 @@ export const WidgetChatWorkspace = () => {
     let busy = false;
 
     const refresh = async () => {
-      if (
-        busy ||
-        document.visibilityState !== "visible"
-      ) {
+      if (busy || document.visibilityState !== "visible") {
         return;
       }
 
@@ -290,9 +267,7 @@ export const WidgetChatWorkspace = () => {
         if (!active) return;
 
         setConversation(details);
-        setMessages((previous) =>
-          mergeMessages(previous, page.items),
-        );
+        setMessages((previous) => mergeMessages(previous, page.items));
       } catch (err) {
         console.error("Refresh messages failed", err);
       } finally {
@@ -320,12 +295,7 @@ export const WidgetChatWorkspace = () => {
   const loadMore = async () => {
     const token = getToken();
 
-    if (
-      !token ||
-      !conversationId ||
-      !nextBefore ||
-      loadingMore
-    ) {
+    if (!token || !conversationId || !nextBefore || loadingMore) {
       return;
     }
 
@@ -338,9 +308,7 @@ export const WidgetChatWorkspace = () => {
         nextBefore,
       );
 
-      setMessages((previous) =>
-        mergeMessages(previous, page.items),
-      );
+      setMessages((previous) => mergeMessages(previous, page.items));
       setHasMore(page.hasMore);
       setNextBefore(page.nextBefore);
     } catch (err) {
@@ -371,10 +339,7 @@ export const WidgetChatWorkspace = () => {
     const canRetry =
       pending?.organizationId === organizationId &&
       pending.content === content &&
-      (
-        !conversationId ||
-        pending.conversationId === conversationId
-      );
+      (!conversationId || pending.conversationId === conversationId);
 
     const clientMessageId = canRetry
       ? pending.clientMessageId
@@ -382,9 +347,7 @@ export const WidgetChatWorkspace = () => {
 
     pendingMessageRef.current = {
       organizationId,
-      conversationId: canRetry
-        ? pending.conversationId
-        : conversationId,
+      conversationId: canRetry ? pending.conversationId : conversationId,
       content,
       clientMessageId,
     };
@@ -398,49 +361,33 @@ export const WidgetChatWorkspace = () => {
 
       // 1. Tạo Guest Session nếu chưa có.
       if (!token) {
-        const guest =
-          await widgetApi.createGuestSession(
-            organizationId,
-          );
+        const guest = await widgetApi.createGuestSession(organizationId);
 
         token = guest.token;
 
-        widgetSession.set(
-          organizationId,
-          guest.token,
-        );
+        widgetSession.set(organizationId, guest.token);
 
-        setContactSessionId(
-          guest.contactSessionId,
-        );
+        setContactSessionId(guest.contactSessionId);
       }
 
       // 2. Tạo conversation nếu chưa có.
       // Giữ ID để retry không tạo trùng.
       let id =
-        conversationId ??
-        pendingMessageRef.current?.conversationId ??
-        null;
+        conversationId ?? pendingMessageRef.current?.conversationId ?? null;
 
       if (!id) {
-        const created =
-          await widgetApi.createConversation(token);
+        const created = await widgetApi.createConversation(token);
 
         id = created.id;
 
-        widgetConversationStorage.set(
-          organizationId,
-          created.id,
-        );
+        widgetConversationStorage.set(organizationId, created.id);
 
         setChats((previous) => [
           {
             ...created,
             title: content,
           },
-          ...previous.filter(
-            (chat) => chat.id !== created.id,
-          ),
+          ...previous.filter((chat) => chat.id !== created.id),
         ]);
       }
 
@@ -460,16 +407,13 @@ export const WidgetChatWorkspace = () => {
       if (conversationId !== id) {
         setConversationId(id);
       } else {
-        setMessages((previous) =>
-          mergeMessages(previous, [message]),
-        );
+        setMessages((previous) => mergeMessages(previous, [message]));
       }
 
       // 5. Cập nhật tiêu đề lịch sử.
       setChats((previous) =>
         previous.map((chat) =>
-          chat.id === id &&
-          chat.title === "Cuộc trò chuyện mới"
+          chat.id === id && chat.title === "Cuộc trò chuyện mới"
             ? { ...chat, title: content }
             : chat,
         ),
@@ -483,10 +427,7 @@ export const WidgetChatWorkspace = () => {
     } catch (err) {
       console.error("Send message failed", err);
 
-      if (
-        err instanceof WidgetApiError &&
-        err.status === 401
-      ) {
+      if (err instanceof WidgetApiError && err.status === 401) {
         widgetSession.clear(organizationId);
         pendingMessageRef.current = null;
 
@@ -505,9 +446,7 @@ export const WidgetChatWorkspace = () => {
       } else {
         // Giữ nội dung đã chọn để khách có thể thử lại.
         setDraft(content);
-        setError(
-          "Không thể gửi tin nhắn. Vui lòng thử lại.",
-        );
+        setError("Không thể gửi tin nhắn. Vui lòng thử lại.");
       }
     } finally {
       sendingRef.current = false;
@@ -518,13 +457,10 @@ export const WidgetChatWorkspace = () => {
   const filteredChats = chats.filter((chat) =>
     chat.title
       .toLocaleLowerCase("vi-VN")
-      .includes(
-        search.trim().toLocaleLowerCase("vi-VN"),
-      ),
+      .includes(search.trim().toLocaleLowerCase("vi-VN")),
   );
 
-  const isResolved =
-    conversation?.status === "resolved";
+  const isResolved = conversation?.status === "resolved";
 
   return (
     <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-white text-zinc-900">
@@ -581,9 +517,7 @@ export const WidgetChatWorkspace = () => {
             <Search className="size-4 text-zinc-500" />
             <input
               value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Tìm kiếm đoạn chat"
               aria-label="Tìm kiếm đoạn chat"
               className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-zinc-500"
@@ -610,9 +544,7 @@ export const WidgetChatWorkspace = () => {
                 onClick={() => openChat(chat.id)}
                 className={[
                   "mb-1 block w-full truncate rounded-lg px-3 py-2.5 text-left text-sm hover:bg-zinc-200/70",
-                  conversationId === chat.id
-                    ? "bg-zinc-200/80"
-                    : "",
+                  conversationId === chat.id ? "bg-zinc-200/80" : "",
                 ].join(" ")}
                 title={chat.title}
               >
@@ -620,12 +552,11 @@ export const WidgetChatWorkspace = () => {
               </button>
             ))}
 
-          {!loadingChats &&
-            filteredChats.length === 0 && (
-              <p className="px-3 py-4 text-sm text-zinc-500">
-                Không có cuộc trò chuyện.
-              </p>
-            )}
+          {!loadingChats && filteredChats.length === 0 && (
+            <p className="px-3 py-4 text-sm text-zinc-500">
+              Không có cuộc trò chuyện.
+            </p>
+          )}
         </div>
 
         <div className="border-t border-zinc-200 px-4 py-3 text-xs text-zinc-500">
@@ -638,9 +569,7 @@ export const WidgetChatWorkspace = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() =>
-                setSidebarOpen((value) => !value)
-              }
+              onClick={() => setSidebarOpen((value) => !value)}
               className="rounded-lg p-2 hover:bg-zinc-100"
               aria-label="Mở hoặc đóng lịch sử"
             >
@@ -715,35 +644,40 @@ export const WidgetChatWorkspace = () => {
                     onClick={() => void loadMore()}
                     className="self-center rounded-full border px-4 py-2 text-xs hover:bg-zinc-50 disabled:opacity-50"
                   >
-                    {loadingMore
-                      ? "Đang tải..."
-                      : "Xem tin nhắn cũ hơn"}
+                    {loadingMore ? "Đang tải..." : "Xem tin nhắn cũ hơn"}
                   </button>
                 )}
 
                 {messages.map((message) => {
-                  const isUser =
-                    message.role === "user";
+                  const isUser = message.role === "user";
 
                   return (
                     <div
                       key={message.id}
                       className={[
                         "flex w-full",
-                        isUser
-                          ? "justify-end"
-                          : "justify-start",
+                        isUser ? "justify-end" : "justify-start",
                       ].join(" ")}
                     >
-                      <div
-                        className={[
-                          "max-w-[85%] whitespace-pre-wrap break-words text-sm leading-7",
-                          isUser
-                            ? "rounded-3xl bg-[#f4f4f4] px-4 py-2.5"
-                            : "py-1",
-                        ].join(" ")}
-                      >
-                        {message.content}
+                      <div className="flex max-w-[85%] flex-col gap-1">
+                        {!isUser && (
+                          <span className="px-1 text-[11px] font-medium text-zinc-500">
+                            {message.senderId
+                              ? "Nhân viên hỗ trợ"
+                              : "Trợ lý AI"}
+                          </span>
+                        )}
+
+                        <div
+                          className={[
+                            "whitespace-pre-wrap break-words text-sm leading-7",
+                            isUser
+                              ? "rounded-3xl bg-[#f4f4f4] px-4 py-2.5"
+                              : "py-1",
+                          ].join(" ")}
+                        >
+                          {message.content}
+                        </div>
                       </div>
                     </div>
                   );
@@ -781,9 +715,7 @@ export const WidgetChatWorkspace = () => {
                   <textarea
                     ref={textareaRef}
                     value={draft}
-                    onChange={(event) =>
-                      setDraft(event.target.value)
-                    }
+                    onChange={(event) => setDraft(event.target.value)}
                     onKeyDown={(event) => {
                       if (
                         event.key === "Enter" &&
@@ -797,27 +729,17 @@ export const WidgetChatWorkspace = () => {
                     placeholder="Hỏi bất kỳ điều gì..."
                     aria-label="Nhập tin nhắn"
                     rows={2}
-                    disabled={
-                      sending || loadingMessages
-                    }
+                    disabled={sending || loadingMessages}
                     className="max-h-36 min-h-12 w-full resize-none bg-transparent text-sm leading-6 outline-none placeholder:text-zinc-400 disabled:opacity-50"
                   />
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-400">
-                      Enter để gửi
-                    </span>
+                    <span className="text-xs text-zinc-400">Enter để gửi</span>
 
                     <button
                       type="button"
-                      onClick={() =>
-                        void sendMessage()
-                      }
-                      disabled={
-                        !draft.trim() ||
-                        sending ||
-                        loadingMessages
-                      }
+                      onClick={() => void sendMessage()}
+                      disabled={!draft.trim() || sending || loadingMessages}
                       aria-label="Gửi tin nhắn"
                       className="flex size-9 items-center justify-center rounded-full bg-zinc-900 text-white transition-colors hover:bg-zinc-700 disabled:bg-zinc-200 disabled:text-zinc-400"
                     >

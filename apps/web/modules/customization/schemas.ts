@@ -1,6 +1,33 @@
 
 import { z } from "zod";
 
+const allowedOriginSchema = z
+  .string()
+  .trim()
+  .url("Vui lòng nhập URL hợp lệ.")
+  .refine(
+    (value) => {
+      try {
+        const url = new URL(value);
+
+        return (
+          ["http:", "https:"].includes(url.protocol) &&
+          !url.username &&
+          !url.password &&
+          url.pathname === "/" &&
+          !url.search &&
+          !url.hash
+        );
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "Chỉ nhập origin, ví dụ https://example.com hoặc http://localhost:3001.",
+    },
+  );
+
 export const widgetSettingsSchema = z.object({
   greetMessage: z
     .string()
@@ -24,4 +51,8 @@ export const widgetSettingsSchema = z.object({
       .max(160, "Tối đa 160 ký tự.")
       .optional(),
   }),
+
+  allowedOrigins: z
+    .array(allowedOriginSchema)
+    .max(20, "Chỉ được cấu hình tối đa 20 domain."),
 });

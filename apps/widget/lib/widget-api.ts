@@ -1,4 +1,3 @@
-
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
@@ -41,6 +40,7 @@ export type WidgetMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   clientMessageId?: string | null;
+  senderId?: string | null;
   createdAt: string;
 };
 

@@ -21,6 +21,7 @@ import {
 
 import { OrganizationSwitcher } from "@/modules/auth/ui/components/organization-switcher";
 import { UserMenu } from "@/modules/auth/ui/components/user-menu";
+import { NotificationBell } from "./notification-bell";
 import { useUiLanguage } from "@/lib/ui-language";
 
 import {
@@ -168,7 +169,13 @@ export const DashboardSidebar = () => {
   return (
     <Sidebar collapsible="icon" className="group">
       <SidebarHeader>
-        <OrganizationSwitcher />
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <OrganizationSwitcher />
+          </div>
+
+          <NotificationBell />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>

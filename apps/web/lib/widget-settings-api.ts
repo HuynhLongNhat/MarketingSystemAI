@@ -11,11 +11,13 @@ export interface WidgetSettings {
   organizationId: string;
   greetMessage: string;
   defaultSuggestions: DefaultSuggestions;
+  allowedOrigins: string[];
 }
 
 export interface UpdateWidgetSettingsInput {
   greetMessage: string;
   defaultSuggestions: DefaultSuggestions;
+  allowedOrigins: string[];
 }
 
 export const widgetSettingsApi = {
