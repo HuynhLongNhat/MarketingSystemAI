@@ -1,0 +1,66 @@
+import { Badge } from "@workspace/ui/components/badge";
+
+import type { GoogleDriveSource } from "@/lib/knowledge-connections-api";
+
+export type KnowledgeSourceStage =
+  | "pending"
+  | "indexing"
+  | "embedding"
+  | "ready"
+  | "failed";
+
+export function getKnowledgeSourceStage(
+  source: GoogleDriveSource,
+): KnowledgeSourceStage {
+  if (source.status === "failed" || source.documentStatus === "failed") {
+    return "failed";
+  }
+
+  if (source.status === "pending") return "pending";
+  if (source.status === "indexing") return "indexing";
+
+  if (
+    source.documentStatus === "ready" &&
+    source.chunkCount > 0 &&
+    source.embeddingCount < source.chunkCount
+  ) {
+    return "embedding";
+  }
+
+  return "ready";
+}
+
+const STAGE_LABELS: Record<KnowledgeSourceStage, string> = {
+  pending: "Đang chờ",
+  indexing: "Đang trích xuất",
+  embedding: "Đang tạo embedding",
+  ready: "Sẵn sàng tìm kiếm",
+  failed: "Thất bại",
+};
+
+const STAGE_CLASSES: Record<KnowledgeSourceStage, string> = {
+  pending: "border-amber-500/40 text-amber-700 dark:text-amber-300",
+  indexing: "border-blue-500/40 text-blue-700 dark:text-blue-300",
+  embedding: "border-violet-500/40 text-violet-700 dark:text-violet-300",
+  ready: "border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
+  failed: "border-destructive/40 text-destructive",
+};
+
+export function KnowledgeSourceStatus({
+  source,
+}: {
+  source: GoogleDriveSource;
+}) {
+  const stage = getKnowledgeSourceStage(source);
+
+  return (
+    <Badge variant="outline" className={STAGE_CLASSES[stage]}>
+      {STAGE_LABELS[stage]}
+    </Badge>
+  );
+}
+
+export function isKnowledgeSourceProcessing(source: GoogleDriveSource) {
+  const stage = getKnowledgeSourceStage(source);
+  return stage === "pending" || stage === "indexing";
+}

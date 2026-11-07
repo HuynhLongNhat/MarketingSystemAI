@@ -1,26 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Script from "next/script";
-import { RefreshCw, RotateCcw } from "lucide-react";
+import { DatabaseZap, RefreshCw } from "lucide-react";
+
+import { ApiError } from "@/lib/api-client";
+import {
+  knowledgeConnectionsApi,
+  type GoogleDriveSourceLimits,
+  type GoogleDriveSource,
+} from "@/lib/knowledge-connections-api";
+import {
+  GoogleDriveSourceList,
+  RemoveGoogleDriveSourceDialog,
+} from "./google-drive-source-list";
+import {
+  getKnowledgeSourceStage,
+  isKnowledgeSourceProcessing,
+} from "./knowledge-source-status";
 
 import { Button } from "@workspace/ui/components/button";
-import { Badge } from "@workspace/ui/components/badge";
-
-type PickerDocument = {
-  id: string;
-  name?: string;
-};
 
 type PickerEvent = {
   action: string;
-  docs?: PickerDocument[];
+  docs?: Array<{ id: string }>;
 };
-
-type PickerInstance = {
-  setVisible: (visible: boolean) => void;
-};
-
 type PickerBuilder = {
   addView: (view: string) => PickerBuilder;
   setOAuthToken: (token: string) => PickerBuilder;
@@ -30,9 +34,8 @@ type PickerBuilder = {
   setMaxItems: (count: number) => PickerBuilder;
   enableFeature: (feature: string) => PickerBuilder;
   setCallback: (callback: (event: PickerEvent) => void) => PickerBuilder;
-  build: () => PickerInstance;
+  build: () => { setVisible: (visible: boolean) => void };
 };
-
 type GooglePickerApi = {
   PickerBuilder: new () => PickerBuilder;
   ViewId: { DOCS: string };
@@ -42,36 +45,19 @@ type GooglePickerApi = {
 
 declare global {
   interface Window {
-    gapi?: {
-      load: (name: string, callback: () => void) => void;
-    };
-    google?: {
-      picker: GooglePickerApi;
-    };
+    gapi?: { load: (name: string, callback: () => void) => void };
+    google?: { picker: GooglePickerApi };
   }
 }
-
-type SavedSource = {
-  id: string;
-  name: string;
-  mimeType: string | null;
-  status: string;
-  lastIndexedAt: string | null;
-  chunkCount: number;
-  embeddingCount: number;
-  embeddingProvider: string | null;
-};
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002")
   .replace(/\/v1\/?$/, "")
   .replace(/\/$/, "");
+const GOOGLE_ENDPOINT = `${API_BASE}/v1/knowledge-connections/google`;
+const PROCESSING_POLL_WINDOW_MS = 5 * 60 * 1000;
 
-const ENDPOINT = `${API_BASE}/v1/knowledge-connections/google`;
-const EMBEDDING_ENDPOINT =
-  `${API_BASE}/v1/knowledge-connections/embeddings/backfill`;
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${ENDPOINT}${path}`, {
+async function googleApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${GOOGLE_ENDPOINT}${path}`, {
     ...init,
     credentials: "include",
     cache: "no-store",
@@ -82,36 +68,110 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: HTTP ${response.status}`);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join(" ")
+      : body?.message;
+    throw new Error(message ?? `API request failed: ${response.status}`);
   }
 
   return (await response.json()) as T;
+}
+
+function sourceSummary(sources: GoogleDriveSource[]) {
+  return {
+    total: sources.length,
+    ready: sources.filter(
+      (source) => getKnowledgeSourceStage(source) === "ready",
+    ).length,
+    pending: sources.filter(isKnowledgeSourceProcessing).length,
+    embedding: sources.filter(
+      (source) => getKnowledgeSourceStage(source) === "embedding",
+    ).length,
+    failed: sources.filter(
+      (source) =>
+        source.status === "failed" || source.documentStatus === "failed",
+    ).length,
+    chunks: sources.reduce((total, source) => total + source.chunkCount, 0),
+    embeddings: sources.reduce(
+      (total, source) => total + source.embeddingCount,
+      0,
+    ),
+  };
 }
 
 export function GoogleDrivePicker() {
   const [sdkReady, setSdkReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [sources, setSources] = useState<SavedSource[]>([]);
   const [message, setMessage] = useState("");
+  const [sources, setSources] = useState<GoogleDriveSource[]>([]);
+  const [limits, setLimits] = useState<GoogleDriveSourceLimits | null>(null);
   const [backfilling, setBackfilling] = useState(false);
-
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [removingSource, setRemovingSource] =
+    useState<GoogleDriveSource | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [pollUntil, setPollUntil] = useState<number | null>(null);
   const developerKey = process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY;
 
-  async function refreshSources() {
-    const list = await api<SavedSource[]>("/sources");
-    setSources(list);
-  }
+  const refreshSources = useCallback(async () => {
+    setSources(await knowledgeConnectionsApi.listGoogleSources());
+  }, []);
 
   useEffect(() => {
     void refreshSources().catch(() =>
       setError("Không tải được danh sách tài liệu."),
     );
+  }, [refreshSources]);
+
+  useEffect(() => {
+    void knowledgeConnectionsApi.getGoogleSourceLimits().then(setLimits).catch(
+      () => undefined,
+    );
   }, []);
+
+  // A page opened while a known ingestion job is running should follow it,
+  // but a stale database status must not cause permanent polling.
+  useEffect(() => {
+    if (sources.some(isKnowledgeSourceProcessing) && pollUntil === null) {
+      setPollUntil(Date.now() + PROCESSING_POLL_WINDOW_MS);
+    }
+  }, [pollUntil, sources]);
+
+  const shouldPoll = useMemo(() => {
+    const processingWindowOpen =
+      pollUntil !== null &&
+      pollUntil > Date.now();
+    if (!processingWindowOpen) return false;
+
+    return (
+      sources.some(isKnowledgeSourceProcessing) ||
+      sources.some(
+        (source) =>
+          source.status === "ready" &&
+          source.chunkCount > source.embeddingCount,
+      )
+    );
+  }, [pollUntil, sources]);
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+    const timer = window.setTimeout(() => {
+      void refreshSources().catch(() =>
+        setError("Không thể cập nhật tiến trình tài liệu."),
+      );
+    }, 5_000);
+    return () => window.clearTimeout(timer);
+  }, [refreshSources, shouldPoll, sources]);
+
+  const startPolling = () =>
+    setPollUntil(Date.now() + PROCESSING_POLL_WINDOW_MS);
 
   async function openPicker() {
     if (busy) return;
-
     setError("");
     setMessage("");
 
@@ -119,26 +179,20 @@ export function GoogleDrivePicker() {
       setError("Google Picker chưa được cấu hình.");
       return;
     }
-
     if (!sdkReady || !window.gapi) {
       setError("Google Picker chưa tải xong.");
       return;
     }
 
     try {
-      const status = await api<{
-        connected: boolean;
-      }>("/status");
-
+      const status = await googleApi<{ connected: boolean }>("/status");
       if (!status.connected) {
-        // OAuth is a top-level browser navigation, not a fetch request.
-        window.location.assign(`${ENDPOINT}/start`);
+        window.location.assign(`${GOOGLE_ENDPOINT}/start`);
         return;
       }
 
       setBusy(true);
-
-      const result = await api<{
+      const token = await googleApi<{
         accessToken: string;
         expiresIn: number;
         appId: string;
@@ -146,7 +200,6 @@ export function GoogleDrivePicker() {
 
       window.gapi.load("picker", () => {
         const pickerApi = window.google?.picker;
-
         if (!pickerApi) {
           setError("Không thể khởi tạo Google Picker.");
           setBusy(false);
@@ -155,36 +208,35 @@ export function GoogleDrivePicker() {
 
         const picker = new pickerApi.PickerBuilder()
           .addView(pickerApi.ViewId.DOCS)
-          .setOAuthToken(result.accessToken)
+          .setOAuthToken(token.accessToken)
           .setDeveloperKey(developerKey)
-          .setAppId(result.appId)
+          .setAppId(token.appId)
           .setOrigin(window.location.origin)
           .enableFeature(pickerApi.Feature.MULTISELECT_ENABLED)
           .setMaxItems(20)
-          .setCallback(async (event) => {
-            if (event.action !== pickerApi.Action.PICKED) {
-              return;
-            }
-
-            const ids = (event.docs ?? []).map((doc) => doc.id).filter(Boolean);
-
-            if (!ids.length) return;
+          .setCallback((event) => {
+            if (event.action !== pickerApi.Action.PICKED) return;
+            const fileIds = (event.docs ?? [])
+              .map((document) => document.id)
+              .filter(Boolean);
+            if (fileIds.length === 0) return;
 
             setBusy(true);
-
-            void api<{
-              success: boolean;
-              selected: SavedSource[];
-            }>("/sources", {
+            void googleApi("/sources", {
               method: "POST",
-              body: JSON.stringify({ fileIds: ids }),
+              body: JSON.stringify({ fileIds }),
             })
               .then(async () => {
+                startPolling();
                 await refreshSources();
-                setMessage("Đã lưu tài liệu được chọn.");
+                setMessage("Đã thêm tài liệu; tiến trình sẽ tự cập nhật.");
               })
-              .catch(() => {
-                setError("Không thể lưu một số tài liệu đã chọn.");
+              .catch((requestError: unknown) => {
+                setError(
+                  requestError instanceof Error
+                    ? requestError.message
+                    : "Không thể lưu tài liệu đã chọn.",
+                );
               })
               .finally(() => setBusy(false));
           })
@@ -193,56 +245,86 @@ export function GoogleDrivePicker() {
         picker.setVisible(true);
         setBusy(false);
       });
-    } catch {
-      setError("Không lấy được quyền truy cập Google Drive. Hãy kiểm tra kết nối.");
-    } finally {
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Không lấy được quyền truy cập Google Drive.",
+      );
       setBusy(false);
     }
   }
 
   async function backfill() {
     if (backfilling) return;
-
     setBackfilling(true);
     setError("");
     setMessage("");
-
     try {
-      const response = await fetch(EMBEDDING_ENDPOINT, {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          message?: string | string[];
-        } | null;
-        const message = Array.isArray(payload?.message)
-          ? payload.message.join(" ")
-          : payload?.message;
-        throw new Error(message || "Embedding backfill failed");
-      }
-
-      const result = (await response.json()) as {
-        queuedCount: number;
-        message: string;
-      };
+      const result = await knowledgeConnectionsApi.backfillEmbeddings();
+      startPolling();
+      await refreshSources();
       setMessage(
         result.queuedCount > 0
           ? `Đã xếp ${result.queuedCount} tài liệu để tạo embedding.`
-          : "Không có tài liệu ready cần tạo embedding.",
+          : "Không có tài liệu sẵn sàng cần tạo embedding.",
       );
-    } catch (error) {
+    } catch (requestError) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Không thể backfill embedding. Hãy kiểm tra cấu hình Embedding Model trong AI Providers.",
+        requestError instanceof ApiError || requestError instanceof Error
+          ? requestError.message
+          : "Không thể backfill embedding.",
       );
     } finally {
       setBackfilling(false);
     }
   }
+
+  async function retry(source: GoogleDriveSource) {
+    if (retryingId) return;
+    setRetryingId(source.id);
+    setError("");
+    try {
+      await knowledgeConnectionsApi.retryGoogleSource(source.id);
+      startPolling();
+      await refreshSources();
+      setMessage(`Đã xếp lại “${source.name}” để index.`);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Không thể re-index tài liệu.",
+      );
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  async function remove() {
+    if (!removingSource || removing) return;
+    setRemoving(true);
+    setError("");
+    try {
+      await knowledgeConnectionsApi.removeGoogleSource(removingSource.id);
+      setSources((current) =>
+        current.filter((source) => source.id !== removingSource.id),
+      );
+      setMessage(
+        `Đã remove “${removingSource.name}” khỏi Knowledge Base. File Google Drive không bị thay đổi.`,
+      );
+      setRemovingSource(null);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Không thể remove source.",
+      );
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  const summary = sourceSummary(sources);
 
   return (
     <section className="space-y-4 rounded-xl border p-5">
@@ -251,14 +333,45 @@ export function GoogleDrivePicker() {
         strategy="afterInteractive"
         onLoad={() => setSdkReady(true)}
       />
-
       <div>
         <h2 className="text-lg font-semibold">Google Drive Knowledge</h2>
-
         <p className="text-sm text-muted-foreground">
-          Chọn tài liệu từ Google Drive của doanh nghiệp. Chỉ những file được
-          cấp quyền mới được thêm vào Knowledge Base.
+          File được chọn chỉ được sao chép vào Knowledge Base; thao tác remove
+          không xóa file gốc trên Google Drive.
         </p>
+      </div>
+
+      {limits && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">Giới hạn khi index</p>
+          <p className="mt-1">
+            Hỗ trợ {limits.supportedFormats.join(", ")}. Dung lượng tải xuống tối đa {Math.floor(limits.maxDownloadBytes / 1024 / 1024)} MB;
+            văn bản sau khi trích xuất tối đa {limits.maxTextCharacters.toLocaleString("vi-VN")} ký tự.
+          </p>
+          <p className="mt-1">
+            File PDF nén vẫn có thể vượt giới hạn ký tự. File phải còn quyền truy cập và có văn bản có thể trích xuất.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-7">
+        {[
+          ["Nguồn", summary.total],
+          ["Sẵn sàng", summary.ready],
+          ["Chờ / Indexing", summary.pending],
+          ["Embedding", summary.embedding],
+          ["Failed", summary.failed],
+          ["Chunks", summary.chunks],
+          ["Embeddings", summary.embeddings],
+        ].map(([label, value]) => (
+          <div
+            key={String(label)}
+            className="rounded-md border bg-muted/30 px-3 py-2"
+          >
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="font-semibold tabular-nums">{value}</p>
+          </div>
+        ))}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -269,7 +382,6 @@ export function GoogleDrivePicker() {
         >
           {busy ? "Đang xử lý..." : "Chọn tài liệu từ Google Drive"}
         </Button>
-
         <Button
           type="button"
           variant="outline"
@@ -279,63 +391,47 @@ export function GoogleDrivePicker() {
             )
           }
         >
-          <RefreshCw className="size-4" />
-          Làm mới danh sách
+          <RefreshCw className="size-4" /> Làm mới
         </Button>
-
         <Button
           type="button"
           variant="outline"
           disabled={backfilling}
           onClick={() => void backfill()}
         >
-          <RotateCcw className={backfilling ? "size-4 animate-spin" : "size-4"} />
+          <DatabaseZap
+            className={backfilling ? "size-4 animate-pulse" : "size-4"}
+          />
           {backfilling ? "Đang xếp hàng..." : "Backfill embeddings"}
         </Button>
       </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-red-500">
-          {error}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {message && (
+        <p className="text-sm text-emerald-700 dark:text-emerald-300">
+          {message}
         </p>
       )}
 
-      {message && <p className="text-sm text-green-600">{message}</p>}
-
-      <div className="space-y-2">
-        {sources.map((source) => (
-          <article
-            key={source.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-3"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{source.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {source.chunkCount} chunks · {source.embeddingCount} embeddings
-                {source.embeddingProvider ? ` · ${source.embeddingProvider}` : ""}
-              </p>
-              {source.lastIndexedAt && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Indexed: {new Intl.DateTimeFormat("vi-VN", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  }).format(new Date(source.lastIndexedAt))}
-                </p>
-              )}
-            </div>
-
-            <Badge variant="outline" className="shrink-0 text-foreground">
-              {source.status}
-            </Badge>
-          </article>
-        ))}
-
-        {sources.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Chưa tải danh sách hoặc chưa có tài liệu.
-          </p>
-        )}
-      </div>
+      <GoogleDriveSourceList
+        sources={sources}
+        removingId={removing ? removingSource?.id ?? null : null}
+        retryingId={retryingId}
+        onRemove={setRemovingSource}
+        onRetry={(source) => void retry(source)}
+      />
+      <RemoveGoogleDriveSourceDialog
+        source={removingSource}
+        pending={removing}
+        onOpenChange={(open) => {
+          if (!open && !removing) setRemovingSource(null);
+        }}
+        onConfirm={(event) => {
+          // Keep the confirmation open while the deletion request is in flight.
+          event.preventDefault();
+          void remove();
+        }}
+      />
     </section>
   );
 }

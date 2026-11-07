@@ -17,7 +17,7 @@ import {
   knowledgeExternalSources,
 } from "@workspace/db/node";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -31,6 +31,11 @@ import {
 import {
   decryptGoogleToken,
 } from "./google-token-crypto.js";
+import {
+  GOOGLE_DRIVE_SUPPORTED_FORMATS,
+  MAX_DOCUMENT_DOWNLOAD_BYTES,
+  MAX_DOCUMENT_TEXT_LENGTH,
+} from "./knowledge-ingestion-limits.js";
 
 const TOKEN_ENDPOINT =
   "https://oauth2.googleapis.com/token";
@@ -475,9 +480,14 @@ export class GoogleDrivePickerService {
         mimeType: knowledgeExternalSources.mimeType,
         status: knowledgeExternalSources.status,
         lastIndexedAt: knowledgeExternalSources.lastIndexedAt,
+        documentStatus: knowledgeDocuments.status,
+        // Ingestion persists only whitelisted, user-safe messages. Older or
+        // unexpected values remain hidden from the browser.
+        errorMessage: sql<string | null>`case when ${knowledgeDocuments.status} = 'failed' and ${knowledgeDocuments.errorMessage} in ('File vượt giới hạn tải xuống 20 MB.', 'Nội dung sau khi trích xuất vượt 300.000 ký tự.', 'Không thể trích xuất văn bản từ file.', 'Định dạng file không được hỗ trợ.', 'Google Drive không cấp quyền tải nội dung file này.', 'Không thể tạo đoạn nội dung để index.', 'Không thể đọc file từ Google Drive. Kiểm tra quyền truy cập rồi thử lại.', 'Google Drive indexing failed. Retry this source.') then ${knowledgeDocuments.errorMessage} else 'Indexing failed. Retry this source or check the source limits.' end`,
         chunkCount: sql<number>`count(distinct ${knowledgeChunks.id})`.mapWith(Number),
         embeddingCount: sql<number>`count(${knowledgeEmbeddings.id})`.mapWith(Number),
         embeddingProvider: sql<string | null>`max(${knowledgeEmbeddings.provider})`,
+        embeddingModel: sql<string | null>`max(${knowledgeEmbeddings.modelId})`,
       })
       .from(knowledgeExternalSources)
       .leftJoin(
@@ -525,7 +535,132 @@ export class GoogleDrivePickerService {
         knowledgeExternalSources.mimeType,
         knowledgeExternalSources.status,
         knowledgeExternalSources.lastIndexedAt,
+        knowledgeDocuments.status,
+        knowledgeDocuments.errorMessage,
         knowledgeExternalSources.createdAt,
       );
+  }
+
+  sourceLimits() {
+    return {
+      supportedFormats: GOOGLE_DRIVE_SUPPORTED_FORMATS,
+      maxDownloadBytes: MAX_DOCUMENT_DOWNLOAD_BYTES,
+      maxTextCharacters: MAX_DOCUMENT_TEXT_LENGTH,
+    };
+  }
+
+  /**
+   * Removes only our knowledge records. It never calls the Google Drive API,
+   * so the original customer file remains untouched.
+   */
+  async removeSource(
+    context: RequestContext,
+    sourceId: string,
+  ) {
+    const deleted = await db.transaction(async (tx) => {
+      const [source] = await tx
+        .delete(knowledgeExternalSources)
+        .where(
+          and(
+            eq(knowledgeExternalSources.id, sourceId),
+            eq(
+              knowledgeExternalSources.organizationId,
+              context.organizationId,
+            ),
+          ),
+        )
+        .returning({ id: knowledgeExternalSources.id });
+
+      if (!source) {
+        return false;
+      }
+
+      // Documents use the source id as their primary key. Deleting the
+      // document cascades to chunks and embeddings at the database level.
+      await tx
+        .delete(knowledgeDocuments)
+        .where(
+          and(
+            eq(knowledgeDocuments.id, sourceId),
+            eq(
+              knowledgeDocuments.organizationId,
+              context.organizationId,
+            ),
+          ),
+        );
+
+      return true;
+    });
+
+    if (!deleted) {
+      throw new NotFoundException("Knowledge source was not found");
+    }
+
+    return { success: true, sourceId };
+  }
+
+  async retrySource(
+    context: RequestContext,
+    sourceId: string,
+  ) {
+    const queued = await db.transaction(async (tx) => {
+      const [source] = await tx
+        .update(knowledgeExternalSources)
+        .set({
+          status: "pending",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(knowledgeExternalSources.id, sourceId),
+            eq(
+              knowledgeExternalSources.organizationId,
+              context.organizationId,
+            ),
+            inArray(knowledgeExternalSources.status, [
+              "failed",
+              "indexing",
+              "ready",
+            ]),
+          ),
+        )
+        .returning({ id: knowledgeExternalSources.id });
+
+      if (!source) {
+        return false;
+      }
+
+      await tx
+        .update(knowledgeDocuments)
+        .set({
+          status: "pending",
+          errorMessage: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(knowledgeDocuments.id, sourceId),
+            eq(
+              knowledgeDocuments.organizationId,
+              context.organizationId,
+            ),
+          ),
+        );
+
+      return true;
+    });
+
+    if (!queued) {
+      throw new NotFoundException(
+        "Knowledge source cannot be re-indexed",
+      );
+    }
+
+    const job = await this.jobs.enqueueKnowledgeSource({
+      organizationId: context.organizationId,
+      sourceId,
+    });
+
+    return { success: true, sourceId, jobId: job.jobId };
   }
 }

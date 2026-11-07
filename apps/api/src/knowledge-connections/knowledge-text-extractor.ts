@@ -2,6 +2,10 @@
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
+import {
+  MAX_DOCUMENT_TEXT_LENGTH,
+} from "./knowledge-ingestion-limits.js";
+
 export const SUPPORTED_DOCUMENT_TYPES = [
   "application/vnd.google-apps.document",
   "application/pdf",
@@ -9,8 +13,6 @@ export const SUPPORTED_DOCUMENT_TYPES = [
   "text/plain",
   "text/markdown",
 ] as const;
-
-const MAX_TEXT_LENGTH = 300_000;
 
 export async function extractDocumentText(
   mimeType: string,
@@ -65,7 +67,7 @@ export async function extractDocumentText(
     );
   }
 
-  if (normalized.length > MAX_TEXT_LENGTH) {
+  if (normalized.length > MAX_DOCUMENT_TEXT_LENGTH) {
     throw new Error(
       "Document exceeds maximum text length",
     );

@@ -20,8 +20,9 @@ import {
   extractDocumentText,
   SUPPORTED_DOCUMENT_TYPES,
 } from "./knowledge-text-extractor.js";
-
-const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+import {
+  MAX_DOCUMENT_DOWNLOAD_BYTES,
+} from "./knowledge-ingestion-limits.js";
 
 type DriveMetadata = {
   id?: string;
@@ -43,6 +44,44 @@ export class GoogleDriveIngestionService {
   constructor(
     private readonly google: GoogleDrivePickerService,
   ) {}
+
+  private safeFailureMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : "";
+
+    if (message === "Document exceeds 20 MB download limit") {
+      return "File vượt giới hạn tải xuống 20 MB.";
+    }
+
+    if (message === "Document exceeds maximum text length") {
+      return "Nội dung sau khi trích xuất vượt 300.000 ký tự.";
+    }
+
+    if (message === "Document contains no extractable text") {
+      return "Không thể trích xuất văn bản từ file.";
+    }
+
+    if (message === "Unsupported document MIME type") {
+      return "Định dạng file không được hỗ trợ.";
+    }
+
+    if (message === "Google Drive download not permitted") {
+      return "Google Drive không cấp quyền tải nội dung file này.";
+    }
+
+    if (message === "No document chunks generated") {
+      return "Không thể tạo đoạn nội dung để index.";
+    }
+
+    if (
+      message.startsWith("Google Drive request failed: HTTP 401") ||
+      message.startsWith("Google Drive request failed: HTTP 403") ||
+      message.startsWith("Google Drive request failed: HTTP 404")
+    ) {
+      return "Không thể đọc file từ Google Drive. Kiểm tra quyền truy cập rồi thử lại.";
+    }
+
+    return "Google Drive indexing failed. Retry this source.";
+  }
 
   private async googleRequest(
     url: string,
@@ -103,7 +142,7 @@ export class GoogleDriveIngestionService {
 
         total += value.byteLength;
 
-        if (total > MAX_DOWNLOAD_BYTES) {
+        if (total > MAX_DOCUMENT_DOWNLOAD_BYTES) {
           throw new Error(
             "Document exceeds 20 MB download limit",
           );
@@ -203,6 +242,22 @@ export class GoogleDriveIngestionService {
         reason: "Source is not pending or failed",
       };
     }
+
+    // Preserve the source as the job authority, while making an existing
+    // document's lifecycle visible during a re-index.
+    await db
+      .update(knowledgeDocuments)
+      .set({
+        status: "pending",
+        errorMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(knowledgeDocuments.id, sourceId),
+          eq(knowledgeDocuments.organizationId, organizationId),
+        ),
+      );
 
     try {
       const [connection] = await db
@@ -484,7 +539,7 @@ export class GoogleDriveIngestionService {
         chunkCount: chunks.length,
       };
     } catch (error) {
-      await db
+      const [failedSource] = await db
         .update(knowledgeExternalSources)
         .set({
           status: "failed",
@@ -505,7 +560,40 @@ export class GoogleDriveIngestionService {
               "indexing",
             ),
           ),
-        );
+        )
+        .returning({ id: knowledgeExternalSources.id });
+
+      // Do not overwrite a retry or a deletion that happened while the
+      // external Drive request was in flight.
+      if (failedSource) {
+        await db
+          .insert(knowledgeDocuments)
+          .values({
+            id: sourceId,
+            organizationId,
+            title: source.name,
+            sourceType: "google_drive",
+            sourceName: source.name,
+            mimeType: source.mimeType,
+            status: "failed",
+            // Keep UI/API errors safe; detailed diagnostics stay in logs.
+            errorMessage: this.safeFailureMessage(error),
+            metadata: {
+              connectionId: source.connectionId,
+              externalFileId: source.externalFileId,
+              sourceVersion: source.sourceVersion,
+            },
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: knowledgeDocuments.id,
+            set: {
+              status: "failed",
+              errorMessage: this.safeFailureMessage(error),
+              updatedAt: new Date(),
+            },
+          });
+      }
 
       this.logger.error(
         JSON.stringify({

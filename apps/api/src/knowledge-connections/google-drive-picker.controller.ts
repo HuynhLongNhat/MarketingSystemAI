@@ -2,8 +2,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
+  Param,
   Post,
   UseGuards,
 } from "@nestjs/common";
@@ -75,6 +77,13 @@ export class GoogleDrivePickerController {
     return this.picker.listSources(ctx);
   }
 
+  @Get("sources/limits")
+  @Header("Cache-Control", "no-store")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_READ)
+  sourceLimits() {
+    return this.picker.sourceLimits();
+  }
+
   @Post("sources")
   @RequirePermissions(PERMISSIONS.KNOWLEDGE_UPDATE)
   saveSources(
@@ -85,5 +94,23 @@ export class GoogleDrivePickerController {
       ctx,
       dto.fileIds,
     );
+  }
+
+  @Post("sources/:sourceId/retry")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_UPDATE)
+  retrySource(
+    @CurrentContext() ctx: RequestContext,
+    @Param("sourceId") sourceId: string,
+  ) {
+    return this.picker.retrySource(ctx, sourceId);
+  }
+
+  @Delete("sources/:sourceId")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_UPDATE)
+  removeSource(
+    @CurrentContext() ctx: RequestContext,
+    @Param("sourceId") sourceId: string,
+  ) {
+    return this.picker.removeSource(ctx, sourceId);
   }
 }
