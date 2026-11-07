@@ -93,11 +93,30 @@ export class KnowledgeEmbeddingController {
     const queued = [];
 
     for (const document of documents) {
-      const result =
-        await this.jobs.enqueueKnowledgeEmbedding({
+      const prepared = await this.embeddings.prepareJob({
+        organizationId: ctx.organizationId,
+        documentId: document.id,
+      });
+
+      if (!prepared || prepared.alreadyQueued) continue;
+
+      let result;
+      try {
+        result = await this.jobs.enqueueKnowledgeEmbedding({
           organizationId: ctx.organizationId,
           documentId: document.id,
+          sourceGeneration: prepared.sourceGeneration,
+          token: prepared.token,
         });
+      } catch {
+        await this.embeddings.markQueueFailed({
+          organizationId: ctx.organizationId,
+          documentId: document.id,
+          sourceGeneration: prepared.sourceGeneration,
+          token: prepared.token,
+        });
+        continue;
+      }
 
       queued.push({
         documentId: document.id,

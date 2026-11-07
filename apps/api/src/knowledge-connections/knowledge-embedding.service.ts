@@ -20,6 +20,9 @@ import {
   getEmbeddingModelDefinition,
   type EmbeddingModelDefinition,
 } from "../ai-providers/provider-registry.js";
+import {
+  isFreshKnowledgeJob,
+} from "./knowledge-job-ownership.js";
 
 const EMBEDDING_PURPOSE = "embedding";
 const BATCH_SIZE = 20;
@@ -164,6 +167,97 @@ export class KnowledgeEmbeddingService {
     await this.configuration(organizationId);
   }
 
+  async prepareJob(input: {
+    organizationId: string;
+    documentId: string;
+  }) {
+    const { organizationId, documentId } = input;
+
+    return db.transaction(async (tx) => {
+      const [document] = await tx
+        .select({
+          id: knowledgeDocuments.id,
+          sourceGeneration: knowledgeDocuments.sourceGeneration,
+          embeddingStatus: knowledgeDocuments.embeddingStatus,
+          embeddingToken: knowledgeDocuments.embeddingToken,
+          embeddingQueuedAt: knowledgeDocuments.embeddingQueuedAt,
+          embeddingStartedAt: knowledgeDocuments.embeddingStartedAt,
+        })
+        .from(knowledgeDocuments)
+        .where(and(eq(knowledgeDocuments.id, documentId), eq(knowledgeDocuments.organizationId, organizationId), eq(knowledgeDocuments.status, "ready")))
+        .for("update")
+        .limit(1);
+
+      if (!document) return null;
+
+      const lastActivity = document.embeddingStartedAt ?? document.embeddingQueuedAt;
+      const active =
+        (document.embeddingStatus === "waiting" || document.embeddingStatus === "processing") &&
+        lastActivity &&
+        isFreshKnowledgeJob(lastActivity);
+
+      if (active && document.embeddingToken) {
+        return { token: document.embeddingToken, sourceGeneration: document.sourceGeneration, alreadyQueued: true };
+      }
+
+      const token = randomUUID();
+      await tx
+        .update(knowledgeDocuments)
+        .set({
+          embeddingStatus: "waiting",
+          embeddingToken: token,
+          embeddingQueuedAt: new Date(),
+          embeddingStartedAt: null,
+          embeddingCompletedAt: null,
+          embeddingErrorMessage: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(knowledgeDocuments.id, document.id));
+
+      return { token, sourceGeneration: document.sourceGeneration, alreadyQueued: false };
+    });
+  }
+
+  async markQueueFailed(input: {
+    organizationId: string;
+    documentId: string;
+    sourceGeneration: number;
+    token: string;
+  }) {
+    await db.update(knowledgeDocuments).set({
+      embeddingStatus: "failed",
+      embeddingErrorMessage: "Unable to queue embedding. Retry backfill.",
+      embeddingToken: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(knowledgeDocuments.id, input.documentId),
+      eq(knowledgeDocuments.organizationId, input.organizationId),
+      eq(knowledgeDocuments.sourceGeneration, input.sourceGeneration),
+      eq(knowledgeDocuments.embeddingToken, input.token),
+    ));
+  }
+
+  async markFailed(input: {
+    organizationId: string;
+    documentId: string;
+    sourceGeneration: number;
+    token: string;
+    message: string;
+  }) {
+    await db.update(knowledgeDocuments).set({
+      embeddingStatus: "failed",
+      embeddingErrorMessage: input.message,
+      embeddingToken: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(knowledgeDocuments.id, input.documentId),
+      eq(knowledgeDocuments.organizationId, input.organizationId),
+      eq(knowledgeDocuments.sourceGeneration, input.sourceGeneration),
+      eq(knowledgeDocuments.embeddingToken, input.token),
+      eq(knowledgeDocuments.embeddingStatus, "processing"),
+    ));
+  }
+
   private async embed(
     contents: string[],
     configuration: EmbeddingConfiguration,
@@ -253,18 +347,23 @@ export class KnowledgeEmbeddingService {
   async process(input: {
     organizationId: string;
     documentId: string;
+    sourceGeneration: number;
+    token: string;
   }) {
-    const { organizationId, documentId } = input;
+    const { organizationId, documentId, sourceGeneration, token } = input;
 
-    if (!organizationId || !documentId) {
+    if (!organizationId || !documentId || !Number.isInteger(sourceGeneration) || !token) {
       throw new Error("Invalid embedding job identity");
     }
 
     const [document] = await db
-      .select({
-        id: knowledgeDocuments.id,
+      .update(knowledgeDocuments)
+      .set({
+        embeddingStatus: "processing",
+        embeddingStartedAt: new Date(),
+        embeddingErrorMessage: null,
+        updatedAt: new Date(),
       })
-      .from(knowledgeDocuments)
       .where(
         and(
           eq(knowledgeDocuments.id, documentId),
@@ -273,9 +372,12 @@ export class KnowledgeEmbeddingService {
             organizationId,
           ),
           eq(knowledgeDocuments.status, "ready"),
+          eq(knowledgeDocuments.sourceGeneration, sourceGeneration),
+          eq(knowledgeDocuments.embeddingStatus, "waiting"),
+          eq(knowledgeDocuments.embeddingToken, token),
         ),
       )
-      .limit(1);
+      .returning({ id: knowledgeDocuments.id });
 
     if (!document) {
       return {
@@ -366,7 +468,10 @@ export class KnowledgeEmbeddingService {
                 knowledgeDocuments.organizationId,
                 organizationId,
               ),
-              eq(knowledgeDocuments.status, "ready"),
+          eq(knowledgeDocuments.status, "ready"),
+          eq(knowledgeDocuments.sourceGeneration, sourceGeneration),
+          eq(knowledgeDocuments.embeddingStatus, "processing"),
+          eq(knowledgeDocuments.embeddingToken, token),
             ),
           )
           .for("update")
@@ -436,6 +541,20 @@ export class KnowledgeEmbeddingService {
         totalChunks: chunks.length,
       }),
     );
+
+    await db.update(knowledgeDocuments).set({
+      embeddingStatus: "completed",
+      embeddingCompletedAt: new Date(),
+      embeddingErrorMessage: null,
+      embeddingToken: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(knowledgeDocuments.id, documentId),
+      eq(knowledgeDocuments.organizationId, organizationId),
+      eq(knowledgeDocuments.sourceGeneration, sourceGeneration),
+      eq(knowledgeDocuments.embeddingStatus, "processing"),
+      eq(knowledgeDocuments.embeddingToken, token),
+    ));
 
     return {
       success: true,

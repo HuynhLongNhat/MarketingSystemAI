@@ -2,7 +2,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
-import { randomUUID } from "node:crypto";
 
 import type { RequestContext } from "../auth/request-context.js";
 import { createTenantJobData } from "./tenant-job.js";
@@ -18,12 +17,16 @@ export interface CustomerSupportReplyJobData {
 export interface KnowledgeIngestionJobData {
   organizationId: string;
   sourceId: string;
+  generation: number;
+  token: string;
   createdAt: string;
 }
 
 export interface KnowledgeEmbeddingJobData {
   organizationId: string;
   documentId: string;
+  sourceGeneration: number;
+  token: string;
   createdAt: string;
 }
 
@@ -151,10 +154,12 @@ export class JobsService {
   async enqueueKnowledgeSource(input: {
     organizationId: string;
     sourceId: string;
+    generation: number;
+    token: string;
   }) {
-    const { organizationId, sourceId } = input;
+    const { organizationId, sourceId, generation, token } = input;
 
-    if (!organizationId || !sourceId) {
+    if (!organizationId || !sourceId || !Number.isInteger(generation) || !token) {
       throw new Error(
         "Invalid knowledge ingestion identity",
       );
@@ -163,6 +168,8 @@ export class JobsService {
     const data: KnowledgeIngestionJobData = {
       organizationId,
       sourceId,
+      generation,
+      token,
       createdAt: new Date().toISOString(),
     };
 
@@ -170,7 +177,7 @@ export class JobsService {
       JOB_NAMES.KNOWLEDGE_INGEST_SOURCE,
       data,
       {
-        jobId: `knowledge-${sourceId}-${randomUUID()}`,
+        jobId: `knowledge-${sourceId}-${generation}-${token}`,
         attempts: 3,
         backoff: {
           type: "exponential",
@@ -198,10 +205,12 @@ export class JobsService {
   async enqueueKnowledgeEmbedding(input: {
     organizationId: string;
     documentId: string;
+    sourceGeneration: number;
+    token: string;
   }) {
-    const { organizationId, documentId } = input;
+    const { organizationId, documentId, sourceGeneration, token } = input;
 
-    if (!organizationId || !documentId) {
+    if (!organizationId || !documentId || !Number.isInteger(sourceGeneration) || !token) {
       throw new Error(
         "Invalid knowledge embedding identity",
       );
@@ -210,6 +219,8 @@ export class JobsService {
     const data: KnowledgeEmbeddingJobData = {
       organizationId,
       documentId,
+      sourceGeneration,
+      token,
       createdAt: new Date().toISOString(),
     };
 
@@ -217,7 +228,7 @@ export class JobsService {
       JOB_NAMES.KNOWLEDGE_EMBED_DOCUMENT,
       data,
       {
-        jobId: `knowledge-embedding-${documentId}-${randomUUID()}`,
+        jobId: `knowledge-embedding-${documentId}-${sourceGeneration}-${token}`,
         attempts: 3,
         backoff: {
           type: "exponential",

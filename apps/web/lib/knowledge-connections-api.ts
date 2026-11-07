@@ -7,6 +7,9 @@ export type GoogleDriveSource = {
   status: "pending" | "indexing" | "ready" | "failed" | "removed";
   documentStatus: string | null;
   errorMessage: string | null;
+  embeddingStatus: "waiting" | "processing" | "completed" | "failed" | null;
+  embeddingErrorMessage: string | null;
+  embeddingCompletedAt: string | null;
   lastIndexedAt: string | null;
   chunkCount: number;
   embeddingCount: number;
@@ -36,7 +39,12 @@ export const knowledgeConnectionsApi = {
     ),
 
   retryGoogleSource: (sourceId: string) =>
-    apiFetch<{ success: true; sourceId: string; jobId: string }>(
+    apiFetch<{
+      success: true;
+      sourceId: string;
+      jobId?: string;
+      alreadyQueued?: boolean;
+    }>(
       `${GOOGLE_PATH}/sources/${encodeURIComponent(sourceId)}/retry`,
       { method: "POST" },
     ),

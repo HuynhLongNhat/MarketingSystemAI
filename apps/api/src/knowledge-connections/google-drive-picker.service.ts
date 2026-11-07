@@ -17,7 +17,7 @@ import {
   knowledgeExternalSources,
 } from "@workspace/db/node";
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -36,6 +36,9 @@ import {
   MAX_DOCUMENT_DOWNLOAD_BYTES,
   MAX_DOCUMENT_TEXT_LENGTH,
 } from "./knowledge-ingestion-limits.js";
+import {
+  isFreshKnowledgeJob,
+} from "./knowledge-job-ownership.js";
 
 const TOKEN_ENDPOINT =
   "https://oauth2.googleapis.com/token";
@@ -396,7 +399,7 @@ export class GoogleDrivePickerService {
       );
     }
 
-    const { token, connectionId } =
+    const { token: accessToken, connectionId } =
       await this.accessToken(
         context.organizationId,
       );
@@ -405,7 +408,7 @@ export class GoogleDrivePickerService {
 
     for (const fileId of ids) {
       const file = await this.getGoogleFile(
-        token,
+        accessToken,
         fileId,
       );
 
@@ -421,6 +424,8 @@ export class GoogleDrivePickerService {
         );
       }
 
+      const token = randomUUID();
+      const queuedAt = new Date();
       const [record] = await db
         .insert(knowledgeExternalSources)
         .values({
@@ -432,6 +437,9 @@ export class GoogleDrivePickerService {
           mimeType: file.mimeType,
           sourceVersion: file.version ?? null,
           status: "pending",
+          ingestionGeneration: 1,
+          ingestionToken: token,
+          ingestionQueuedAt: queuedAt,
         })
         .onConflictDoUpdate({
           target: [
@@ -443,6 +451,9 @@ export class GoogleDrivePickerService {
             mimeType: file.mimeType,
             sourceVersion: file.version ?? null,
             status: "pending",
+            ingestionGeneration: sql`${knowledgeExternalSources.ingestionGeneration} + 1`,
+            ingestionToken: token,
+            ingestionQueuedAt: queuedAt,
             updatedAt: new Date(),
           },
         })
@@ -451,15 +462,31 @@ export class GoogleDrivePickerService {
           name: knowledgeExternalSources.name,
           mimeType: knowledgeExternalSources.mimeType,
           status: knowledgeExternalSources.status,
+          generation: knowledgeExternalSources.ingestionGeneration,
+          token: knowledgeExternalSources.ingestionToken,
         });
 
       if (record) {
         selected.push(record);
 
-        await this.jobs.enqueueKnowledgeSource({
-          organizationId: context.organizationId,
-          sourceId: record.id,
-        });
+        try {
+          await this.jobs.enqueueKnowledgeSource({
+            organizationId: context.organizationId,
+            sourceId: record.id,
+            generation: record.generation,
+            token: record.token ?? token,
+          });
+        } catch {
+          await this.markIngestionQueueFailed(
+            context.organizationId,
+            record.id,
+            record.generation,
+            record.token ?? token,
+          );
+          throw new BadRequestException(
+            "Unable to queue Google Drive indexing",
+          );
+        }
       }
     }
 
@@ -468,6 +495,29 @@ export class GoogleDrivePickerService {
       selected,
       message: "Documents queued for indexing",
     };
+  }
+
+  private async markIngestionQueueFailed(
+    organizationId: string,
+    sourceId: string,
+    generation: number,
+    token: string,
+  ) {
+    await db
+      .update(knowledgeExternalSources)
+      .set({
+        status: "failed",
+        ingestionToken: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(knowledgeExternalSources.id, sourceId),
+          eq(knowledgeExternalSources.organizationId, organizationId),
+          eq(knowledgeExternalSources.ingestionGeneration, generation),
+          eq(knowledgeExternalSources.ingestionToken, token),
+        ),
+      );
   }
 
   async listSources(
@@ -481,6 +531,9 @@ export class GoogleDrivePickerService {
         status: knowledgeExternalSources.status,
         lastIndexedAt: knowledgeExternalSources.lastIndexedAt,
         documentStatus: knowledgeDocuments.status,
+        embeddingStatus: knowledgeDocuments.embeddingStatus,
+        embeddingErrorMessage: sql<string | null>`case when ${knowledgeDocuments.embeddingStatus} = 'failed' and ${knowledgeDocuments.embeddingErrorMessage} in ('Unable to queue embedding. Retry backfill.', 'Embedding failed. Retry backfill.', 'Configure an embedding provider and model before embedding documents', 'The configured embedding provider connection is disabled', 'The configured embedding provider credential is unavailable', 'The configured embedding model is not compatible with 1536-dimensional knowledge vectors', 'Embedding provider rejected the configured credential', 'Embedding provider has insufficient credits', 'Embedding provider rejected the configured model or request') then ${knowledgeDocuments.embeddingErrorMessage} else null end`,
+        embeddingCompletedAt: knowledgeDocuments.embeddingCompletedAt,
         // Ingestion persists only whitelisted, user-safe messages. Older or
         // unexpected values remain hidden from the browser.
         errorMessage: sql<string | null>`case when ${knowledgeDocuments.status} = 'failed' and ${knowledgeDocuments.errorMessage} in ('File vượt giới hạn tải xuống 20 MB.', 'Nội dung sau khi trích xuất vượt 300.000 ký tự.', 'Không thể trích xuất văn bản từ file.', 'Định dạng file không được hỗ trợ.', 'Google Drive không cấp quyền tải nội dung file này.', 'Không thể tạo đoạn nội dung để index.', 'Không thể đọc file từ Google Drive. Kiểm tra quyền truy cập rồi thử lại.', 'Google Drive indexing failed. Retry this source.') then ${knowledgeDocuments.errorMessage} else 'Indexing failed. Retry this source or check the source limits.' end`,
@@ -536,6 +589,9 @@ export class GoogleDrivePickerService {
         knowledgeExternalSources.status,
         knowledgeExternalSources.lastIndexedAt,
         knowledgeDocuments.status,
+        knowledgeDocuments.embeddingStatus,
+        knowledgeDocuments.embeddingErrorMessage,
+        knowledgeDocuments.embeddingCompletedAt,
         knowledgeDocuments.errorMessage,
         knowledgeExternalSources.createdAt,
       );
@@ -604,31 +660,46 @@ export class GoogleDrivePickerService {
     sourceId: string,
   ) {
     const queued = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(knowledgeExternalSources)
+        .where(and(eq(knowledgeExternalSources.id, sourceId), eq(knowledgeExternalSources.organizationId, context.organizationId)))
+        .for("update")
+        .limit(1);
+
+      if (!current) return null;
+
+      const pendingIsFresh =
+        current.status === "pending" &&
+        current.ingestionToken &&
+        current.ingestionQueuedAt &&
+        isFreshKnowledgeJob(current.ingestionQueuedAt);
+
+      if (pendingIsFresh) {
+        return {
+          id: current.id,
+          generation: current.ingestionGeneration,
+          token: current.ingestionToken,
+          alreadyQueued: true,
+        };
+      }
+
+      const token = randomUUID();
       const [source] = await tx
         .update(knowledgeExternalSources)
         .set({
           status: "pending",
+          ingestionGeneration: current.ingestionGeneration + 1,
+          ingestionToken: token,
+          ingestionQueuedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(knowledgeExternalSources.id, sourceId),
-            eq(
-              knowledgeExternalSources.organizationId,
-              context.organizationId,
-            ),
-            inArray(knowledgeExternalSources.status, [
-              "failed",
-              "indexing",
-              "ready",
-            ]),
-          ),
-        )
-        .returning({ id: knowledgeExternalSources.id });
-
-      if (!source) {
-        return false;
-      }
+        .where(eq(knowledgeExternalSources.id, current.id))
+        .returning({
+          id: knowledgeExternalSources.id,
+          generation: knowledgeExternalSources.ingestionGeneration,
+          token: knowledgeExternalSources.ingestionToken,
+        });
 
       await tx
         .update(knowledgeDocuments)
@@ -647,7 +718,7 @@ export class GoogleDrivePickerService {
           ),
         );
 
-      return true;
+      return source ? { ...source, alreadyQueued: false } : null;
     });
 
     if (!queued) {
@@ -656,11 +727,30 @@ export class GoogleDrivePickerService {
       );
     }
 
-    const job = await this.jobs.enqueueKnowledgeSource({
-      organizationId: context.organizationId,
-      sourceId,
-    });
+    if (queued.alreadyQueued) {
+      return { success: true, sourceId, alreadyQueued: true };
+    }
 
-    return { success: true, sourceId, jobId: job.jobId };
+    let job;
+    try {
+      job = await this.jobs.enqueueKnowledgeSource({
+        organizationId: context.organizationId,
+        sourceId,
+        generation: queued.generation,
+        token: queued.token ?? "",
+      });
+    } catch {
+      await this.markIngestionQueueFailed(
+        context.organizationId,
+        sourceId,
+        queued.generation,
+        queued.token ?? "",
+      );
+      throw new BadRequestException(
+        "Unable to queue Google Drive indexing",
+      );
+    }
+
+    return { success: true, sourceId, jobId: job.jobId, alreadyQueued: false };
   }
 }

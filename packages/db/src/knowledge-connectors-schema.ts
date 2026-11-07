@@ -2,6 +2,7 @@
 import {
   foreignKey,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -26,6 +27,13 @@ export const KNOWLEDGE_SOURCE_STATUSES = [
   "ready",
   "failed",
   "removed",
+] as const;
+
+export const KNOWLEDGE_EMBEDDING_STATUSES = [
+  "waiting",
+  "processing",
+  "completed",
+  "failed",
 ] as const;
 
 // OAuth connection owned by one organization.
@@ -124,6 +132,16 @@ export const knowledgeExternalSources = pgTable(
     })
       .notNull()
       .default("pending"),
+
+    ingestionGeneration: integer("ingestion_generation")
+      .notNull()
+      .default(0),
+
+    ingestionToken: text("ingestion_token"),
+
+    ingestionQueuedAt: timestamp("ingestion_queued_at", {
+      withTimezone: true,
+    }),
 
     lastIndexedAt: timestamp("last_indexed_at", {
       withTimezone: true,

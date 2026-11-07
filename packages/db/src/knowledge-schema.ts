@@ -11,6 +11,9 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { organization } from "./schema.js";
+import {
+  KNOWLEDGE_EMBEDDING_STATUSES,
+} from "./knowledge-connectors-schema.js";
 
 export const KNOWLEDGE_DOCUMENT_STATUSES = [
   "pending",
@@ -86,6 +89,32 @@ export const knowledgeDocuments = pgTable(
       .default("pending"),
 
     errorMessage: text("error_message"),
+
+    sourceGeneration: integer("source_generation")
+      .notNull()
+      .default(0),
+
+    embeddingStatus: text("embedding_status", {
+      enum: KNOWLEDGE_EMBEDDING_STATUSES,
+    })
+      .notNull()
+      .default("waiting"),
+
+    embeddingToken: text("embedding_token"),
+
+    embeddingQueuedAt: timestamp("embedding_queued_at", {
+      withTimezone: true,
+    }),
+
+    embeddingStartedAt: timestamp("embedding_started_at", {
+      withTimezone: true,
+    }),
+
+    embeddingCompletedAt: timestamp("embedding_completed_at", {
+      withTimezone: true,
+    }),
+
+    embeddingErrorMessage: text("embedding_error_message"),
 
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()

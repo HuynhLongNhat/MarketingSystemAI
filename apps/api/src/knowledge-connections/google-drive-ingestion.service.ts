@@ -1,7 +1,7 @@
 
 import { Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import {
   db,
@@ -203,10 +203,12 @@ export class GoogleDriveIngestionService {
   async process(input: {
     organizationId: string;
     sourceId: string;
+    generation: number;
+    token: string;
   }) {
-    const { organizationId, sourceId } = input;
+    const { organizationId, sourceId, generation, token } = input;
 
-    if (!organizationId || !sourceId) {
+    if (!organizationId || !sourceId || !Number.isInteger(generation) || !token) {
       throw new Error(
         "Invalid document ingestion identity",
       );
@@ -228,10 +230,9 @@ export class GoogleDriveIngestionService {
             knowledgeExternalSources.organizationId,
             organizationId,
           ),
-          inArray(
-            knowledgeExternalSources.status,
-            ["pending", "failed"],
-          ),
+          eq(knowledgeExternalSources.status, "pending"),
+          eq(knowledgeExternalSources.ingestionGeneration, generation),
+          eq(knowledgeExternalSources.ingestionToken, token),
         ),
       )
       .returning();
@@ -390,6 +391,9 @@ export class GoogleDriveIngestionService {
           .select({
             id: knowledgeExternalSources.id,
             status: knowledgeExternalSources.status,
+            ingestionGeneration:
+              knowledgeExternalSources.ingestionGeneration,
+            ingestionToken: knowledgeExternalSources.ingestionToken,
           })
           .from(knowledgeExternalSources)
           .where(
@@ -409,7 +413,9 @@ export class GoogleDriveIngestionService {
 
         if (
           !currentSource ||
-          currentSource.status !== "indexing"
+          currentSource.status !== "indexing" ||
+          currentSource.ingestionGeneration !== generation ||
+          currentSource.ingestionToken !== token
         ) {
           throw new Error(
             "Knowledge source is no longer indexing",
@@ -426,6 +432,13 @@ export class GoogleDriveIngestionService {
             sourceName: fileName,
             mimeType,
             status: "ready",
+            sourceGeneration: generation,
+            embeddingStatus: "waiting",
+            embeddingToken: null,
+            embeddingQueuedAt: null,
+            embeddingStartedAt: null,
+            embeddingCompletedAt: null,
+            embeddingErrorMessage: null,
             errorMessage: null,
             metadata: {
               connectionId: source.connectionId,
@@ -442,6 +455,13 @@ export class GoogleDriveIngestionService {
               sourceName: fileName,
               mimeType,
               status: "ready",
+              sourceGeneration: generation,
+              embeddingStatus: "waiting",
+              embeddingToken: null,
+              embeddingQueuedAt: null,
+              embeddingStartedAt: null,
+              embeddingCompletedAt: null,
+              embeddingErrorMessage: null,
               errorMessage: null,
               metadata: {
                 connectionId:
@@ -505,6 +525,7 @@ export class GoogleDriveIngestionService {
             sourceVersion:
               metadata.version ?? null,
             status: "ready",
+            ingestionToken: null,
             lastIndexedAt: now,
             updatedAt: now,
           })
@@ -559,6 +580,8 @@ export class GoogleDriveIngestionService {
               knowledgeExternalSources.status,
               "indexing",
             ),
+            eq(knowledgeExternalSources.ingestionGeneration, generation),
+            eq(knowledgeExternalSources.ingestionToken, token),
           ),
         )
         .returning({ id: knowledgeExternalSources.id });
@@ -576,6 +599,7 @@ export class GoogleDriveIngestionService {
             sourceName: source.name,
             mimeType: source.mimeType,
             status: "failed",
+            sourceGeneration: generation,
             // Keep UI/API errors safe; detailed diagnostics stay in logs.
             errorMessage: this.safeFailureMessage(error),
             metadata: {

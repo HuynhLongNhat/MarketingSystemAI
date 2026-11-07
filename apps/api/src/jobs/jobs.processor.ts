@@ -219,16 +219,24 @@ export class JobsProcessor extends WorkerHost {
       typeof data.organizationId !== "string" ||
       !data.organizationId ||
       typeof data.sourceId !== "string" ||
-      !data.sourceId
+      !data.sourceId ||
+      !Number.isInteger(data.generation) ||
+      typeof data.token !== "string" ||
+      !data.token
     ) {
       throw new UnrecoverableError(
         "Invalid knowledge ingestion job data",
       );
     }
 
+    const generation = data.generation as number;
+    const token = data.token as string;
+
     const result = await this.ingestion.process({
       organizationId: data.organizationId,
       sourceId: data.sourceId,
+      generation,
+      token,
     });
 
     if (
@@ -237,10 +245,29 @@ export class JobsProcessor extends WorkerHost {
       "documentId" in result &&
       typeof result.documentId === "string"
     ) {
-      await this.jobs.enqueueKnowledgeEmbedding({
+      const prepared = await this.embeddings.prepareJob({
         organizationId: data.organizationId,
         documentId: result.documentId,
       });
+
+      if (prepared && !prepared.alreadyQueued) {
+        try {
+          await this.jobs.enqueueKnowledgeEmbedding({
+            organizationId: data.organizationId,
+            documentId: result.documentId,
+            sourceGeneration: prepared.sourceGeneration,
+            token: prepared.token,
+          });
+        } catch {
+          await this.embeddings.markQueueFailed({
+            organizationId: data.organizationId,
+            documentId: result.documentId,
+            sourceGeneration: prepared.sourceGeneration,
+            token: prepared.token,
+          });
+          throw new UnrecoverableError("Unable to queue embedding");
+        }
+      }
     }
 
     this.logger.log(
@@ -269,20 +296,43 @@ export class JobsProcessor extends WorkerHost {
       typeof data.organizationId !== "string" ||
       !data.organizationId ||
       typeof data.documentId !== "string" ||
-      !data.documentId
+      !data.documentId ||
+      !Number.isInteger(data.sourceGeneration) ||
+      typeof data.token !== "string" ||
+      !data.token
     ) {
       throw new UnrecoverableError(
         "Invalid knowledge embedding job data",
       );
     }
 
+    const sourceGeneration = data.sourceGeneration as number;
+    const token = data.token as string;
+
     try {
       return await this.embeddings.process({
         organizationId: data.organizationId,
         documentId: data.documentId,
+        sourceGeneration,
+        token,
       });
     } catch (error) {
+      const attempts = job.opts.attempts ?? 1;
+      const finalAttempt = job.attemptsMade + 1 >= attempts;
+      const safeMessage =
+        error instanceof EmbeddingConfigurationError ||
+        error instanceof EmbeddingProviderError
+          ? error.message
+          : "Embedding failed. Retry backfill.";
+
       if (error instanceof EmbeddingConfigurationError) {
+        await this.embeddings.markFailed({
+          organizationId: data.organizationId,
+          documentId: data.documentId,
+          sourceGeneration,
+          token,
+          message: safeMessage,
+        });
         throw new UnrecoverableError(error.message);
       }
 
@@ -290,7 +340,24 @@ export class JobsProcessor extends WorkerHost {
         error instanceof EmbeddingProviderError &&
         !error.retryable
       ) {
+        await this.embeddings.markFailed({
+          organizationId: data.organizationId,
+          documentId: data.documentId,
+          sourceGeneration,
+          token,
+          message: safeMessage,
+        });
         throw new UnrecoverableError(error.message);
+      }
+
+      if (finalAttempt) {
+        await this.embeddings.markFailed({
+          organizationId: data.organizationId,
+          documentId: data.documentId,
+          sourceGeneration,
+          token,
+          message: safeMessage,
+        });
       }
 
       throw error;

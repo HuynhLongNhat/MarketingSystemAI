@@ -88,7 +88,10 @@ function sourceSummary(sources: GoogleDriveSource[]) {
     ).length,
     pending: sources.filter(isKnowledgeSourceProcessing).length,
     embedding: sources.filter(
-      (source) => getKnowledgeSourceStage(source) === "embedding",
+      (source) => {
+        const stage = getKnowledgeSourceStage(source);
+        return stage === "embedding-waiting" || stage === "embedding-processing";
+      },
     ).length,
     failed: sources.filter(
       (source) =>
@@ -151,8 +154,8 @@ export function GoogleDrivePicker() {
       sources.some(isKnowledgeSourceProcessing) ||
       sources.some(
         (source) =>
-          source.status === "ready" &&
-          source.chunkCount > source.embeddingCount,
+          source.embeddingStatus === "waiting" ||
+          source.embeddingStatus === "processing",
       )
     );
   }, [pollUntil, sources]);

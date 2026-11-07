@@ -82,7 +82,7 @@ export function GoogleDriveSourceList({
               <div className="flex shrink-0 items-center gap-2">
                 <KnowledgeSourceStatus source={source} />
 
-                {(stage === "failed" || stage === "indexing" || stage === "ready") && (
+                {(stage === "failed" || stage === "pending" || stage === "indexing" || stage === "ready") && (
                   <Button
                     type="button"
                     size="sm"
@@ -116,15 +116,17 @@ export function GoogleDriveSourceList({
               </div>
             </div>
 
-            {stage === "embedding" && (
+            {(stage === "embedding-waiting" || stage === "embedding-processing") && (
               <p className="mt-3 text-xs text-muted-foreground">
-                Đã trích xuất nội dung; đang chờ embedding để có thể tìm kiếm ngữ nghĩa.
+                {stage === "embedding-processing"
+                  ? "Đang tạo embedding; tài liệu chưa sẵn sàng cho tìm kiếm ngữ nghĩa."
+                  : "Đã trích xuất nội dung; đang chờ job embedding để có thể tìm kiếm ngữ nghĩa."}
               </p>
             )}
 
-            {stage === "failed" && source.errorMessage && (
+            {stage === "failed" && (source.errorMessage || source.embeddingErrorMessage) && (
               <p role="alert" className="mt-3 text-xs text-destructive">
-                {source.errorMessage}
+                {source.errorMessage ?? source.embeddingErrorMessage}
               </p>
             )}
           </article>
