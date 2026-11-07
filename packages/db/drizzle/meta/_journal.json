@@ -155,6 +155,13 @@
       "when": 1794046461060,
       "tag": "0022_lyrical_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794066374501,
+      "tag": "0023_volatile_sleeper",
+      "breakpoints": true
     }
   ]
 }

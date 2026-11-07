@@ -64,6 +64,17 @@ export type {
   KnowledgeChunk,
   NewKnowledgeChunk,
 } from "./knowledge-schema.js";
+
+export {
+  knowledgeEmbeddings,
+  KNOWLEDGE_EMBEDDING_DIMENSIONS,
+} from "./knowledge-vector-schema.js";
+
+export type {
+  KnowledgeEmbedding,
+  NewKnowledgeEmbedding,
+} from "./knowledge-vector-schema.js";
+
 export {
   verifyDatabaseEnvironment,
 } from "./environment-guard.js";
@@ -134,6 +145,7 @@ export type {
   OfficeDeskAssignment,
   NewOfficeDeskAssignment,
 } from "./office-schema.js";
+
 export {
   notifications,
   NOTIFICATION_TYPES,
@@ -144,7 +156,6 @@ export type {
   Notification,
   NewNotification,
 } from "./notifications-schema.js";
-
 
 export {
   knowledgeConnections,
