@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table";
+import { GoogleDrivePicker } from "@/components/knowledge/google-drive-picker";
 
 const EMPTY_FORM: KnowledgeInput = {
   question: "",
@@ -232,6 +233,8 @@ export const FilesView = () => {
         </div>
 
         {loadError && (
+         <>
+        <GoogleDrivePicker />
           <div
             role="alert"
             className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-4"
@@ -249,6 +252,7 @@ export const FilesView = () => {
               Thử lại
             </Button>
           </div>
+        </> 
         )}
 
         <div className="overflow-hidden rounded-lg border bg-background">
