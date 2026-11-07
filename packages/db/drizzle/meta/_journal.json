@@ -148,6 +148,13 @@
       "when": 1793893160186,
       "tag": "0021_milky_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794046461060,
+      "tag": "0022_lyrical_dazzler",
+      "breakpoints": true
     }
   ]
 }

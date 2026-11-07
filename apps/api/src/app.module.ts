@@ -15,6 +15,7 @@ import { AgentsModule } from "./agents/agents.module.js";
 import { AgentTemplatesModule } from "./agent-templates/agent-templates.module.js";
 import { OfficeModule } from "./office/office.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
+import { KnowledgeConnectionsModule } from "./knowledge-connections/knowledge-connections.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -37,7 +38,8 @@ import { NotificationsModule } from "./notifications/notifications.module.js";
     AgentsModule,
     AgentTemplatesModule,
     OfficeModule,
-    NotificationsModule
+    NotificationsModule,
+    KnowledgeConnectionsModule
   ],
   controllers: [HealthController],
 })

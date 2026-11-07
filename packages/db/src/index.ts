@@ -145,3 +145,18 @@ export type {
   NewNotification,
 } from "./notifications-schema.js";
 
+
+export {
+  knowledgeConnections,
+  knowledgeExternalSources,
+  KNOWLEDGE_CONNECTOR_TYPES,
+  KNOWLEDGE_CONNECTION_STATUSES,
+  KNOWLEDGE_SOURCE_STATUSES,
+} from "./knowledge-connectors-schema.js";
+
+export type {
+  KnowledgeConnection,
+  NewKnowledgeConnection,
+  KnowledgeExternalSource,
+  NewKnowledgeExternalSource,
+} from "./knowledge-connectors-schema.js";
