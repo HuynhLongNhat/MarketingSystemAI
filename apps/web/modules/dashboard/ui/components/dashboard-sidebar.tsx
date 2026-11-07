@@ -15,7 +15,6 @@ import {
   Palette,
   Settings2,
   Users,
-  Workflow,
   Languages,
 } from "lucide-react";
 
@@ -55,7 +54,7 @@ export const DashboardSidebar = () => {
 
   const groups = [
     {
-      label: t.company,
+      label: "Workspace",
       items: [
         {
           title: t.overview,
@@ -63,78 +62,67 @@ export const DashboardSidebar = () => {
           icon: LayoutDashboard,
         },
         {
-          title: t.office,
+          title: "AI Office",
           url: "/office",
           icon: Building2,
         },
         {
-          title: t.agents,
+          title: "AI Employees",
           url: "/workforce?tab=agents",
           icon: Bot,
         },
         {
-          title: t.departments,
+          title: "Departments",
           url: "/workforce?tab=departments",
           icon: Network,
         },
       ],
     },
     {
-      label: t.operations,
+      label: "Customer Support",
       items: [
         {
-          title: t.tasks,
-          url: "/#operations",
-          icon: Workflow,
-          soon: true,
-        },
-      ],
-    },
-    {
-      label: t.support,
-      items: [
-        {
-          title: t.conversations,
+          title: "Inbox",
           url: "/conversations",
           icon: Inbox,
         },
         {
-          title: "Thử nghiệm Chatbot",
+          title: "Chatbot Playground",
           url: "/playground",
           icon: FlaskConical,
         },
         {
-          title: t.knowledge,
+          title: "Knowledge Base",
           url: "/files",
           icon: LibraryBig,
         },
         {
-          title: t.customization,
+          title: "Widget Customization",
           url: "/customization",
           icon: Palette,
         },
         {
-          title: t.integrations,
+          title: "Channels & Integrations",
           url: "/integrations",
           icon: Headset,
         },
       ],
     },
     {
-      label: t.system,
+      label: "Administration",
       items: [
         {
-          title: t.providers,
+          title: "AI Providers & Models",
           url: "/settings/ai-providers",
           icon: Settings2,
         },
         {
-          title: t.members,
+          title: "Team & Permissions",
           url: "/settings/members",
           icon: Users,
         },
         {
-          title: t.billing,
+          title: "Billing",
           url: "/billing",
           icon: CreditCard,
         },
@@ -142,9 +130,7 @@ export const DashboardSidebar = () => {
     },
   ];
 
-  const isActive = (url: string, soon?: boolean) => {
-    if (soon) return false;
-
+  const isActive = (url: string) => {
     const [path, query] = url.split("?");
 
     if (path === "/") return pathname === "/";
@@ -188,10 +174,7 @@ export const DashboardSidebar = () => {
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
-                  const active = isActive(
-                    item.url,
-                    "soon" in item && item.soon,
-                  );
+                  const active = isActive(item.url);
 
                   return (
                     <SidebarMenuItem key={item.url}>
@@ -211,11 +194,6 @@ export const DashboardSidebar = () => {
                             {item.title}
                           </span>
 
-                          {"soon" in item && item.soon && (
-                            <span className="ml-auto text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-                              {t.soon}
-                            </span>
-                          )}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

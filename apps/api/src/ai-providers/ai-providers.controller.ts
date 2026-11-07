@@ -97,6 +97,22 @@ export class AiProvidersController {
     return this.modelCatalog.listModels(provider);
   }
 
+  @Get("catalog/embedding-models")
+  @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
+  @ApiOperation({
+    summary: "List embedding models compatible with knowledge vectors",
+  })
+  @ApiQuery({
+    name: "provider",
+    required: true,
+    type: String,
+  })
+  listEmbeddingModels(
+    @Query("provider") provider: string,
+  ) {
+    return this.modelCatalog.listEmbeddingModels(provider);
+  }
+
   @Get("model-defaults")
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
   @ApiOperation({

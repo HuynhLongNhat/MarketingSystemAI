@@ -10,11 +10,14 @@ import {
 
 import {
   db,
+  knowledgeChunks,
   knowledgeConnections,
+  knowledgeDocuments,
+  knowledgeEmbeddings,
   knowledgeExternalSources,
 } from "@workspace/db/node";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -472,8 +475,41 @@ export class GoogleDrivePickerService {
         mimeType: knowledgeExternalSources.mimeType,
         status: knowledgeExternalSources.status,
         lastIndexedAt: knowledgeExternalSources.lastIndexedAt,
+        chunkCount: sql<number>`count(distinct ${knowledgeChunks.id})`.mapWith(Number),
+        embeddingCount: sql<number>`count(${knowledgeEmbeddings.id})`.mapWith(Number),
+        embeddingProvider: sql<string | null>`max(${knowledgeEmbeddings.provider})`,
       })
       .from(knowledgeExternalSources)
+      .leftJoin(
+        knowledgeDocuments,
+        and(
+          eq(knowledgeDocuments.id, knowledgeExternalSources.id),
+          eq(
+            knowledgeDocuments.organizationId,
+            knowledgeExternalSources.organizationId,
+          ),
+        ),
+      )
+      .leftJoin(
+        knowledgeChunks,
+        and(
+          eq(knowledgeChunks.documentId, knowledgeDocuments.id),
+          eq(
+            knowledgeChunks.organizationId,
+            knowledgeDocuments.organizationId,
+          ),
+        ),
+      )
+      .leftJoin(
+        knowledgeEmbeddings,
+        and(
+          eq(knowledgeEmbeddings.chunkId, knowledgeChunks.id),
+          eq(
+            knowledgeEmbeddings.organizationId,
+            knowledgeChunks.organizationId,
+          ),
+        ),
+      )
       .where(
         eq(
           knowledgeExternalSources.organizationId,
@@ -482,6 +518,14 @@ export class GoogleDrivePickerService {
       )
       .orderBy(
         desc(knowledgeExternalSources.createdAt),
+      )
+      .groupBy(
+        knowledgeExternalSources.id,
+        knowledgeExternalSources.name,
+        knowledgeExternalSources.mimeType,
+        knowledgeExternalSources.status,
+        knowledgeExternalSources.lastIndexedAt,
+        knowledgeExternalSources.createdAt,
       );
   }
 }

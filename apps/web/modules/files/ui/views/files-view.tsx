@@ -212,17 +212,16 @@ export const FilesView = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted p-4 md:p-8">
+    <div className="flex min-h-full flex-col bg-background p-4 md:p-8">
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold md:text-3xl">
-              Knowledge Base
+              Knowledge Center
             </h1>
 
             <p className="text-sm text-muted-foreground">
-              Quản lý câu hỏi và câu trả lời để đào tạo AI
-              chăm sóc khách hàng.
+              FAQ và nguồn tài liệu dành cho Customer Support.
             </p>
           </div>
 
@@ -230,7 +229,6 @@ export const FilesView = () => {
             <PlusIcon className="mr-2 size-4" />
             Thêm kiến thức
           </Button>
-          <GoogleDrivePicker />
         </div>
 
         {loadError && (
@@ -254,6 +252,24 @@ export const FilesView = () => {
           </div>
         </> 
         )}
+
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Documents & Sources</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Theo dõi nguồn Google Drive, tiến trình indexing và embedding. Semantic retrieval chưa được hiển thị vì chưa có API truy xuất vector.
+            </p>
+          </div>
+          <GoogleDrivePicker />
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">FAQ</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Câu hỏi và câu trả lời hiện đang được Customer Support sử dụng.
+            </p>
+          </div>
 
         <div className="overflow-hidden rounded-lg border bg-background">
           <Table>
@@ -361,6 +377,7 @@ export const FilesView = () => {
             </div>
           )}
         </div>
+        </section>
       </div>
 
       {/* CREATE / UPDATE DIALOG */}

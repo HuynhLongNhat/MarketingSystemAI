@@ -132,19 +132,53 @@ export const PROVIDER_REGISTRY: Record<
  * knowledge_embeddings column. Add a model here only together with its
  * verified dimension and a compatible storage migration when needed.
  */
-const EMBEDDING_MODEL_DIMENSIONS: Partial<
-  Record<AiProviderType, Record<string, number>>
-> = {
-  openai: {
-    "text-embedding-3-small": 1536,
-  },
+export type EmbeddingProviderType = "openai" | "openrouter";
+
+export type EmbeddingModelDefinition = {
+  provider: EmbeddingProviderType;
+  modelId: string;
+  dimensions: number;
+  endpoint: string;
 };
+
+const EMBEDDING_MODELS: readonly EmbeddingModelDefinition[] = [
+  {
+    provider: "openai",
+    modelId: "text-embedding-3-small",
+    dimensions: 1536,
+    endpoint: "https://api.openai.com/v1/embeddings",
+  },
+  {
+    provider: "openrouter",
+    modelId: "openai/text-embedding-3-small",
+    dimensions: 1536,
+    endpoint: "https://openrouter.ai/api/v1/embeddings",
+  },
+];
+
+export function getEmbeddingModelDefinition(
+  provider: AiProviderType,
+  modelId: string,
+): EmbeddingModelDefinition | undefined {
+  return EMBEDDING_MODELS.find(
+    (model) =>
+      model.provider === provider && model.modelId === modelId,
+  );
+}
+
+export function listEmbeddingModelDefinitions(
+  provider?: AiProviderType,
+): readonly EmbeddingModelDefinition[] {
+  return provider
+    ? EMBEDDING_MODELS.filter((model) => model.provider === provider)
+    : EMBEDDING_MODELS;
+}
 
 export function getEmbeddingModelDimensions(
   provider: AiProviderType,
   modelId: string,
 ): number | undefined {
-  return EMBEDDING_MODEL_DIMENSIONS[provider]?.[modelId];
+  return getEmbeddingModelDefinition(provider, modelId)?.dimensions;
 }
 
 export function listProviderDefinitions() {

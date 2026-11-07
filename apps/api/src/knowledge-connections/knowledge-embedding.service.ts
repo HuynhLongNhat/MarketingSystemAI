@@ -16,12 +16,12 @@ import {
 import {
   decryptCredential,
 } from "../ai-credentials/credential-crypto.js";
-import { getEmbeddingModelDimensions } from "../ai-providers/provider-registry.js";
+import {
+  getEmbeddingModelDefinition,
+  type EmbeddingModelDefinition,
+} from "../ai-providers/provider-registry.js";
 
 const EMBEDDING_PURPOSE = "embedding";
-const EMBEDDING_URL =
-  "https://api.openai.com/v1/embeddings";
-
 const BATCH_SIZE = 20;
 
 type EmbeddingResponse = {
@@ -40,11 +40,22 @@ export class EmbeddingConfigurationError extends Error {
 
 type EmbeddingConfiguration = {
   connectionId: string;
-  provider: "openai";
-  modelId: "text-embedding-3-small";
+  provider: EmbeddingModelDefinition["provider"];
+  modelId: string;
   dimensions: number;
+  endpoint: string;
   apiKey: string;
 };
+
+export class EmbeddingProviderError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = "EmbeddingProviderError";
+  }
+}
 
 @Injectable()
 export class KnowledgeEmbeddingService {
@@ -103,15 +114,14 @@ export class KnowledgeEmbeddingService {
       );
     }
 
-    const dimensions = getEmbeddingModelDimensions(
+    const model = getEmbeddingModelDefinition(
       selection.provider,
       selection.modelId,
     );
 
     if (
-      selection.provider !== "openai" ||
-      selection.modelId !== "text-embedding-3-small" ||
-      dimensions !== KNOWLEDGE_EMBEDDING_DIMENSIONS
+      !model ||
+      model.dimensions !== KNOWLEDGE_EMBEDDING_DIMENSIONS
     ) {
       throw new EmbeddingConfigurationError(
         "The configured embedding model is not compatible with 1536-dimensional knowledge vectors",
@@ -142,9 +152,10 @@ export class KnowledgeEmbeddingService {
 
     return {
       connectionId: selection.connectionId,
-      provider: selection.provider,
-      modelId: selection.modelId,
-      dimensions,
+      provider: model.provider,
+      modelId: model.modelId,
+      dimensions: model.dimensions,
+      endpoint: model.endpoint,
       apiKey,
     };
   }
@@ -157,26 +168,51 @@ export class KnowledgeEmbeddingService {
     contents: string[],
     configuration: EmbeddingConfiguration,
   ): Promise<number[][]> {
-    const response = await fetch(EMBEDDING_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${configuration.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: configuration.modelId,
-        input: contents,
-        dimensions: configuration.dimensions,
-      }),
-      signal: AbortSignal.timeout(45_000),
-      redirect: "error",
-    });
+    let response: Response;
+
+    try {
+      response = await fetch(configuration.endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${configuration.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: configuration.modelId,
+          input: contents,
+          dimensions: configuration.dimensions,
+        }),
+        signal: AbortSignal.timeout(45_000),
+        redirect: "error",
+      });
+    } catch {
+      throw new EmbeddingProviderError(
+        "Embedding provider is temporarily unavailable",
+        true,
+      );
+    }
 
     if (!response.ok) {
-      // Never log the API key, provider response body
-      // or customer document text.
-      throw new Error(
-        `OpenAI embedding request failed: HTTP ${response.status}`,
+      const retryable =
+        response.status === 408 ||
+        response.status === 429 ||
+        response.status >= 500;
+
+      const message =
+        response.status === 401 || response.status === 403
+          ? "Embedding provider rejected the configured credential"
+          : response.status === 402
+            ? "Embedding provider has insufficient credits"
+            : response.status === 400 ||
+                response.status === 404 ||
+                response.status === 413
+              ? "Embedding provider rejected the configured model or request"
+              : "Embedding provider request failed";
+
+      // Never log the API key, provider response body or customer document text.
+      throw new EmbeddingProviderError(
+        message,
+        retryable,
       );
     }
 

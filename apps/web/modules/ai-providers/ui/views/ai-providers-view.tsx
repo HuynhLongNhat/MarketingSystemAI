@@ -78,6 +78,7 @@ const PURPOSE_LABELS: Record<AiModelPurpose, string> = {
   customer_support: "Chăm sóc khách hàng",
   message_enhancement: "Cải thiện tin nhắn",
   general: "Tác vụ chung",
+  embedding: "Embedding Knowledge Base",
 };
 
 const PURPOSE_DESCRIPTIONS: Record<AiModelPurpose, string> = {
@@ -87,11 +88,19 @@ const PURPOSE_DESCRIPTIONS: Record<AiModelPurpose, string> = {
     "Model dành cho chức năng hỗ trợ cải thiện nội dung tin nhắn.",
   general:
     "Model dự phòng cho các chức năng AI dùng chung trong tương lai.",
+  embedding:
+    "Tạo vector cho tài liệu Knowledge Base. Chỉ hiển thị model tương thích pgvector 1536 dimensions.",
 };
 
 const PRIMARY_CLASS =
   "bg-zinc-950 text-white hover:bg-zinc-800 " +
   "dark:bg-white dark:text-black dark:hover:bg-zinc-200";
+
+const CHAT_MODEL_PURPOSES: readonly AiModelPurpose[] = [
+  "customer_support",
+  "message_enhancement",
+  "general",
+];
 
 function emptyDrafts(): Record<AiModelPurpose, ModelDraft> {
   return {
@@ -104,6 +113,10 @@ function emptyDrafts(): Record<AiModelPurpose, ModelDraft> {
       modelId: "",
     },
     general: {
+      connectionId: "",
+      modelId: "",
+    },
+    embedding: {
       connectionId: "",
       modelId: "",
     },
@@ -144,6 +157,14 @@ function ModelDefaultCard({
 }: ModelDefaultCardProps) {
   const selectedConnection = connections.find(
     (connection) => connection.id === draft.connectionId,
+  );
+
+  const availableConnections = connections.filter(
+    (connection) =>
+      (purpose !== "embedding" ||
+        connection.provider === "openai" ||
+        connection.provider === "openrouter") &&
+      (connection.enabled || connection.id === draft.connectionId),
   );
 
   const savedMatchesDraft =
@@ -205,13 +226,7 @@ function ModelDefaultCard({
                   Chưa chọn kết nối
                 </SelectItem>
 
-                {connections
-                  .filter(
-                    (connection) =>
-                      connection.enabled ||
-                      connection.id === draft.connectionId,
-                  )
-                  .map((connection) => (
+                {availableConnections.map((connection) => (
                     <SelectItem
                       key={connection.id}
                       value={connection.id}
@@ -231,6 +246,12 @@ function ModelDefaultCard({
                 hoặc chọn kết nối khác.
               </p>
             )}
+
+            {purpose === "embedding" && availableConnections.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Thêm hoặc bật kết nối OpenRouter/OpenAI để cấu hình embedding.
+              </p>
+            )}
           </div>
 
           <div className="min-w-0 space-y-2">
@@ -247,6 +268,7 @@ function ModelDefaultCard({
                 onChange(purpose, { modelId })
               }
               disabled={disabled || busy}
+              embeddingOnly={purpose === "embedding"}
             />
           </div>
         </div>
@@ -260,6 +282,12 @@ function ModelDefaultCard({
               {saved.modelId}
             </span>
           </div>
+        )}
+
+        {purpose === "embedding" && (
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
+            Vector Knowledge Base dùng không gian 1536 dimensions. Cấu hình này độc lập với model chatbot và không gửi API key về trình duyệt.
+          </p>
         )}
 
         <div className="flex flex-wrap gap-2">
@@ -914,7 +942,7 @@ export function AiProvidersView() {
       <section className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold">
-            Mô hình AI mặc định
+            Chat Models
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Mỗi chức năng có thể dùng kết nối và
@@ -924,7 +952,7 @@ export function AiProvidersView() {
         </div>
 
         <div className="grid gap-4">
-          {AI_MODEL_PURPOSES.map((purpose) => (
+          {CHAT_MODEL_PURPOSES.map((purpose) => (
             <ModelDefaultCard
               key={`${organizationId ?? "none"}-${purpose}`}
               purpose={purpose}
@@ -943,6 +971,28 @@ export function AiProvidersView() {
             />
           ))}
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Embedding Models</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Chọn connection và model riêng để lập chỉ mục Knowledge Base. Không dùng chung với chatbot.
+          </p>
+        </div>
+
+        <ModelDefaultCard
+          key={`${organizationId ?? "none"}-embedding`}
+          purpose="embedding"
+          draft={drafts.embedding}
+          saved={savedDefaults.get("embedding")}
+          connections={connections}
+          busy={busyId === "embedding"}
+          disabled={!organizationId || loading || busy}
+          onChange={updateDraft}
+          onSave={saveDefault}
+          onRemove={removeDefault}
+        />
       </section>
 
       <Dialog

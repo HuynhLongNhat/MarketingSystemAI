@@ -14,6 +14,16 @@ describe("embedding provider registry", () => {
     );
   });
 
+  it("accepts the OpenRouter embedding route at the same vector dimension", () => {
+    assert.equal(
+      getEmbeddingModelDimensions(
+        "openrouter",
+        "openai/text-embedding-3-small",
+      ),
+      1536,
+    );
+  });
+
   it("does not treat a chat model or another provider as compatible by default", () => {
     assert.equal(
       getEmbeddingModelDimensions("openai", "gpt-4o-mini"),

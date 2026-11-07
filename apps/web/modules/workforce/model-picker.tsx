@@ -30,6 +30,7 @@ interface Props {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  embeddingOnly?: boolean;
 }
 
 export function ModelPicker({
@@ -37,6 +38,7 @@ export function ModelPicker({
   value,
   onChange,
   disabled,
+  embeddingOnly = false,
 }: Props) {
   const { t } = useUiLanguage();
 
@@ -60,8 +62,11 @@ export function ModelPicker({
     setError(false);
     setModels([]);
 
-    void aiProvidersApi
-      .listCatalogModels(provider)
+    const loadModels = embeddingOnly
+      ? aiProvidersApi.listEmbeddingModels(provider)
+      : aiProvidersApi.listCatalogModels(provider);
+
+    void loadModels
       .then((items) => {
         if (alive) setModels(items);
       })
@@ -75,7 +80,7 @@ export function ModelPicker({
     return () => {
       alive = false;
     };
-  }, [provider, revision]);
+  }, [embeddingOnly, provider, revision]);
 
   const selected = useMemo(
     () => models.find((item) => item.id === value),
@@ -166,6 +171,9 @@ export function ModelPicker({
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
                       {model.id}
+                      {model.dimensions
+                        ? ` · ${model.dimensions} dimensions`
+                        : ""}
                     </span>
                   </span>
                 </CommandItem>
@@ -178,6 +186,7 @@ export function ModelPicker({
       {provider && !loading && !error && (
         <p className="text-xs text-muted-foreground">
           {models.length} {t.modelCount}
+          {embeddingOnly ? " embedding tương thích" : ""}
         </p>
       )}
 

@@ -125,12 +125,12 @@ export const ConversationsView = () => {
           <div className="flex items-center gap-2">
             <Inbox className="size-5" />
             <h1 className="text-lg font-semibold">
-              Human Handoff
+              Customer Support Inbox
             </h1>
           </div>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Quản lý các hội thoại cần nhân viên hỗ trợ.
+            Hàng đợi hội thoại cần nhân viên tiếp quản. Kênh hiện tại là widget website.
           </p>
         </div>
 

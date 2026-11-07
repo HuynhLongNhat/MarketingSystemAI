@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 
 import { ApiTags } from "@nestjs/swagger";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import {
   db,
@@ -47,6 +47,8 @@ import {
   KnowledgeEmbeddingService,
 } from "./knowledge-embedding.service.js";
 
+const MAX_BACKFILL_DOCUMENTS = 100;
+
 @ApiTags("Knowledge Embeddings")
 @Controller("knowledge-connections/embeddings")
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -84,7 +86,9 @@ export class KnowledgeEmbeddingController {
           ),
           eq(knowledgeDocuments.status, "ready"),
         ),
-      );
+      )
+      .orderBy(asc(knowledgeDocuments.createdAt))
+      .limit(MAX_BACKFILL_DOCUMENTS);
 
     const queued = [];
 
@@ -105,7 +109,11 @@ export class KnowledgeEmbeddingController {
       success: true,
       queuedCount: queued.length,
       queued,
-      message: "Embedding jobs queued",
+      limit: MAX_BACKFILL_DOCUMENTS,
+      message:
+        documents.length === MAX_BACKFILL_DOCUMENTS
+          ? "Embedding jobs queued. Run backfill again for remaining documents."
+          : "Embedding jobs queued",
     };
   }
 }

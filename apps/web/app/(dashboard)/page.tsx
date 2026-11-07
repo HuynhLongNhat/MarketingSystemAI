@@ -1,245 +1,67 @@
-
 import Link from "next/link";
-
 import {
-  ArrowRightIcon,
-  BotIcon,
-  Building2Icon,
-  CheckCircle2Icon,
-  CircleDashedIcon,
-  HeadsetIcon,
-  InboxIcon,
-  LibraryBigIcon,
-  NetworkIcon,
-  Settings2Icon,
-  WorkflowIcon,
+  ArrowRight,
+  Bot,
+  Inbox,
+  LibraryBig,
+  Settings2,
 } from "lucide-react";
 
-type ModuleStatus = "available" | "planned";
-
-type CompanyModule = {
-  title: string;
-  description: string;
-  href: string;
-  status: ModuleStatus;
-  icon: typeof BotIcon;
-};
-
-const companyModules: CompanyModule[] = [
+const actions = [
   {
-    title: "Tasks & Workflows",
-    description:
-      "Giao nhiệm vụ, điều phối quy trình và theo dõi execution.",
-    href: "#operations",
-    status: "planned",
-    icon: WorkflowIcon,
-  },
-];
-
-const availableModules: CompanyModule[] = [
-  {
-    title: "AI Office",
-    description:
-      "Khám phá văn phòng 3D, xem vị trí và thông tin các nhân viên AI đã được kích hoạt.",
-    href: "/office",
-    status: "available",
-    icon: Building2Icon,
-  },
-  {
-    title: "AI Workforce",
-    description:
-      "Quản lý nhân viên AI, vai trò, trạng thái và template.",
-    href: "/workforce",
-    status: "available",
-    icon: BotIcon,
-  },
-  {
-    title: "Departments",
-    description:
-      "Tổ chức đội ngũ theo các phòng ban Marketing, Sales và Support.",
-    href: "/workforce",
-    status: "available",
-    icon: NetworkIcon,
-  },
-  {
-    title: "Customer Conversations",
-    description:
-      "Quản lý hội thoại và hoạt động chăm sóc khách hàng.",
+    title: "Inbox hỗ trợ",
+    description: "Xử lý các hội thoại đang cần nhân viên tiếp quản.",
     href: "/conversations",
-    status: "available",
-    icon: InboxIcon,
+    icon: Inbox,
   },
   {
     title: "Knowledge Base",
-    description:
-      "Quản lý nguồn kiến thức phục vụ chatbot.",
+    description: "Quản lý FAQ, nguồn tài liệu và trạng thái lập chỉ mục.",
     href: "/files",
-    status: "available",
-    icon: LibraryBigIcon,
+    icon: LibraryBig,
   },
   {
     title: "AI Providers & Models",
-    description:
-      "Cấu hình kết nối AI, API keys và model mặc định.",
+    description: "Thiết lập model chat và embedding riêng cho workspace.",
     href: "/settings/ai-providers",
-    status: "available",
-    icon: Settings2Icon,
+    icon: Settings2,
   },
 ];
 
-function ModuleCard({
-  module,
-}: {
-  module: CompanyModule;
-}) {
-  const Icon = module.icon;
-  const available = module.status === "available";
-
-  return (
-    <Link
-      href={module.href}
-      className="group flex h-full flex-col rounded-xl border bg-card p-5 transition-colors hover:border-primary/40 hover:bg-accent/30"
-    >
-      <div className="mb-4 flex items-start justify-between">
-        <div className="flex size-11 items-center justify-center rounded-lg bg-muted">
-          <Icon className="size-5" />
-        </div>
-
-        {available ? (
-          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2Icon className="size-3.5" />
-            Có sẵn
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <CircleDashedIcon className="size-3.5" />
-            Kế hoạch
-          </span>
-        )}
-      </div>
-
-      <h3 className="font-semibold">{module.title}</h3>
-
-      <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">
-        {module.description}
-      </p>
-
-      <div className="mt-5 flex items-center gap-1 text-sm font-medium text-primary">
-        {available ? "Mở module" : "Xem kế hoạch"}
-        <ArrowRightIcon className="size-4 transition-transform group-hover:translate-x-1" />
-      </div>
-    </Link>
-  );
-}
-
 export default function CompanyOverviewPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto w-full max-w-7xl space-y-10 px-5 py-8 md:px-8">
-        <header className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Building2Icon className="size-4" />
-            Company Workspace
+    <div className="min-h-full bg-background">
+      <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-7 sm:px-6 lg:px-8">
+        <header className="rounded-2xl border bg-card px-6 py-7 sm:px-8">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Bot className="size-5" />
           </div>
-
-          <h1 className="text-3xl font-bold tracking-tight">
-            Company Overview
-          </h1>
-
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            Trung tâm điều hành công ty marketing AI.
-            Quản lý đội ngũ nhân viên, phòng ban,
-            công việc và các hoạt động chăm sóc
-            khách hàng trong cùng một workspace.
+          <p className="mt-5 text-sm font-medium text-muted-foreground">AI Company Workspace</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Tổng quan vận hành</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Customer Support là sản phẩm đang hoạt động. Các chỉ số vận hành sẽ chỉ được hiển thị khi API cung cấp dữ liệu đã xác minh.
           </p>
         </header>
 
-        <section className="rounded-2xl border bg-card p-6">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <HeadsetIcon className="size-4" />
-                Existing capability
-              </div>
-
-              <h2 className="text-xl font-semibold">
-                Customer Support
-              </h2>
-
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                Hệ thống chăm sóc khách hàng hiện có
-                tiếp tục hoạt động. Trong kiến trúc mới,
-                đây sẽ là một bộ phận của AI Company,
-                không còn là toàn bộ sản phẩm.
-              </p>
-            </div>
-
-            <Link
-              href="/conversations"
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Mở Customer Support
-              <ArrowRightIcon className="size-4" />
-            </Link>
-          </div>
-        </section>
-
-        <section className="space-y-4">
+        <section aria-labelledby="quick-actions" className="space-y-4">
           <div>
-            <h2 className="text-xl font-semibold">
-              Modules đang có
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Các trang có thể truy cập trong hệ thống hiện tại.
-            </p>
+            <h2 id="quick-actions" className="text-lg font-semibold">Tiếp tục công việc</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Truy cập nhanh các khu vực đang kết nối với dữ liệu thật.</p>
           </div>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {availableModules.map((module) => (
-              <ModuleCard
-                key={module.title}
-                module={module}
-              />
+          <div className="grid gap-4 md:grid-cols-3">
+            {actions.map((action) => (
+              <Link key={action.href} href={action.href} className="group rounded-xl border bg-card p-5 transition-colors hover:border-primary/40 hover:bg-muted/30">
+                <action.icon className="size-5" />
+                <h3 className="mt-5 font-semibold">{action.title}</h3>
+                <p className="mt-2 min-h-10 text-sm leading-5 text-muted-foreground">{action.description}</p>
+                <span className="mt-5 inline-flex items-center gap-1 text-sm font-medium">Mở khu vực <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+              </Link>
             ))}
           </div>
         </section>
 
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">
-              AI Company Roadmap
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Các module sẽ được triển khai và kết nối
-              dữ liệu thật theo từng task.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {companyModules.map((module) => (
-              <div
-                key={module.title}
-                id={module.href.slice(1)}
-                className="scroll-mt-8"
-              >
-                <ModuleCard module={module} />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-dashed p-5">
-          <h2 className="font-semibold">
-            Nguyên tắc dữ liệu
-          </h2>
-
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            AI Workforce hiện lấy dữ liệu từ các API
-            Departments, Agents và Agent Templates
-            theo organization. Các chỉ số execution,
-            token và chi phí AI sẽ được bổ sung khi
-            triển khai Tasks & Workflows.
-          </p>
+        <section className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+          Không hiển thị số liệu mẫu. Khi hệ thống có API tổng quan cho hội thoại, agents và Knowledge Base, các chỉ số đã xác minh sẽ được bổ sung tại đây.
         </section>
       </div>
     </div>

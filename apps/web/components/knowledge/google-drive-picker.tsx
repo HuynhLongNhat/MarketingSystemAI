@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Script from "next/script";
+import { RefreshCw, RotateCcw } from "lucide-react";
+
+import { Button } from "@workspace/ui/components/button";
+import { Badge } from "@workspace/ui/components/badge";
 
 type PickerDocument = {
   id: string;
@@ -52,6 +56,10 @@ type SavedSource = {
   name: string;
   mimeType: string | null;
   status: string;
+  lastIndexedAt: string | null;
+  chunkCount: number;
+  embeddingCount: number;
+  embeddingProvider: string | null;
 };
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002")
@@ -59,6 +67,8 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002")
   .replace(/\/$/, "");
 
 const ENDPOINT = `${API_BASE}/v1/knowledge-connections/google`;
+const EMBEDDING_ENDPOINT =
+  `${API_BASE}/v1/knowledge-connections/embeddings/backfill`;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${ENDPOINT}${path}`, {
@@ -84,6 +94,7 @@ export function GoogleDrivePicker() {
   const [error, setError] = useState("");
   const [sources, setSources] = useState<SavedSource[]>([]);
   const [message, setMessage] = useState("");
+  const [backfilling, setBackfilling] = useState(false);
 
   const developerKey = process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY;
 
@@ -91,6 +102,12 @@ export function GoogleDrivePicker() {
     const list = await api<SavedSource[]>("/sources");
     setSources(list);
   }
+
+  useEffect(() => {
+    void refreshSources().catch(() =>
+      setError("Không tải được danh sách tài liệu."),
+    );
+  }, []);
 
   async function openPicker() {
     if (busy) return;
@@ -183,6 +200,50 @@ export function GoogleDrivePicker() {
     }
   }
 
+  async function backfill() {
+    if (backfilling) return;
+
+    setBackfilling(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch(EMBEDDING_ENDPOINT, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
+        const message = Array.isArray(payload?.message)
+          ? payload.message.join(" ")
+          : payload?.message;
+        throw new Error(message || "Embedding backfill failed");
+      }
+
+      const result = (await response.json()) as {
+        queuedCount: number;
+        message: string;
+      };
+      setMessage(
+        result.queuedCount > 0
+          ? `Đã xếp ${result.queuedCount} tài liệu để tạo embedding.`
+          : "Không có tài liệu ready cần tạo embedding.",
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Không thể backfill embedding. Hãy kiểm tra cấu hình Embedding Model trong AI Providers.",
+      );
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   return (
     <section className="space-y-4 rounded-xl border p-5">
       <Script
@@ -201,26 +262,36 @@ export function GoogleDrivePicker() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
           type="button"
           disabled={busy || !sdkReady}
           onClick={() => void openPicker()}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy ? "Đang xử lý..." : "Chọn tài liệu từ Google Drive"}
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={() =>
             void refreshSources().catch(() =>
               setError("Không tải được danh sách tài liệu."),
             )
           }
-          className="rounded-lg border px-4 py-2 text-sm"
         >
+          <RefreshCw className="size-4" />
           Làm mới danh sách
-        </button>
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          disabled={backfilling}
+          onClick={() => void backfill()}
+        >
+          <RotateCcw className={backfilling ? "size-4 animate-spin" : "size-4"} />
+          {backfilling ? "Đang xếp hàng..." : "Backfill embeddings"}
+        </Button>
       </div>
 
       {error && (
@@ -233,16 +304,30 @@ export function GoogleDrivePicker() {
 
       <div className="space-y-2">
         {sources.map((source) => (
-          <div
+          <article
             key={source.id}
-            className="flex items-center justify-between gap-3 rounded-lg border p-3"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-3"
           >
-            <span className="min-w-0 truncate text-sm">{source.name}</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{source.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {source.chunkCount} chunks · {source.embeddingCount} embeddings
+                {source.embeddingProvider ? ` · ${source.embeddingProvider}` : ""}
+              </p>
+              {source.lastIndexedAt && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Indexed: {new Intl.DateTimeFormat("vi-VN", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  }).format(new Date(source.lastIndexedAt))}
+                </p>
+              )}
+            </div>
 
-            <span className="shrink-0 text-xs text-muted-foreground">
+            <Badge variant="outline" className="shrink-0 text-foreground">
               {source.status}
-            </span>
-          </div>
+            </Badge>
+          </article>
         ))}
 
         {sources.length === 0 && (

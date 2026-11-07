@@ -35,6 +35,7 @@ import {
 
 import {
   EmbeddingConfigurationError,
+  EmbeddingProviderError,
   KnowledgeEmbeddingService,
 } from "../knowledge-connections/knowledge-embedding.service.js";
 
@@ -282,6 +283,13 @@ export class JobsProcessor extends WorkerHost {
       });
     } catch (error) {
       if (error instanceof EmbeddingConfigurationError) {
+        throw new UnrecoverableError(error.message);
+      }
+
+      if (
+        error instanceof EmbeddingProviderError &&
+        !error.retryable
+      ) {
         throw new UnrecoverableError(error.message);
       }
 

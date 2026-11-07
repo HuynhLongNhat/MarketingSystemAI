@@ -8,6 +8,7 @@ import {
 
 import {
   PROVIDER_REGISTRY,
+  listEmbeddingModelDefinitions,
   listProviderDefinitions,
 } from "./provider-registry.js";
 
@@ -22,6 +23,7 @@ export interface CatalogModel {
   outputPricePerMillion: number | null;
   supportsVision: boolean;
   supportsTools: boolean;
+  dimensions?: number;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -63,6 +65,31 @@ export class ModelCatalogService {
 
   listProviders() {
     return listProviderDefinitions();
+  }
+
+  listEmbeddingModels(provider: string): CatalogModel[] {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        PROVIDER_REGISTRY,
+        provider,
+      )
+    ) {
+      throw new BadRequestException("Unsupported provider");
+    }
+
+    return listEmbeddingModelDefinitions(
+      provider as AiProviderType,
+    ).map((model) => ({
+      id: model.modelId,
+      name: model.modelId,
+      provider: model.provider,
+      contextWindow: null,
+      inputPricePerMillion: null,
+      outputPricePerMillion: null,
+      supportsVision: false,
+      supportsTools: false,
+      dimensions: model.dimensions,
+    }));
   }
 
   async listModels(provider: string): Promise<CatalogModel[]> {

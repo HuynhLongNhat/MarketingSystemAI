@@ -33,9 +33,16 @@ export async function apiFetch<T>(
   );
 
   if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(payload?.message)
+      ? payload.message.join(" ")
+      : payload?.message;
+
     throw new ApiError(
       response.status,
-      `API request failed: ${response.status}`,
+      message || `API request failed: ${response.status}`,
     );
   }
 

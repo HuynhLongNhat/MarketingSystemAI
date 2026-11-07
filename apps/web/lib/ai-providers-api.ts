@@ -5,6 +5,7 @@ export const AI_MODEL_PURPOSES = [
   "customer_support",
   "message_enhancement",
   "general",
+  "embedding",
 ] as const;
 
 export type AiModelPurpose =
@@ -83,6 +84,7 @@ export interface CatalogModel {
   outputPricePerMillion: number | null;
   supportsVision: boolean | null;
   supportsTools: boolean | null;
+  dimensions?: number;
 }
 
 export type ConnectionTestStatus =
@@ -187,6 +189,12 @@ export const aiProvidersApi = {
   listCatalogModels(provider: AiProviderType) {
     return apiFetch<CatalogModel[]>(
       `${BASE_PATH}/catalog/models?provider=${encodeURIComponent(provider)}`,
+    );
+  },
+
+  listEmbeddingModels(provider: AiProviderType) {
+    return apiFetch<CatalogModel[]>(
+      `${BASE_PATH}/catalog/embedding-models?provider=${encodeURIComponent(provider)}`,
     );
   },
 };
