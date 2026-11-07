@@ -24,11 +24,19 @@ import { PublicWidgetService } from "../conversations/public-widget.service.js";
 import type {
   CustomerSupportReplyJobData,
   KnowledgeIngestionJobData,
+  KnowledgeEmbeddingJobData,
 } from "./jobs.service.js";
+
+import { JobsService } from "./jobs.service.js";
 
 import {
   GoogleDriveIngestionService,
 } from "../knowledge-connections/google-drive-ingestion.service.js";
+
+import {
+  EmbeddingConfigurationError,
+  KnowledgeEmbeddingService,
+} from "../knowledge-connections/knowledge-embedding.service.js";
 
 interface TenantTaskPayload {
   message: string;
@@ -44,6 +52,8 @@ export class JobsProcessor extends WorkerHost {
     private readonly authorization: TenantJobAuthorization,
     private readonly publicWidgetService: PublicWidgetService,
     private readonly ingestion: GoogleDriveIngestionService,
+    private readonly embeddings: KnowledgeEmbeddingService,
+    private readonly jobs: JobsService,
   ) {
     super();
   }
@@ -61,6 +71,9 @@ export class JobsProcessor extends WorkerHost {
 
       case JOB_NAMES.KNOWLEDGE_INGEST_SOURCE:
         return this.handleKnowledgeIngestion(job);
+
+      case JOB_NAMES.KNOWLEDGE_EMBED_DOCUMENT:
+        return this.handleKnowledgeEmbedding(job);
 
       default:
         throw new UnrecoverableError(
@@ -212,20 +225,22 @@ export class JobsProcessor extends WorkerHost {
       );
     }
 
-    this.logger.log(
-      JSON.stringify({
-        event: "knowledge.ingestion.processing",
-        jobId: job.id,
-        organizationId: data.organizationId,
-        sourceId: data.sourceId,
-        attempt: job.attemptsMade + 1,
-      }),
-    );
-
     const result = await this.ingestion.process({
       organizationId: data.organizationId,
       sourceId: data.sourceId,
     });
+
+    if (
+      "success" in result &&
+      result.success === true &&
+      "documentId" in result &&
+      typeof result.documentId === "string"
+    ) {
+      await this.jobs.enqueueKnowledgeEmbedding({
+        organizationId: data.organizationId,
+        documentId: result.documentId,
+      });
+    }
 
     this.logger.log(
       JSON.stringify({
@@ -238,5 +253,39 @@ export class JobsProcessor extends WorkerHost {
     );
 
     return result;
+  }
+
+  private async handleKnowledgeEmbedding(
+    job: Job,
+  ) {
+    const data =
+      job.data as
+        | Partial<KnowledgeEmbeddingJobData>
+        | undefined;
+
+    if (
+      !data ||
+      typeof data.organizationId !== "string" ||
+      !data.organizationId ||
+      typeof data.documentId !== "string" ||
+      !data.documentId
+    ) {
+      throw new UnrecoverableError(
+        "Invalid knowledge embedding job data",
+      );
+    }
+
+    try {
+      return await this.embeddings.process({
+        organizationId: data.organizationId,
+        documentId: data.documentId,
+      });
+    } catch (error) {
+      if (error instanceof EmbeddingConfigurationError) {
+        throw new UnrecoverableError(error.message);
+      }
+
+      throw error;
+    }
   }
 }

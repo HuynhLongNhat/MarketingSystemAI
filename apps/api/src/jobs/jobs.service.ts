@@ -21,6 +21,12 @@ export interface KnowledgeIngestionJobData {
   createdAt: string;
 }
 
+export interface KnowledgeEmbeddingJobData {
+  organizationId: string;
+  documentId: string;
+  createdAt: string;
+}
+
 @Injectable()
 export class JobsService {
   constructor(
@@ -186,6 +192,53 @@ export class JobsService {
       jobName: job.name,
       organizationId,
       sourceId,
+    };
+  }
+
+  async enqueueKnowledgeEmbedding(input: {
+    organizationId: string;
+    documentId: string;
+  }) {
+    const { organizationId, documentId } = input;
+
+    if (!organizationId || !documentId) {
+      throw new Error(
+        "Invalid knowledge embedding identity",
+      );
+    }
+
+    const data: KnowledgeEmbeddingJobData = {
+      organizationId,
+      documentId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const job = await this.queue.add(
+      JOB_NAMES.KNOWLEDGE_EMBED_DOCUMENT,
+      data,
+      {
+        jobId: `knowledge-embedding-${documentId}-${randomUUID()}`,
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+        removeOnComplete: {
+          age: 86400,
+          count: 1000,
+        },
+        removeOnFail: {
+          age: 604800,
+          count: 1000,
+        },
+      },
+    );
+
+    return {
+      jobId: job.id,
+      jobName: job.name,
+      organizationId,
+      documentId,
     };
   }
 }

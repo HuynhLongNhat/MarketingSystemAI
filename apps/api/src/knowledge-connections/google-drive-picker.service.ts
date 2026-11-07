@@ -1,3 +1,4 @@
+
 import {
   BadGatewayException,
   BadRequestException,
@@ -14,17 +15,25 @@ import {
 } from "@workspace/db/node";
 
 import { and, desc, eq } from "drizzle-orm";
-
 import { randomUUID } from "node:crypto";
 
-import type { RequestContext } from "../auth/request-context.js";
+import type {
+  RequestContext,
+} from "../auth/request-context.js";
 
-import { decryptGoogleToken } from "./google-token-crypto.js";
-import { JobsService } from "../jobs/jobs.service.js";
+import {
+  JobsService,
+} from "../jobs/jobs.service.js";
 
-const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+import {
+  decryptGoogleToken,
+} from "./google-token-crypto.js";
 
-const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
+const TOKEN_ENDPOINT =
+  "https://oauth2.googleapis.com/token";
+
+const DRIVE_FILES_ENDPOINT =
+  "https://www.googleapis.com/drive/v3/files";
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -37,7 +46,6 @@ const ALLOWED_MIME_TYPES = new Set([
 type GoogleTokenResponse = {
   access_token?: string;
   expires_in?: number;
-  scope?: string;
   error?: string;
 };
 
@@ -51,13 +59,17 @@ type GoogleDriveFile = {
 
 @Injectable()
 export class GoogleDrivePickerService {
-
   constructor(
-  private readonly jobs: JobsService,
-) {}
+    private readonly jobs: JobsService,
+  ) {}
+
   private pickerAppId(): string {
-    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
-    const match = clientId?.match(/^(\d+)-.+\.apps\.googleusercontent\.com$/);
+    const clientId =
+      process.env.GOOGLE_CLIENT_ID?.trim();
+
+    const match = clientId?.match(
+      /^(\d+)-.+\.apps\.googleusercontent\.com$/,
+    );
 
     if (!match?.[1]) {
       throw new ServiceUnavailableException(
@@ -65,21 +77,29 @@ export class GoogleDrivePickerService {
       );
     }
 
-    // A Google OAuth client ID begins with the owning Cloud project number.
-    // Supplying it from the same source as token refresh prevents Picker's
-    // setAppId() from drifting to another project under drive.file.
     return match[1];
   }
 
-  private async connection(organizationId: string) {
+  private async connection(
+    organizationId: string,
+  ) {
     const [connection] = await db
       .select()
       .from(knowledgeConnections)
       .where(
         and(
-          eq(knowledgeConnections.organizationId, organizationId),
-          eq(knowledgeConnections.provider, "google_drive"),
-          eq(knowledgeConnections.status, "connected"),
+          eq(
+            knowledgeConnections.organizationId,
+            organizationId,
+          ),
+          eq(
+            knowledgeConnections.provider,
+            "google_drive",
+          ),
+          eq(
+            knowledgeConnections.status,
+            "connected",
+          ),
         ),
       )
       .orderBy(desc(knowledgeConnections.createdAt))
@@ -92,21 +112,26 @@ export class GoogleDrivePickerService {
       !connection.refreshTokenAuthTag ||
       !connection.tokenKeyVersion
     ) {
-      throw new NotFoundException("Google Drive connection is not available");
+      throw new NotFoundException(
+        "Google Drive connection is not available",
+      );
     }
 
     return connection;
   }
 
-  async accessToken(organizationId: string) {
-    const connection = await this.connection(organizationId);
+  async accessToken(
+    organizationId: string,
+  ) {
+    const connection = await this.connection(
+      organizationId,
+    );
 
-    // Keep token refresh on the same OAuth client that issued the refresh
-    // token during Google Drive authorization and that Better Auth uses for
-    // Google sign-in.
-    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    const clientId =
+      process.env.GOOGLE_CLIENT_ID?.trim();
 
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+    const clientSecret =
+      process.env.GOOGLE_CLIENT_SECRET?.trim();
 
     if (!clientId || !clientSecret) {
       throw new ServiceUnavailableException(
@@ -151,7 +176,8 @@ export class GoogleDrivePickerService {
       response = await fetch(TOKEN_ENDPOINT, {
         method: "POST",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type":
+            "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
           client_id: clientId,
@@ -163,11 +189,15 @@ export class GoogleDrivePickerService {
         redirect: "error",
       });
     } catch {
-      throw new BadGatewayException("Google token service unavailable");
+      throw new BadGatewayException(
+        "Google token service unavailable",
+      );
     }
 
     if (!response.ok) {
-      const errorData = (await response.json().catch(() => ({}))) as {
+      const errorData = (await response
+        .json()
+        .catch(() => ({}))) as {
         error?: string;
       };
 
@@ -186,11 +216,16 @@ export class GoogleDrivePickerService {
           .where(
             and(
               eq(knowledgeConnections.id, connection.id),
-              eq(knowledgeConnections.organizationId, organizationId),
+              eq(
+                knowledgeConnections.organizationId,
+                organizationId,
+              ),
             ),
           );
 
-        throw new UnauthorizedException("Google Drive must be reconnected");
+        throw new UnauthorizedException(
+          "Google Drive must be reconnected",
+        );
       }
 
       if (errorData.error === "invalid_client") {
@@ -198,24 +233,37 @@ export class GoogleDrivePickerService {
           "Google OAuth client credentials are invalid",
         );
       }
-      throw new BadGatewayException("Unable to refresh Google access token");
+
+      throw new BadGatewayException(
+        "Unable to refresh Google access token",
+      );
     }
 
-    const data = (await response.json()) as GoogleTokenResponse;
+    const data =
+      (await response.json()) as GoogleTokenResponse;
 
     if (!data.access_token) {
-      throw new BadGatewayException("Google returned no access token");
+      throw new BadGatewayException(
+        "Google returned no access token",
+      );
     }
 
     return {
       connectionId: connection.id,
       token: data.access_token,
-      expiresIn: Math.min(Math.max(data.expires_in ?? 3600, 1), 3600),
+      expiresIn: Math.min(
+        Math.max(data.expires_in ?? 3600, 1),
+        3600,
+      ),
     };
   }
 
-  async pickerToken(context: RequestContext) {
-    const token = await this.accessToken(context.organizationId);
+  async pickerToken(
+    context: RequestContext,
+  ) {
+    const token = await this.accessToken(
+      context.organizationId,
+    );
 
     return {
       accessToken: token.token,
@@ -228,16 +276,27 @@ export class GoogleDrivePickerService {
     accessToken: string,
     fileId: string,
   ): Promise<GoogleDriveFile> {
-    if (!/^[A-Za-z0-9_-]{5,200}$/.test(fileId)) {
-      throw new BadRequestException("Invalid Drive file ID");
+    if (
+      !/^[A-Za-z0-9_-]{5,200}$/.test(fileId)
+    ) {
+      throw new BadRequestException(
+        "Invalid Drive file ID",
+      );
     }
 
     const url = new URL(
       `${DRIVE_FILES_ENDPOINT}/${encodeURIComponent(fileId)}`,
     );
 
-    url.searchParams.set("fields", "id,name,mimeType,version,trashed");
-    url.searchParams.set("supportsAllDrives", "true");
+    url.searchParams.set(
+      "fields",
+      "id,name,mimeType,version,trashed",
+    );
+
+    url.searchParams.set(
+      "supportsAllDrives",
+      "true",
+    );
 
     let response: Response;
 
@@ -251,17 +310,27 @@ export class GoogleDrivePickerService {
         redirect: "error",
       });
     } catch {
-      throw new BadGatewayException("Google Drive request unavailable");
+      throw new BadGatewayException(
+        "Google Drive request unavailable",
+      );
     }
 
-    if (response.status === 404 || response.status === 403) {
-      const body = (await response.json().catch(() => null)) as {
+    if (
+      response.status === 403 ||
+      response.status === 404
+    ) {
+      const body = (await response
+        .json()
+        .catch(() => null)) as {
         error?: {
-          errors?: Array<{ reason?: string }>;
+          errors?: Array<{
+            reason?: string;
+          }>;
         };
       } | null;
 
-      const reason = body?.error?.errors?.[0]?.reason;
+      const reason =
+        body?.error?.errors?.[0]?.reason;
 
       const safeReasons = new Set([
         "appNotAuthorizedToFile",
@@ -270,10 +339,15 @@ export class GoogleDrivePickerService {
         "insufficientPermissions",
       ]);
 
-      console.warn("Google Drive file access denied", {
-        status: response.status,
-        reason: safeReasons.has(reason ?? "") ? reason : "unknown",
-      });
+      console.warn(
+        "Google Drive file access denied",
+        {
+          status: response.status,
+          reason: safeReasons.has(reason ?? "")
+            ? reason
+            : "unknown",
+        },
+      );
 
       throw new BadRequestException(
         "File is unavailable or permission was not granted",
@@ -281,37 +355,51 @@ export class GoogleDrivePickerService {
     }
 
     if (!response.ok) {
-      throw new BadGatewayException("Could not verify Google Drive file");
+      throw new BadGatewayException(
+        "Could not verify Google Drive file",
+      );
     }
 
-    return (await response.json()) as GoogleDriveFile;
+    return (
+      await response.json()
+    ) as GoogleDriveFile;
   }
 
-  async saveSelectedFiles(context: RequestContext, fileIds: string[]) {
+  async saveSelectedFiles(
+    context: RequestContext,
+    fileIds: string[],
+  ) {
     if (
       !Array.isArray(fileIds) ||
       fileIds.length === 0 ||
       fileIds.length > 20 ||
       fileIds.some((id) => typeof id !== "string")
     ) {
-      throw new BadRequestException("Select between 1 and 20 files");
+      throw new BadRequestException(
+        "Select between 1 and 20 files",
+      );
     }
 
     const ids = [...new Set(fileIds)];
 
     if (ids.length !== fileIds.length) {
-      throw new BadRequestException("Duplicate file IDs are not allowed");
+      throw new BadRequestException(
+        "Duplicate file IDs are not allowed",
+      );
     }
 
-    const { token, connectionId } = await this.accessToken(
-      context.organizationId,
-    );
+    const { token, connectionId } =
+      await this.accessToken(
+        context.organizationId,
+      );
 
     const selected = [];
 
-    // Sequential processing limits requests per submission.
     for (const fileId of ids) {
-      const file = await this.getGoogleFile(token, fileId);
+      const file = await this.getGoogleFile(
+        token,
+        fileId,
+      );
 
       if (
         !file.id ||
@@ -325,8 +413,6 @@ export class GoogleDrivePickerService {
         );
       }
 
-      // Metadata is verified with Google, not taken
-      // from user-controlled Picker callback data.
       const [record] = await db
         .insert(knowledgeExternalSources)
         .values({
@@ -359,17 +445,26 @@ export class GoogleDrivePickerService {
           status: knowledgeExternalSources.status,
         });
 
-      if (record) selected.push(record);
+      if (record) {
+        selected.push(record);
+
+        await this.jobs.enqueueKnowledgeSource({
+          organizationId: context.organizationId,
+          sourceId: record.id,
+        });
+      }
     }
 
     return {
       success: true,
       selected,
-      message: "Documents saved. Indexing is not implemented yet.",
+      message: "Documents queued for indexing",
     };
   }
 
-  async listSources(context: RequestContext) {
+  async listSources(
+    context: RequestContext,
+  ) {
     return db
       .select({
         id: knowledgeExternalSources.id,
@@ -380,8 +475,13 @@ export class GoogleDrivePickerService {
       })
       .from(knowledgeExternalSources)
       .where(
-        eq(knowledgeExternalSources.organizationId, context.organizationId),
+        eq(
+          knowledgeExternalSources.organizationId,
+          context.organizationId,
+        ),
       )
-      .orderBy(desc(knowledgeExternalSources.createdAt));
+      .orderBy(
+        desc(knowledgeExternalSources.createdAt),
+      );
   }
 }

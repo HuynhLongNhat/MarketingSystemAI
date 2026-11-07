@@ -127,6 +127,26 @@ export const PROVIDER_REGISTRY: Record<
   },
 };
 
+/**
+ * Embedding models currently compatible with the fixed pgvector(1536)
+ * knowledge_embeddings column. Add a model here only together with its
+ * verified dimension and a compatible storage migration when needed.
+ */
+const EMBEDDING_MODEL_DIMENSIONS: Partial<
+  Record<AiProviderType, Record<string, number>>
+> = {
+  openai: {
+    "text-embedding-3-small": 1536,
+  },
+};
+
+export function getEmbeddingModelDimensions(
+  provider: AiProviderType,
+  modelId: string,
+): number | undefined {
+  return EMBEDDING_MODEL_DIMENSIONS[provider]?.[modelId];
+}
+
 export function listProviderDefinitions() {
   return AI_PROVIDER_TYPES.map(
     (id) => PROVIDER_REGISTRY[id],

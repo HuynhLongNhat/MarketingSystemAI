@@ -33,28 +33,36 @@ import {
   GoogleDriveIngestionService,
 } from "./google-drive-ingestion.service.js";
 
+import {
+  KnowledgeEmbeddingService,
+} from "./knowledge-embedding.service.js";
+
+import {
+  KnowledgeEmbeddingController,
+} from "./knowledge-embedding.controller.js";
+
 @Module({
   imports: [
     JobsModule,
   ],
-
   controllers: [
     GoogleDriveController,
     GoogleDrivePickerController,
+    KnowledgeEmbeddingController,
   ],
-
   providers: [
     GoogleDriveOAuthService,
     GoogleDrivePickerService,
     GoogleDriveIngestionService,
+    KnowledgeEmbeddingService,
     AuthGuard,
     PermissionsGuard,
   ],
-
   exports: [
     GoogleDriveOAuthService,
     GoogleDrivePickerService,
     GoogleDriveIngestionService,
+    KnowledgeEmbeddingService,
   ],
 })
 export class KnowledgeConnectionsModule {}

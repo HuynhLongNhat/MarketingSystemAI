@@ -6,4 +6,5 @@ export const JOB_NAMES = {
   TENANT_TASK: "tenant.task",
   CUSTOMER_SUPPORT_REPLY: "customer-support.reply",
   KNOWLEDGE_INGEST_SOURCE: "knowledge.ingest-source",
+  KNOWLEDGE_EMBED_DOCUMENT: "knowledge.embed-document",
 } as const;

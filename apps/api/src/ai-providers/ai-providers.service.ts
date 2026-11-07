@@ -22,6 +22,7 @@ import type {
 import type { RequestContext } from "../auth/request-context.js";
 import { tenantWhere } from "../common/tenant/tenant-query.js";
 import { encryptCredential } from "../ai-credentials/credential-crypto.js";
+import { getEmbeddingModelDimensions } from "./provider-registry.js";
 
 import {
   AI_MODEL_PURPOSES,
@@ -368,6 +369,15 @@ export class AiProvidersService {
     if (!connection.enabled) {
       throw new BadRequestException(
         "Cannot assign a disabled connection",
+      );
+    }
+
+    if (
+      purpose === "embedding" &&
+      getEmbeddingModelDimensions(connection.provider, modelId) !== 1536
+    ) {
+      throw new BadRequestException(
+        "Embedding requires a supported 1536-dimension provider and model",
       );
     }
 
