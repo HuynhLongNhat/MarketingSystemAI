@@ -20,6 +20,7 @@ import { randomUUID } from "node:crypto";
 import type { RequestContext } from "../auth/request-context.js";
 
 import { decryptGoogleToken } from "./google-token-crypto.js";
+import { JobsService } from "../jobs/jobs.service.js";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
@@ -50,6 +51,10 @@ type GoogleDriveFile = {
 
 @Injectable()
 export class GoogleDrivePickerService {
+
+  constructor(
+  private readonly jobs: JobsService,
+) {}
   private pickerAppId(): string {
     const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
     const match = clientId?.match(/^(\d+)-.+\.apps\.googleusercontent\.com$/);
@@ -93,7 +98,7 @@ export class GoogleDrivePickerService {
     return connection;
   }
 
-  private async accessToken(organizationId: string) {
+  async accessToken(organizationId: string) {
     const connection = await this.connection(organizationId);
 
     // Keep token refresh on the same OAuth client that issued the refresh

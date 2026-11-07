@@ -1,5 +1,7 @@
+
 import { Logger } from "@nestjs/common";
 import { Processor, WorkerHost } from "@nestjs/bullmq";
+
 import {
   UnrecoverableError,
   type Job,
@@ -16,8 +18,17 @@ import {
 } from "./tenant-job.js";
 
 import { TenantJobAuthorization } from "./tenant-job-authorization.js";
+
 import { PublicWidgetService } from "../conversations/public-widget.service.js";
-import type { CustomerSupportReplyJobData } from "./jobs.service.js";
+
+import type {
+  CustomerSupportReplyJobData,
+  KnowledgeIngestionJobData,
+} from "./jobs.service.js";
+
+import {
+  GoogleDriveIngestionService,
+} from "../knowledge-connections/google-drive-ingestion.service.js";
 
 interface TenantTaskPayload {
   message: string;
@@ -25,11 +36,14 @@ interface TenantTaskPayload {
 
 @Processor(DEFAULT_QUEUE)
 export class JobsProcessor extends WorkerHost {
-  private readonly logger = new Logger(JobsProcessor.name);
+  private readonly logger = new Logger(
+    JobsProcessor.name,
+  );
 
   constructor(
     private readonly authorization: TenantJobAuthorization,
     private readonly publicWidgetService: PublicWidgetService,
+    private readonly ingestion: GoogleDriveIngestionService,
   ) {
     super();
   }
@@ -45,6 +59,9 @@ export class JobsProcessor extends WorkerHost {
       case JOB_NAMES.CUSTOMER_SUPPORT_REPLY:
         return this.handleCustomerSupportReply(job);
 
+      case JOB_NAMES.KNOWLEDGE_INGEST_SOURCE:
+        return this.handleKnowledgeIngestion(job);
+
       default:
         throw new UnrecoverableError(
           `Unsupported job type: ${job.name}`,
@@ -53,7 +70,9 @@ export class JobsProcessor extends WorkerHost {
   }
 
   private async handleHealthCheck(job: Job) {
-    const message = String(job.data?.message ?? "");
+    const message = String(
+      job.data?.message ?? "",
+    );
 
     this.logger.log(
       JSON.stringify({
@@ -74,17 +93,22 @@ export class JobsProcessor extends WorkerHost {
     try {
       assertTenantJobData(job.data);
     } catch {
-      throw new UnrecoverableError("Invalid tenant job data");
+      throw new UnrecoverableError(
+        "Invalid tenant job data",
+      );
     }
 
-    const data = job.data as TenantJobData<TenantTaskPayload>;
+    const data =
+      job.data as TenantJobData<TenantTaskPayload>;
 
     if (
       !data.payload ||
       typeof data.payload !== "object" ||
       typeof data.payload.message !== "string"
     ) {
-      throw new UnrecoverableError("Invalid tenant task payload");
+      throw new UnrecoverableError(
+        "Invalid tenant task payload",
+      );
     }
 
     const role = await this.authorization.authorize(
@@ -110,8 +134,13 @@ export class JobsProcessor extends WorkerHost {
     };
   }
 
-  private async handleCustomerSupportReply(job: Job) {
-    const data = job.data as Partial<CustomerSupportReplyJobData> | undefined;
+  private async handleCustomerSupportReply(
+    job: Job,
+  ) {
+    const data =
+      job.data as
+        | Partial<CustomerSupportReplyJobData>
+        | undefined;
 
     if (
       !data ||
@@ -138,8 +167,6 @@ export class JobsProcessor extends WorkerHost {
       }),
     );
 
-    // Service tự kiểm tra tenant, conversation, trạng thái
-    // và trigger message trước khi gọi AI.
     await this.publicWidgetService.processAiReply({
       organizationId: data.organizationId,
       conversationId: data.conversationId,
@@ -163,5 +190,53 @@ export class JobsProcessor extends WorkerHost {
       triggerMessageId: data.triggerMessageId,
       processedAt: new Date().toISOString(),
     };
+  }
+
+  private async handleKnowledgeIngestion(
+    job: Job,
+  ) {
+    const data =
+      job.data as
+        | Partial<KnowledgeIngestionJobData>
+        | undefined;
+
+    if (
+      !data ||
+      typeof data.organizationId !== "string" ||
+      !data.organizationId ||
+      typeof data.sourceId !== "string" ||
+      !data.sourceId
+    ) {
+      throw new UnrecoverableError(
+        "Invalid knowledge ingestion job data",
+      );
+    }
+
+    this.logger.log(
+      JSON.stringify({
+        event: "knowledge.ingestion.processing",
+        jobId: job.id,
+        organizationId: data.organizationId,
+        sourceId: data.sourceId,
+        attempt: job.attemptsMade + 1,
+      }),
+    );
+
+    const result = await this.ingestion.process({
+      organizationId: data.organizationId,
+      sourceId: data.sourceId,
+    });
+
+    this.logger.log(
+      JSON.stringify({
+        event: "knowledge.ingestion.finished",
+        jobId: job.id,
+        organizationId: data.organizationId,
+        sourceId: data.sourceId,
+        result,
+      }),
+    );
+
+    return result;
   }
 }
