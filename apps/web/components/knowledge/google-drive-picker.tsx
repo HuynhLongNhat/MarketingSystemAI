@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -26,9 +25,7 @@ type PickerBuilder = {
   setOrigin: (origin: string) => PickerBuilder;
   setMaxItems: (count: number) => PickerBuilder;
   enableFeature: (feature: string) => PickerBuilder;
-  setCallback: (
-    callback: (event: PickerEvent) => void,
-  ) => PickerBuilder;
+  setCallback: (callback: (event: PickerEvent) => void) => PickerBuilder;
   build: () => PickerInstance;
 };
 
@@ -57,34 +54,25 @@ type SavedSource = {
   status: string;
 };
 
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:3002"
-).replace(/\/v1\/?$/, "").replace(/\/$/, "");
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002")
+  .replace(/\/v1\/?$/, "")
+  .replace(/\/$/, "");
 
-const ENDPOINT =
-  `${API_BASE}/v1/knowledge-connections/google`;
+const ENDPOINT = `${API_BASE}/v1/knowledge-connections/google`;
 
-async function api<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${ENDPOINT}${path}`, {
     ...init,
     credentials: "include",
     cache: "no-store",
     headers: {
-      ...(init?.body
-        ? { "Content-Type": "application/json" }
-        : {}),
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
   });
 
   if (!response.ok) {
-    throw new Error(
-      `API request failed: HTTP ${response.status}`,
-    );
+    throw new Error(`API request failed: HTTP ${response.status}`);
   }
 
   return (await response.json()) as T;
@@ -97,11 +85,7 @@ export function GoogleDrivePicker() {
   const [sources, setSources] = useState<SavedSource[]>([]);
   const [message, setMessage] = useState("");
 
-  const developerKey =
-    process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY;
-
-  const projectNumber =
-    process.env.NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER;
+  const developerKey = process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY;
 
   async function refreshSources() {
     const list = await api<SavedSource[]>("/sources");
@@ -114,7 +98,7 @@ export function GoogleDrivePicker() {
     setError("");
     setMessage("");
 
-    if (!developerKey || !projectNumber) {
+    if (!developerKey) {
       setError("Google Picker chưa được cấu hình.");
       return;
     }
@@ -124,12 +108,23 @@ export function GoogleDrivePicker() {
       return;
     }
 
-    setBusy(true);
-
     try {
+      const status = await api<{
+        connected: boolean;
+      }>("/status");
+
+      if (!status.connected) {
+        // OAuth is a top-level browser navigation, not a fetch request.
+        window.location.assign(`${ENDPOINT}/start`);
+        return;
+      }
+
+      setBusy(true);
+
       const result = await api<{
         accessToken: string;
         expiresIn: number;
+        appId: string;
       }>("/picker-token");
 
       window.gapi.load("picker", () => {
@@ -145,20 +140,16 @@ export function GoogleDrivePicker() {
           .addView(pickerApi.ViewId.DOCS)
           .setOAuthToken(result.accessToken)
           .setDeveloperKey(developerKey)
-          .setAppId(projectNumber)
+          .setAppId(result.appId)
           .setOrigin(window.location.origin)
-          .enableFeature(
-            pickerApi.Feature.MULTISELECT_ENABLED,
-          )
+          .enableFeature(pickerApi.Feature.MULTISELECT_ENABLED)
           .setMaxItems(20)
-          .setCallback((event) => {
+          .setCallback(async (event) => {
             if (event.action !== pickerApi.Action.PICKED) {
               return;
             }
 
-            const ids = (event.docs ?? [])
-              .map((doc) => doc.id)
-              .filter(Boolean);
+            const ids = (event.docs ?? []).map((doc) => doc.id).filter(Boolean);
 
             if (!ids.length) return;
 
@@ -176,9 +167,7 @@ export function GoogleDrivePicker() {
                 setMessage("Đã lưu tài liệu được chọn.");
               })
               .catch(() => {
-                setError(
-                  "Không thể lưu một số tài liệu đã chọn.",
-                );
+                setError("Không thể lưu một số tài liệu đã chọn.");
               })
               .finally(() => setBusy(false));
           })
@@ -188,9 +177,8 @@ export function GoogleDrivePicker() {
         setBusy(false);
       });
     } catch {
-      setError(
-        "Không lấy được quyền truy cập Google Drive. Hãy kiểm tra kết nối.",
-      );
+      setError("Không lấy được quyền truy cập Google Drive. Hãy kiểm tra kết nối.");
+    } finally {
       setBusy(false);
     }
   }
@@ -204,14 +192,11 @@ export function GoogleDrivePicker() {
       />
 
       <div>
-        <h2 className="text-lg font-semibold">
-          Google Drive Knowledge
-        </h2>
+        <h2 className="text-lg font-semibold">Google Drive Knowledge</h2>
 
         <p className="text-sm text-muted-foreground">
-          Chọn tài liệu từ Google Drive của doanh nghiệp.
-          Chỉ những file được cấp quyền mới được thêm
-          vào Knowledge Base.
+          Chọn tài liệu từ Google Drive của doanh nghiệp. Chỉ những file được
+          cấp quyền mới được thêm vào Knowledge Base.
         </p>
       </div>
 
@@ -244,11 +229,7 @@ export function GoogleDrivePicker() {
         </p>
       )}
 
-      {message && (
-        <p className="text-sm text-green-600">
-          {message}
-        </p>
-      )}
+      {message && <p className="text-sm text-green-600">{message}</p>}
 
       <div className="space-y-2">
         {sources.map((source) => (
@@ -256,9 +237,7 @@ export function GoogleDrivePicker() {
             key={source.id}
             className="flex items-center justify-between gap-3 rounded-lg border p-3"
           >
-            <span className="min-w-0 truncate text-sm">
-              {source.name}
-            </span>
+            <span className="min-w-0 truncate text-sm">{source.name}</span>
 
             <span className="shrink-0 text-xs text-muted-foreground">
               {source.status}

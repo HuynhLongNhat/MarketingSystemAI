@@ -230,11 +230,11 @@ export const FilesView = () => {
             <PlusIcon className="mr-2 size-4" />
             Thêm kiến thức
           </Button>
+          <GoogleDrivePicker />
         </div>
 
         {loadError && (
          <>
-        <GoogleDrivePicker />
           <div
             role="alert"
             className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-4"

@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Query,
   Req,
   Res,
@@ -14,36 +15,38 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 
-import type {
-  Request,
-  Response,
-} from "express";
+import type { Request, Response } from "express";
 
 import { AuthGuard } from "../auth/auth.guard.js";
 
-import { CurrentContext } from "../auth/current-context.decorator.js";
+import {
+  CurrentContext,
+} from "../auth/current-context.decorator.js";
 
-import type { RequestContext } from "../auth/request-context.js";
+import type {
+  RequestContext,
+} from "../auth/request-context.js";
 
-import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
+import {
+  PermissionsGuard,
+} from "../common/permissions/permissions.guard.js";
 
-import { RequirePermissions } from "../common/permissions/permissions.decorator.js";
+import {
+  RequirePermissions,
+} from "../common/permissions/permissions.decorator.js";
 
-import { PERMISSIONS } from "../common/permissions/permissions.js";
+import {
+  PERMISSIONS,
+} from "../common/permissions/permissions.js";
 
-import { GoogleDriveOAuthService } from "./google-drive-oauth.service.js";
+import {
+  GoogleDriveOAuthService,
+} from "./google-drive-oauth.service.js";
 
 const STATE_COOKIE = "gdrive_oauth_nonce";
 
-function readCookie(
-  request: Request,
-  name: string,
-): string | undefined {
-  const parts = (
-    request.headers.cookie ?? ""
-  ).split(";");
-
-  for (const part of parts) {
+function readCookie(request: Request, name: string): string | undefined {
+  for (const part of (request.headers.cookie ?? "").split(";")) {
     const [key, ...values] = part.trim().split("=");
 
     if (key === name) {
@@ -54,15 +57,17 @@ function readCookie(
   return undefined;
 }
 
-function cookieOptions() {
+function stateCookieOptions() {
   return {
     httpOnly: true as const,
     secure:
       process.env.APP_ENV === "production" ||
       process.env.APP_ENV === "staging",
     sameSite: "lax" as const,
-    path:
-      "/v1/knowledge-connections/google/callback",
+    // A cookie Path must path-match the response that sets it (`/start`) as
+    // well as the callback that consumes it. Using `/callback` here causes
+    // browsers to reject the Set-Cookie header issued by `/start`.
+    path: "/v1/knowledge-connections/google",
     maxAge: 10 * 60 * 1000,
   };
 }
@@ -84,19 +89,16 @@ export class GoogleDriveController {
     @CurrentContext() context: RequestContext,
     @Res() response: Response,
   ) {
-    const request =
-      this.oauth.getAuthorizationRequest(context);
+    const { url, nonce } = this.oauth.getAuthorizationRequest(context);
 
-    response.cookie(
-      STATE_COOKIE,
-      request.nonce,
-      cookieOptions(),
-    );
+    response.setHeader("Cache-Control", "no-store");
+    response.cookie(STATE_COOKIE, nonce, stateCookieOptions());
 
-    return response.redirect(302, request.url);
+    return response.redirect(302, url);
   }
 
   @Get("callback")
+  @Header("Cache-Control", "no-store")
   @RequirePermissions(PERMISSIONS.KNOWLEDGE_UPDATE)
   @ApiOperation({
     summary: "Google Drive OAuth callback",
@@ -109,17 +111,21 @@ export class GoogleDriveController {
     @Req() request: Request,
     @Res() response: Response,
   ) {
-    const nonce = readCookie(
-      request,
-      STATE_COOKIE,
-    );
+    const nonce = readCookie(request, STATE_COOKIE);
 
+    response.setHeader("Cache-Control", "no-store");
+
+    // Clear before processing: a state is single-use even when Google returns
+    // an authorization error or token exchange later fails.
     response.clearCookie(STATE_COOKIE, {
       httpOnly: true,
-      secure: cookieOptions().secure,
+      secure: stateCookieOptions().secure,
       sameSite: "lax",
-      path: cookieOptions().path,
+      path: stateCookieOptions().path,
     });
+
+    // Validate state even when Google returns an error.
+    this.oauth.verifyState(context, nonce, state);
 
     if (error) {
       return response.status(400).json({
@@ -127,12 +133,6 @@ export class GoogleDriveController {
         error: "Google authorization was denied",
       });
     }
-
-    this.oauth.verifyState(
-      context,
-      nonce,
-      state,
-    );
 
     const result = await this.oauth.complete(
       context,
@@ -146,6 +146,7 @@ export class GoogleDriveController {
   }
 
   @Get("status")
+  @Header("Cache-Control", "no-store")
   @RequirePermissions(PERMISSIONS.KNOWLEDGE_READ)
   @ApiOperation({
     summary: "Get Google Drive connection status",

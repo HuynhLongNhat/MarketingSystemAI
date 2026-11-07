@@ -1,4 +1,3 @@
-
 import {
   BadGatewayException,
   ConflictException,
@@ -16,16 +15,11 @@ import {
 
 import { and, desc, eq } from "drizzle-orm";
 
-import {
-  db,
-  knowledgeConnections,
-} from "@workspace/db/node";
+import { db, knowledgeConnections } from "@workspace/db/node";
 
 import type { RequestContext } from "../auth/request-context.js";
 
-import {
-  encryptGoogleToken,
-} from "./google-token-crypto.js";
+import { encryptGoogleToken } from "./google-token-crypto.js";
 
 const GOOGLE_SCOPE = [
   "openid",
@@ -34,14 +28,11 @@ const GOOGLE_SCOPE = [
   "https://www.googleapis.com/auth/drive.file",
 ].join(" ");
 
-const AUTH_ENDPOINT =
-  "https://accounts.google.com/o/oauth2/v2/auth";
+const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 
-const TOKEN_ENDPOINT =
-  "https://oauth2.googleapis.com/token";
+const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
-const USERINFO_ENDPOINT =
-  "https://openidconnect.googleapis.com/v1/userinfo";
+const USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -59,26 +50,19 @@ type GoogleUser = {
 @Injectable()
 export class GoogleDriveOAuthService {
   private config() {
-    const clientId =
-      process.env.GOOGLE_DRIVE_CLIENT_ID ??
-      process.env.GOOGLE_CLIENT_ID;
+    // Google Drive authorization must use the same OAuth client as the
+    // Google social-login provider. A refresh token is bound to its client;
+    // selecting a second, differently configured client here causes Google to
+    // reject the refresh grant with `invalid_client`.
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
 
-    const clientSecret =
-      process.env.GOOGLE_DRIVE_CLIENT_SECRET ??
-      process.env.GOOGLE_CLIENT_SECRET;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
 
-    const redirectUri =
-      process.env.GOOGLE_DRIVE_REDIRECT_URI;
+    const redirectUri = process.env.GOOGLE_DRIVE_REDIRECT_URI?.trim();
 
-    const signingKey =
-      process.env.BETTER_AUTH_SECRET;
+    const signingKey = process.env.BETTER_AUTH_SECRET;
 
-    if (
-      !clientId ||
-      !clientSecret ||
-      !redirectUri ||
-      !signingKey
-    ) {
+    if (!clientId || !clientSecret || !redirectUri || !signingKey) {
       throw new ServiceUnavailableException(
         "Google Drive OAuth is not configured",
       );
@@ -105,7 +89,7 @@ export class GoogleDriveOAuthService {
     };
   }
 
-  createState(context: RequestContext, nonce: string) {
+  createState(context: RequestContext, nonce: string): string {
     const { signingKey } = this.config();
 
     return createHmac("sha256", signingKey)
@@ -125,67 +109,41 @@ export class GoogleDriveOAuthService {
     context: RequestContext,
     nonce: string | undefined,
     receivedState: string | undefined,
-  ) {
+  ): void {
     if (!nonce || !receivedState) {
-      throw new UnauthorizedException(
-        "Missing OAuth state",
-      );
+      throw new UnauthorizedException("Missing OAuth state");
     }
 
-    const expected = Buffer.from(
-      this.createState(context, nonce),
-    );
-
-    const actual = Buffer.from(receivedState);
+    const expectedBuffer = Buffer.from(this.createState(context, nonce));
+    const actualBuffer = Buffer.from(receivedState);
 
     if (
-      expected.length !== actual.length ||
-      !timingSafeEqual(expected, actual)
+      actualBuffer.length !== expectedBuffer.length ||
+      !timingSafeEqual(actualBuffer, expectedBuffer)
     ) {
-      throw new UnauthorizedException(
-        "Invalid OAuth state",
-      );
+      throw new UnauthorizedException("Invalid OAuth state");
     }
   }
 
   getAuthorizationRequest(context: RequestContext) {
     const nonce = randomBytes(32).toString("base64url");
-
     const config = this.config();
 
     const url = new URL(AUTH_ENDPOINT);
 
-    url.searchParams.set(
-      "client_id",
-      config.clientId,
-    );
+    url.searchParams.set("client_id", config.clientId);
 
-    url.searchParams.set(
-      "redirect_uri",
-      config.redirectUri,
-    );
+    url.searchParams.set("redirect_uri", config.redirectUri);
 
-    url.searchParams.set(
-      "response_type",
-      "code",
-    );
+    url.searchParams.set("response_type", "code");
 
     url.searchParams.set("scope", GOOGLE_SCOPE);
 
-    url.searchParams.set(
-      "access_type",
-      "offline",
-    );
+    url.searchParams.set("access_type", "offline");
 
-    url.searchParams.set(
-      "prompt",
-      "consent",
-    );
+    url.searchParams.set("prompt", "consent");
 
-    url.searchParams.set(
-      "state",
-      this.createState(context, nonce),
-    );
+    url.searchParams.set("state", this.createState(context, nonce));
 
     return {
       url: url.toString(),
@@ -193,10 +151,7 @@ export class GoogleDriveOAuthService {
     };
   }
 
-  private async fetchJson<T>(
-    url: string,
-    init: RequestInit,
-  ): Promise<T> {
+  private async fetchJson<T>(url: string, init: RequestInit): Promise<T> {
     let response: globalThis.Response;
 
     try {
@@ -206,17 +161,13 @@ export class GoogleDriveOAuthService {
         redirect: "error",
       });
     } catch {
-      throw new BadGatewayException(
-        "Google OAuth request unavailable",
-      );
+      throw new BadGatewayException("Google OAuth request unavailable");
     }
 
     if (!response.ok) {
       // Do not expose Google response bodies:
       // they may contain sensitive information.
-      throw new BadGatewayException(
-        "Google OAuth request failed",
-      );
+      throw new BadGatewayException("Google OAuth request failed");
     }
 
     return (await response.json()) as T;
@@ -225,55 +176,38 @@ export class GoogleDriveOAuthService {
   private async exchangeCode(code: string) {
     const config = this.config();
 
-    return this.fetchJson<GoogleTokenResponse>(
-      TOKEN_ENDPOINT,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          code,
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          redirect_uri: config.redirectUri,
-          grant_type: "authorization_code",
-        }),
+    return this.fetchJson<GoogleTokenResponse>(TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-    );
+      body: new URLSearchParams({
+        code,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: config.redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
   }
 
-  private async getGoogleUser(
-    accessToken: string,
-  ): Promise<GoogleUser> {
-    return this.fetchJson<GoogleUser>(
-      USERINFO_ENDPOINT,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+  private async getGoogleUser(accessToken: string): Promise<GoogleUser> {
+    return this.fetchJson<GoogleUser>(USERINFO_ENDPOINT, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
       },
-    );
+    });
   }
 
-  private async findConnection(
-    organizationId: string,
-  ) {
+  private async findConnection(organizationId: string) {
     const [connection] = await db
       .select()
       .from(knowledgeConnections)
       .where(
         and(
-          eq(
-            knowledgeConnections.organizationId,
-            organizationId,
-          ),
-          eq(
-            knowledgeConnections.provider,
-            "google_drive",
-          ),
+          eq(knowledgeConnections.organizationId, organizationId),
+          eq(knowledgeConnections.provider, "google_drive"),
         ),
       )
       .orderBy(desc(knowledgeConnections.createdAt))
@@ -283,9 +217,7 @@ export class GoogleDriveOAuthService {
   }
 
   async status(context: RequestContext) {
-    const connection = await this.findConnection(
-      context.organizationId,
-    );
+    const connection = await this.findConnection(context.organizationId);
 
     if (!connection) {
       return { connected: false };
@@ -305,37 +237,24 @@ export class GoogleDriveOAuthService {
     };
   }
 
-  async complete(
-    context: RequestContext,
-    code: string,
-  ) {
+  async complete(context: RequestContext, code: string) {
     if (!code || code.length > 4096) {
-      throw new UnauthorizedException(
-        "Invalid authorization code",
-      );
+      throw new UnauthorizedException("Invalid authorization code");
     }
 
     const tokens = await this.exchangeCode(code);
 
     if (!tokens.access_token) {
-      throw new BadGatewayException(
-        "Google did not return an access token",
-      );
+      throw new BadGatewayException("Google did not return an access token");
     }
 
-    const user = await this.getGoogleUser(
-      tokens.access_token,
-    );
+    const user = await this.getGoogleUser(tokens.access_token);
 
     if (!user.sub || !user.email || !user.email_verified) {
-      throw new UnauthorizedException(
-        "Google account could not be verified",
-      );
+      throw new UnauthorizedException("Google account could not be verified");
     }
 
-    const existing = await this.findConnection(
-      context.organizationId,
-    );
+    const existing = await this.findConnection(context.organizationId);
 
     if (
       existing?.externalAccountId &&
@@ -348,23 +267,17 @@ export class GoogleDriveOAuthService {
 
     const id = existing?.id ?? randomUUID();
 
-    if (
-      !tokens.refresh_token &&
-      !existing?.encryptedRefreshToken
-    ) {
+    if (!tokens.refresh_token && !existing?.encryptedRefreshToken) {
       throw new BadGatewayException(
         "Google did not issue an offline refresh token",
       );
     }
 
     const encrypted = tokens.refresh_token
-      ? encryptGoogleToken(
-          tokens.refresh_token,
-          {
-            organizationId: context.organizationId,
-            connectionId: id,
-          },
-        )
+      ? encryptGoogleToken(tokens.refresh_token, {
+          organizationId: context.organizationId,
+          connectionId: id,
+        })
       : null;
 
     if (existing) {
@@ -380,17 +293,12 @@ export class GoogleDriveOAuthService {
         .where(
           and(
             eq(knowledgeConnections.id, id),
-            eq(
-              knowledgeConnections.organizationId,
-              context.organizationId,
-            ),
+            eq(knowledgeConnections.organizationId, context.organizationId),
           ),
         );
     } else {
       if (!encrypted) {
-        throw new BadGatewayException(
-          "Refresh token required",
-        );
+        throw new BadGatewayException("Refresh token required");
       }
 
       await db.insert(knowledgeConnections).values({
@@ -412,9 +320,7 @@ export class GoogleDriveOAuthService {
   }
 
   async disconnect(context: RequestContext) {
-    const connection = await this.findConnection(
-      context.organizationId,
-    );
+    const connection = await this.findConnection(context.organizationId);
 
     if (!connection) {
       return { disconnected: true };
@@ -428,14 +334,8 @@ export class GoogleDriveOAuthService {
       .delete(knowledgeConnections)
       .where(
         and(
-          eq(
-            knowledgeConnections.id,
-            connection.id,
-          ),
-          eq(
-            knowledgeConnections.organizationId,
-            context.organizationId,
-          ),
+          eq(knowledgeConnections.id, connection.id),
+          eq(knowledgeConnections.organizationId, context.organizationId),
         ),
       );
 
