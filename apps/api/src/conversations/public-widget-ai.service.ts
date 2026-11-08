@@ -16,7 +16,6 @@ import {
   type CustomerSupportAgentConfig,
 } from "./customer-support-agent.js";
 import {
-  MAX_KNOWLEDGE_CHARACTERS,
   selectKnowledge,
   type KnowledgeItem,
 } from "./knowledge-ranking.js";
@@ -24,7 +23,6 @@ import { AiUsageRecorder } from "./ai-usage-recorder.js";
 import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
 import {
   KnowledgeRetrievalService,
-  MAX_DOCUMENT_CONTEXT_CHARACTERS,
 } from "../knowledge-connections/knowledge-retrieval.service.js";
 
 type ChatMessage = {
@@ -162,8 +160,6 @@ const RETRY_BASE_DELAY_MS = 400;
 const MAX_RETRY_AFTER_MS = 2000;
 const MAX_DATABASE_INTEGER = 2_147_483_647;
 const MAX_COMPLETION_TOKENS = 600;
-const MAX_PROMPT_KNOWLEDGE_CHARACTERS =
-  MAX_KNOWLEDGE_CHARACTERS + MAX_DOCUMENT_CONTEXT_CHARACTERS + 1_000;
 
 function isTimeoutError(error: unknown): boolean {
   return (
@@ -282,7 +278,7 @@ function isRetryableNetworkError(error: unknown): boolean {
  * estimate, adds the configured completion allowance, then reserves
  * for the maximum number of attempts.
  */
-function estimateReservationTokens(
+export function estimateReservationTokens(
   systemPrompt: string,
   messages: Array<{ role: string; content: string }>,
 ): number {
@@ -645,23 +641,31 @@ export class PublicWidgetAiService {
 
   private async settleQuotaReservation(
     organizationId: string,
-    reservationId: string | null,
+    reservationIds: string[],
     usageReliable: boolean,
   ): Promise<void> {
-    if (!reservationId) {
+    if (reservationIds.length === 0) {
       return;
     }
 
-    try {
-      if (usageReliable) {
-        await this.usageQuota.release(organizationId, reservationId);
-      } else {
-        await this.usageQuota.retainUntilPeriodEnd(
-          organizationId,
-          reservationId,
-        );
+    let settlementFailed = false;
+
+    for (const reservationId of reservationIds) {
+      try {
+        if (usageReliable) {
+          await this.usageQuota.release(organizationId, reservationId);
+        } else {
+          await this.usageQuota.retainUntilPeriodEnd(
+            organizationId,
+            reservationId,
+          );
+        }
+      } catch {
+        settlementFailed = true;
       }
-    } catch {
+    }
+
+    if (settlementFailed) {
       // Reservation mặc định hết hạn vào cuối kỳ.
       // Nếu settlement lỗi, không xóa reservation bằng cách khác.
       this.logger.error("Could not settle AI quota reservation");
@@ -723,57 +727,72 @@ export class PublicWidgetAiService {
       return { ok: false, code: "not_configured" };
     }
 
-    // Reserve before semantic retrieval so a rejected chat never spends an
-    // embedding request. The reservation includes the maximum FAQ + document
-    // context that may be inserted after retrieval.
-    const requestedTokens = estimateReservationTokens(
-      this.buildSystemPrompt(
-        "x".repeat(MAX_PROMPT_KNOWLEDGE_CHARACTERS),
-        agent,
-      ),
+    // Phase one reserves only the request without retrieved context. This is
+    // the minimum known cost before an embedding call, so exhausted quotas do
+    // not spend an embedding request and short questions are not charged for
+    // a maximum-sized document context.
+    const baseReservationTokens = estimateReservationTokens(
+      this.buildSystemPrompt(null, agent),
       messages,
     );
-
-    let reservationId: string | null = null;
+    const reservationIds: string[] = [];
+    let usageReliable = true;
 
     try {
-      const reservation = await this.usageQuota.reserve(
+      const baseReservation = await this.usageQuota.reserve(
         organizationId,
-        requestedTokens,
+        baseReservationTokens,
       );
 
-      if (reservation.limited && !reservation.allowed) {
+      if (baseReservation.limited && !baseReservation.allowed) {
         this.logger.warn(
           `Organization AI token quota exceeded: ` +
             `org=${organizationId}, ` +
-            `used=${reservation.usedTokens}, ` +
-            `reserved=${reservation.reservedTokens}, ` +
-            `requested=${reservation.requestedTokens}, ` +
-            `limit=${reservation.monthlyTokenLimit}`,
+            `used=${baseReservation.usedTokens}, ` +
+            `reserved=${baseReservation.reservedTokens}, ` +
+            `requested=${baseReservation.requestedTokens}, ` +
+            `limit=${baseReservation.monthlyTokenLimit}`,
         );
 
         return { ok: false, code: "quota_exceeded" };
       }
 
-      if (reservation.limited && reservation.allowed) {
-        reservationId = reservation.reservationId;
+      if (baseReservation.limited && baseReservation.allowed) {
+        reservationIds.push(baseReservation.reservationId);
       }
-    } catch {
-      // Fail closed: nếu không xác minh được quota thì không gọi provider.
-      this.logger.error("Could not reserve organization AI token quota");
-      return { ok: false, code: "provider_error" };
-    }
 
-    const knowledge = await this.getKnowledgeContext(
-      organizationId,
-      latestUserMessage.content,
-    );
-    const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
+      const knowledge = await this.getKnowledgeContext(
+        organizationId,
+        latestUserMessage.content,
+      );
+      const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
+      const requestedTokens = estimateReservationTokens(systemPrompt, messages);
+      const additionalTokens = requestedTokens - baseReservationTokens;
 
-    let usageReliable = true;
-    let lastFailure: ProviderErrorCode = "provider_error";
+      // Phase two reserves exactly the added FAQ/document context. It runs
+      // before the chat provider and is serialized by the same quota row lock.
+      if (baseReservation.limited && additionalTokens > 0) {
+        const contextReservation = await this.usageQuota.reserve(
+          organizationId,
+          additionalTokens,
+        );
 
-    try {
+        if (contextReservation.limited && !contextReservation.allowed) {
+          this.logger.warn(JSON.stringify({
+            event: "customer_support.quota_context_rejected",
+            organizationId,
+            requestedTokens: contextReservation.requestedTokens,
+          }));
+          return { ok: false, code: "quota_exceeded" };
+        }
+
+        if (contextReservation.limited && contextReservation.allowed) {
+          reservationIds.push(contextReservation.reservationId);
+        }
+      }
+
+      let lastFailure: ProviderErrorCode = "provider_error";
+
       for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt += 1) {
         const attemptStartedAt = Date.now();
 
@@ -951,10 +970,15 @@ export class PublicWidgetAiService {
         ok: false,
         code: lastFailure,
       };
+    } catch {
+      // Fail closed. The finally block releases any live reservation made
+      // before retrieval, formatting, or a supplemental reservation failed.
+      this.logger.error("Could not prepare customer support AI request");
+      return { ok: false, code: "provider_error" };
     } finally {
       await this.settleQuotaReservation(
         organizationId,
-        reservationId,
+        reservationIds,
         usageReliable,
       );
     }
