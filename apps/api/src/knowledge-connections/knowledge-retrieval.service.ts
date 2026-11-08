@@ -15,9 +15,13 @@ import {
 } from "./knowledge-embedding.service.js";
 
 const MAX_QUERY_LENGTH = 500;
-const MAX_RESULTS = 5;
-const MAX_CONTEXT_CHARACTERS = 7_500;
-const MIN_SIMILARITY = 0.72;
+export const MAX_DOCUMENT_CONTEXT_CHARACTERS = 7_500;
+export const MAX_RETRIEVAL_RESULTS = 5;
+
+// This guardrail is deliberately conservative, not presented as an optimum.
+// It must be tuned only from measured relevance data for the deployed
+// embedding model; automated service tests do not establish semantic quality.
+export const MIN_DOCUMENT_SIMILARITY = 0.72;
 
 export type DocumentRetrievalMatch = {
   documentId: string;
@@ -29,7 +33,7 @@ export type DocumentRetrievalMatch = {
 
 export type DocumentRetrievalResult = {
   status: "ok" | "no_match" | "degraded";
-  reason?: "configuration" | "provider" | "timeout";
+  reason?: "configuration" | "provider" | "timeout" | "network" | "database";
   matches: DocumentRetrievalMatch[];
   latencyMs: number;
 };
@@ -54,13 +58,20 @@ export class KnowledgeRetrievalService {
       return { status: "no_match", matches: [], latencyMs: 0 };
     }
 
+    let queryEmbedding: Awaited<ReturnType<KnowledgeEmbeddingService["embedQuery"]>>;
+
     try {
-      const queryEmbedding = await this.embeddings.embedQuery(
+      queryEmbedding = await this.embeddings.embedQuery(
         input.organizationId,
         query,
       );
+    } catch (error) {
+      return this.degraded(input.organizationId, startedAt, error);
+    }
+
+    try {
       const vector = `[${queryEmbedding.embedding.join(",")}]`;
-      const limit = Math.min(Math.max(input.limit ?? MAX_RESULTS, 1), MAX_RESULTS);
+      const limit = Math.min(Math.max(input.limit ?? MAX_RETRIEVAL_RESULTS, 1), MAX_RETRIEVAL_RESULTS);
 
       const rows = await db
         .select({
@@ -100,12 +111,12 @@ export class KnowledgeRetrievalService {
       const matches: DocumentRetrievalMatch[] = [];
       let characters = 0;
       for (const row of rows) {
-        if (row.similarity < MIN_SIMILARITY) continue;
-        const content = row.content.slice(0, MAX_CONTEXT_CHARACTERS - characters);
+        if (row.similarity < MIN_DOCUMENT_SIMILARITY) continue;
+        const content = row.content.slice(0, MAX_DOCUMENT_CONTEXT_CHARACTERS - characters);
         if (!content) break;
         matches.push({ ...row, content });
         characters += content.length;
-        if (characters >= MAX_CONTEXT_CHARACTERS) break;
+        if (characters >= MAX_DOCUMENT_CONTEXT_CHARACTERS) break;
       }
 
       this.logger.log(JSON.stringify({
@@ -122,30 +133,36 @@ export class KnowledgeRetrievalService {
         latencyMs: Date.now() - startedAt,
       };
     } catch (error) {
-      const reason =
-        error instanceof EmbeddingConfigurationError
-          ? "configuration"
-          : error instanceof EmbeddingProviderError
-            ? "provider"
-            : error instanceof Error &&
-                (error.name === "TimeoutError" || error.name === "AbortError")
-              ? "timeout"
-              : "provider";
-
-      this.logger.warn(JSON.stringify({
-        event: "knowledge.retrieval.degraded",
-        organizationId: input.organizationId,
-        reason,
-        latencyMs: Date.now() - startedAt,
-      }));
-
-      return {
-        status: "degraded",
-        reason,
-        matches: [],
-        latencyMs: Date.now() - startedAt,
-      };
+      return this.degraded(input.organizationId, startedAt, error, "database");
     }
+  }
+
+  private degraded(
+    organizationId: string,
+    startedAt: number,
+    error: unknown,
+    fallback: DocumentRetrievalResult["reason"] = "provider",
+  ): DocumentRetrievalResult {
+    const reason =
+      error instanceof EmbeddingConfigurationError
+        ? "configuration"
+        : error instanceof EmbeddingProviderError
+          ? error.kind
+          : fallback;
+
+    this.logger.warn(JSON.stringify({
+      event: "knowledge.retrieval.degraded",
+      organizationId,
+      reason,
+      latencyMs: Date.now() - startedAt,
+    }));
+
+    return {
+      status: "degraded",
+      reason,
+      matches: [],
+      latencyMs: Date.now() - startedAt,
+    };
   }
 
   formatContext(matches: DocumentRetrievalMatch[]) {

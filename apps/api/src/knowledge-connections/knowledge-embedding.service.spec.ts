@@ -100,4 +100,30 @@ describe("knowledge embeddings provider request", () => {
       });
     }
   });
+
+  it("classifies an aborted embedding request as a timeout", async () => {
+    const originalFetch = globalThis.fetch;
+
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: async () => {
+        throw new DOMException("Request timed out", "TimeoutError");
+      },
+    });
+
+    try {
+      await assert.rejects(
+        () => embeddingServiceEmbed()(["Agency roster"], configuration),
+        (error: unknown) =>
+          error instanceof EmbeddingProviderError &&
+          error.kind === "timeout" &&
+          error.retryable === true,
+      );
+    } finally {
+      Object.defineProperty(globalThis, "fetch", {
+        configurable: true,
+        value: originalFetch,
+      });
+    }
+  });
 });

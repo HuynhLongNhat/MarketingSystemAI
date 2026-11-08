@@ -15,11 +15,16 @@ import {
   resolveCustomerSupportAgent,
   type CustomerSupportAgentConfig,
 } from "./customer-support-agent.js";
-import { selectKnowledge } from "./knowledge-ranking.js";
+import {
+  MAX_KNOWLEDGE_CHARACTERS,
+  selectKnowledge,
+  type KnowledgeItem,
+} from "./knowledge-ranking.js";
 import { AiUsageRecorder } from "./ai-usage-recorder.js";
 import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
 import {
   KnowledgeRetrievalService,
+  MAX_DOCUMENT_CONTEXT_CHARACTERS,
 } from "../knowledge-connections/knowledge-retrieval.service.js";
 
 type ChatMessage = {
@@ -157,6 +162,8 @@ const RETRY_BASE_DELAY_MS = 400;
 const MAX_RETRY_AFTER_MS = 2000;
 const MAX_DATABASE_INTEGER = 2_147_483_647;
 const MAX_COMPLETION_TOKENS = 600;
+const MAX_PROMPT_KNOWLEDGE_CHARACTERS =
+  MAX_KNOWLEDGE_CHARACTERS + MAX_DOCUMENT_CONTEXT_CHARACTERS + 1_000;
 
 function isTimeoutError(error: unknown): boolean {
   return (
@@ -339,9 +346,40 @@ export class PublicWidgetAiService {
   private async getKnowledgeContext(
     organizationId: string,
     latestQuestion: string,
-  ): Promise<{ context: string; count: number }> {
-    let faq: unknown[] = [];
+  ): Promise<{ context: string | null; count: number }> {
+    const faq = await this.loadRelevantFaq(organizationId, latestQuestion);
+    const documents = await this.retrieval.retrieve({
+      organizationId,
+      query: latestQuestion,
+    });
 
+    const documentContext = this.retrieval.formatContext(documents.matches);
+    const faqCount = faq.length;
+    const sections: string[] = [];
+
+    if (faq.length > 0) {
+      sections.push(`FAQ phù hợp:\n${JSON.stringify(faq)}`);
+    }
+
+    if (documentContext.length > 0) {
+      sections.push(
+        "Đoạn trích tài liệu phù hợp:\n" +
+          documentContext.map((document) =>
+            `[Nguồn: ${document.source.documentTitle}]\n${document.content}`,
+          ).join("\n\n"),
+      );
+    }
+
+    return {
+      context: sections.length > 0 ? sections.join("\n\n") : null,
+      count: faqCount + documentContext.length,
+    };
+  }
+
+  private async loadRelevantFaq(
+    organizationId: string,
+    latestQuestion: string,
+  ): Promise<KnowledgeItem[]> {
     try {
       const entries = await db
         .select({
@@ -354,31 +392,13 @@ export class PublicWidgetAiService {
         .orderBy(desc(knowledgeEntries.updatedAt))
         .limit(100);
 
-      if (entries.length === 0) {
-        faq = [];
-      } else {
-        faq = selectKnowledge(entries, latestQuestion);
-      }
+      return entries.length === 0
+        ? []
+        : selectKnowledge(entries, latestQuestion);
     } catch {
       this.logger.error("Could not load customer support knowledge context");
+      return [];
     }
-
-    const documents = await this.retrieval.retrieve({
-      organizationId,
-      query: latestQuestion,
-    });
-
-    const documentContext = this.retrieval.formatContext(documents.matches);
-    const faqCount = faq.length;
-
-    return {
-      context: JSON.stringify({
-        faq,
-        documents: documentContext,
-        retrievalStatus: documents.status,
-      }),
-      count: faqCount + documentContext.length,
-    };
   }
 
   private async countKnowledge(organizationId: string): Promise<number> {
@@ -560,8 +580,12 @@ export class PublicWidgetAiService {
     return this.getLegacyRuntime();
   }
 
+  private resolveAgent(organizationId: string) {
+    return resolveCustomerSupportAgent(organizationId);
+  }
+
   private buildSystemPrompt(
-    knowledgeContext: string,
+    knowledgeContext: string | null,
     agent: CustomerSupportAgentConfig | null,
   ): string {
     const instructions = [
@@ -674,7 +698,7 @@ export class PublicWidgetAiService {
     let runtime: RuntimeConfig | null = null;
 
     try {
-      const resolution = await resolveCustomerSupportAgent(organizationId);
+      const resolution = await this.resolveAgent(organizationId);
 
       if (resolution.kind === "ambiguous") {
         this.logger.warn(
@@ -699,13 +723,16 @@ export class PublicWidgetAiService {
       return { ok: false, code: "not_configured" };
     }
 
-    const knowledge = await this.getKnowledgeContext(
-      organizationId,
-      latestUserMessage.content,
+    // Reserve before semantic retrieval so a rejected chat never spends an
+    // embedding request. The reservation includes the maximum FAQ + document
+    // context that may be inserted after retrieval.
+    const requestedTokens = estimateReservationTokens(
+      this.buildSystemPrompt(
+        "x".repeat(MAX_PROMPT_KNOWLEDGE_CHARACTERS),
+        agent,
+      ),
+      messages,
     );
-
-    const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
-    const requestedTokens = estimateReservationTokens(systemPrompt, messages);
 
     let reservationId: string | null = null;
 
@@ -736,6 +763,12 @@ export class PublicWidgetAiService {
       this.logger.error("Could not reserve organization AI token quota");
       return { ok: false, code: "provider_error" };
     }
+
+    const knowledge = await this.getKnowledgeContext(
+      organizationId,
+      latestUserMessage.content,
+    );
+    const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
 
     let usageReliable = true;
     let lastFailure: ProviderErrorCode = "provider_error";

@@ -54,6 +54,7 @@ export class EmbeddingProviderError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
+    readonly kind: "timeout" | "network" | "provider" = "provider",
   ) {
     super(message);
     this.name = "EmbeddingProviderError";
@@ -280,10 +281,21 @@ export class KnowledgeEmbeddingService {
         signal: AbortSignal.timeout(timeoutMs),
         redirect: "error",
       });
-    } catch {
+    } catch (error) {
+      const kind =
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
+          ? "timeout"
+          : error instanceof TypeError
+            ? "network"
+            : "provider";
+
       throw new EmbeddingProviderError(
-        "Embedding provider is temporarily unavailable",
+        kind === "timeout"
+          ? "Embedding provider request timed out"
+          : "Embedding provider is temporarily unavailable",
         true,
+        kind,
       );
     }
 
@@ -308,6 +320,7 @@ export class KnowledgeEmbeddingService {
       throw new EmbeddingProviderError(
         message,
         retryable,
+        "provider",
       );
     }
 
