@@ -12,6 +12,8 @@ export interface CustomerSupportReplyJobData {
   conversationId: string;
   triggerMessageId: string;
   createdAt: string;
+  /** Correlation ID xuyên suốt API -> BullMQ -> Worker -> LLM (chỉ để trace). */
+  traceId?: string;
 }
 
 export interface KnowledgeIngestionJobData {
@@ -94,11 +96,13 @@ export class JobsService {
     organizationId: string;
     conversationId: string;
     triggerMessageId: string;
+    traceId?: string;
   }) {
     const {
       organizationId,
       conversationId,
       triggerMessageId,
+      traceId,
     } = input;
 
     if (
@@ -119,6 +123,7 @@ export class JobsService {
       conversationId,
       triggerMessageId,
       createdAt: new Date().toISOString(),
+      ...(traceId ? { traceId } : {}),
     };
 
     const job = await this.queue.add(

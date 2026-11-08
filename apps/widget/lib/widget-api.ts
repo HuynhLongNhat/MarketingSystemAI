@@ -44,6 +44,10 @@ export type WidgetMessage = {
   createdAt: string;
 };
 
+export type WidgetTypingStatus = {
+  kind: "human" | "ai" | "none";
+};
+
 type MessagePage = {
   items: WidgetMessage[];
   hasMore: boolean;
@@ -212,6 +216,14 @@ export const widgetApi = {
 
     return request<MessagePage>(
       `/conversations/${encodeURIComponent(id)}/messages${query}`,
+      {},
+      token,
+    );
+  },
+
+  getTypingStatus(token: string, id: string) {
+    return request<WidgetTypingStatus>(
+      `/conversations/${encodeURIComponent(id)}/typing`,
       {},
       token,
     );

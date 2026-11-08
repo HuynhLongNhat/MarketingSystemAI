@@ -24,6 +24,11 @@ import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
 import {
   KnowledgeRetrievalService,
 } from "../knowledge-connections/knowledge-retrieval.service.js";
+import {
+  expectedEvidencePresence,
+  ragTraceLog,
+  type RagTrace,
+} from "./rag-trace.js";
 
 type ChatMessage = {
   role: string;
@@ -342,6 +347,7 @@ export class PublicWidgetAiService {
   private async getKnowledgeContext(
     organizationId: string,
     latestQuestion: string,
+    trace?: RagTrace,
   ): Promise<{ context: string | null; count: number }> {
     const faq = await this.loadRelevantFaq(organizationId, latestQuestion);
     const documents = await this.retrieval.retrieve({
@@ -366,8 +372,29 @@ export class PublicWidgetAiService {
       );
     }
 
+    const context = sections.length > 0 ? sections.join("\n\n") : null;
+
+    // Phân biệt A (retrieval có kết quả) và B (context bị mất sau retrieval):
+    // so sánh hybridMatches/selectedChunkIds với contextLength/documentSections.
+    ragTraceLog(this.logger, "context.built", trace, {
+      organizationId,
+      queryLength: latestQuestion.length,
+      retrievalStatus: documents.status,
+      retrievalReason: documents.reason ?? null,
+      semanticCandidates: documents.stats?.semanticCandidates ?? null,
+      lexicalCandidates: documents.stats?.lexicalCandidates ?? null,
+      hybridMatches: documents.stats?.hybridMatches ?? documents.matches.length,
+      embeddingUsed: documents.stats?.embeddingUsed ?? null,
+      selectedChunkIds: documents.matches.map((match) => match.chunkId),
+      selectedChunkLengths: documents.matches.map((match) => match.content.length),
+      documentSections: documentContext.length,
+      faqCount,
+      contextLength: context?.length ?? 0,
+      evidence: expectedEvidencePresence(context),
+    });
+
     return {
-      context: sections.length > 0 ? sections.join("\n\n") : null,
+      context,
       count: faqCount + documentContext.length,
     };
   }
@@ -675,8 +702,21 @@ export class PublicWidgetAiService {
   private async run(
     history: ChatMessage[],
     organizationId: string,
+    trace?: RagTrace,
   ): Promise<AiGenerationResult> {
     const startedAt = Date.now();
+    const fail = (
+      code: AiFailureCode,
+      stage: string,
+    ): AiGenerationResult => {
+      ragTraceLog(this.logger, "llm.failed", trace, {
+        organizationId,
+        code,
+        stage,
+        latencyMs: Date.now() - startedAt,
+      });
+      return { ok: false, code };
+    };
 
     const messages = history
       .filter(
@@ -695,7 +735,7 @@ export class PublicWidgetAiService {
       .find((item) => item.role === "user");
 
     if (!latestUserMessage) {
-      return { ok: false, code: "no_user_message" };
+      return fail("no_user_message", "history");
     }
 
     let agent: CustomerSupportAgentConfig | null = null;
@@ -708,7 +748,7 @@ export class PublicWidgetAiService {
         this.logger.warn(
           "Multiple active customer support Agents found in one organization",
         );
-        return { ok: false, code: "agent_ambiguous" };
+        return fail("agent_ambiguous", "agent");
       }
 
       if (resolution.kind === "selected") {
@@ -720,12 +760,24 @@ export class PublicWidgetAiService {
       this.logger.error(
         "Could not resolve customer support Agent configuration",
       );
-      return { ok: false, code: "not_configured" };
+      return fail("not_configured", "agent_exception");
     }
 
     if (!runtime) {
-      return { ok: false, code: "not_configured" };
+      return fail("not_configured", "runtime");
     }
+
+    ragTraceLog(this.logger, "runtime.resolved", trace, {
+      organizationId,
+      agentId: agent?.id ?? null,
+      agentName: agent?.name ?? null,
+      agentPromptLength: agent?.systemPrompt?.length ?? 0,
+      runtimeSource: runtime.source,
+      provider: runtime.provider,
+      modelId: runtime.modelId,
+      endpointHost: new URL(runtime.endpoint).host,
+      historyMessages: messages.length,
+    });
 
     // Phase one reserves only the request without retrieved context. This is
     // the minimum known cost before an embedding call, so exhausted quotas do
@@ -754,7 +806,7 @@ export class PublicWidgetAiService {
             `limit=${baseReservation.monthlyTokenLimit}`,
         );
 
-        return { ok: false, code: "quota_exceeded" };
+        return fail("quota_exceeded", "quota_before_retrieval");
       }
 
       if (baseReservation.limited && baseReservation.allowed) {
@@ -764,6 +816,7 @@ export class PublicWidgetAiService {
       const knowledge = await this.getKnowledgeContext(
         organizationId,
         latestUserMessage.content,
+        trace,
       );
       const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
       const requestedTokens = estimateReservationTokens(systemPrompt, messages);
@@ -783,13 +836,23 @@ export class PublicWidgetAiService {
             organizationId,
             requestedTokens: contextReservation.requestedTokens,
           }));
-          return { ok: false, code: "quota_exceeded" };
+          return fail("quota_exceeded", "quota_after_retrieval");
         }
 
         if (contextReservation.limited && contextReservation.allowed) {
           reservationIds.push(contextReservation.reservationId);
         }
       }
+
+      ragTraceLog(this.logger, "llm.request", trace, {
+        organizationId,
+        systemPromptLength: systemPrompt.length,
+        knowledgeInPrompt: knowledge.context !== null &&
+          systemPrompt.includes(knowledge.context),
+        messageCount: messages.length + 1,
+        maxCompletionTokens: MAX_COMPLETION_TOKENS,
+        requestedTokensEstimate: requestedTokens,
+      });
 
       let lastFailure: ProviderErrorCode = "provider_error";
 
@@ -854,10 +917,7 @@ export class PublicWidgetAiService {
             );
 
             if (!canRetry) {
-              return {
-                ok: false,
-                code: lastFailure,
-              };
+              return fail(lastFailure, `http_${response.status}`);
             }
 
             await sleep(retryAfterMs ?? getRetryDelay(attempt));
@@ -881,10 +941,17 @@ export class PublicWidgetAiService {
 
             this.logger.warn("Customer support AI returned an empty response");
 
-            return {
-              ok: false,
-              code: "empty_response",
-            };
+            const choice = (data as {
+              choices?: Array<{ finish_reason?: unknown }>;
+            }).choices?.[0];
+            ragTraceLog(this.logger, "llm.empty", trace, {
+              organizationId,
+              finishReason: choice?.finish_reason ?? null,
+              completionTokens:
+                extractProviderUsage(data.usage).outputTokens,
+            });
+
+            return fail("empty_response", "empty_content");
           }
 
           const usageRecorded = await this.recordUsage(
@@ -897,6 +964,18 @@ export class PublicWidgetAiService {
           );
 
           usageReliable = usageReliable && usageRecorded;
+
+          ragTraceLog(this.logger, "llm.ok", trace, {
+            organizationId,
+            replyLength: reply.length,
+            truncated: reply.length > MAX_REPLY_LENGTH,
+            finishReason: (data as {
+              choices?: Array<{ finish_reason?: unknown }>;
+            }).choices?.[0]?.finish_reason ?? null,
+            usage: extractProviderUsage(data.usage),
+            knowledgeMatched: knowledge.count,
+            latencyMs: Date.now() - startedAt,
+          });
 
           return {
             ok: true,
@@ -928,10 +1007,7 @@ export class PublicWidgetAiService {
 
             this.logger.error("Customer support AI generation failed");
 
-            return {
-              ok: false,
-              code: "provider_error",
-            };
+            return fail("provider_error", "unexpected_error");
           }
 
           const usageRecorded = await this.recordUsage(
@@ -966,15 +1042,16 @@ export class PublicWidgetAiService {
           `code=${lastFailure}`,
       );
 
-      return {
-        ok: false,
-        code: lastFailure,
-      };
-    } catch {
+      return fail(lastFailure, "attempts_exhausted");
+    } catch (error) {
       // Fail closed. The finally block releases any live reservation made
       // before retrieval, formatting, or a supplemental reservation failed.
       this.logger.error("Could not prepare customer support AI request");
-      return { ok: false, code: "provider_error" };
+      ragTraceLog(this.logger, "prepare.error", trace, {
+        organizationId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      return fail("provider_error", "prepare_exception");
     } finally {
       await this.settleQuotaReservation(
         organizationId,
@@ -987,8 +1064,9 @@ export class PublicWidgetAiService {
   async generateReply(
     history: ChatMessage[],
     organizationId: string,
+    trace?: RagTrace,
   ): Promise<string | null> {
-    const result = await this.run(history, organizationId);
+    const result = await this.run(history, organizationId, trace);
 
     return result.ok ? result.reply : null;
   }
@@ -996,8 +1074,9 @@ export class PublicWidgetAiService {
   generatePlaygroundReply(
     history: ChatMessage[],
     organizationId: string,
+    trace?: RagTrace,
   ): Promise<AiGenerationResult> {
-    return this.run(history, organizationId);
+    return this.run(history, organizationId, trace);
   }
 
   async getPlaygroundOverview(

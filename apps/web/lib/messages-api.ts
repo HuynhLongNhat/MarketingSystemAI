@@ -63,6 +63,16 @@ export const messagesApi = {
     );
   },
 
+  setTyping(conversationId: string, active: boolean) {
+    return apiFetch<{ active: boolean }>(
+      `${conversationPath(conversationId)}/typing`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ active }),
+      },
+    );
+  },
+
   enhance(conversationId: string, prompt: string) {
     return apiFetch<EnhancedMessageResponse>(
       `${conversationPath(conversationId)}/enhance`,

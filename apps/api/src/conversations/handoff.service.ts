@@ -3,7 +3,6 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import {
   db,
   conversations,
@@ -14,9 +13,12 @@ import {
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { RequestContext } from "../auth/request-context.js";
+import { ConversationTypingService } from "./conversation-typing.service.js";
 
 @Injectable()
 export class HandoffService {
+  constructor(private readonly typing: ConversationTypingService) {}
+
   async listQueue(
     context: RequestContext,
     filter: "all" | "unassigned" | "mine" = "all",
@@ -125,6 +127,7 @@ export class HandoffService {
         );
       }
 
+      await this.typing.clearAiTyping(context.organizationId, conversationId);
       return updated;
     });
   }
@@ -195,6 +198,7 @@ export class HandoffService {
         throw new NotFoundException("Conversation not found");
       }
 
+      await this.typing.clearAiTyping(context.organizationId, conversationId);
       return updated;
     });
   }

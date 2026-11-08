@@ -5,8 +5,10 @@ import {
   Param,
   Post,
   Query,
+  Patch,
   UseGuards,
 } from "@nestjs/common";
+import { IsBoolean } from "class-validator";
 
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
@@ -21,6 +23,11 @@ import { MessagesService } from "./messages.service.js";
 import { MessageEnhancementService } from "./message-enhancement.service.js";
 import { CreateMessageDto, ListMessagesQueryDto } from "./messages.dto.js";
 import { EnhanceMessageDto } from "./enhance-message.dto.js";
+
+class UpdateTypingDto {
+  @IsBoolean()
+  active!: boolean;
+}
 
 @ApiTags("Messages")
 @Controller("conversations/:conversationId/messages")
@@ -55,6 +62,17 @@ export class MessagesController {
     @Body() dto: CreateMessageDto,
   ) {
     return this.service.createOperatorMessage(context, conversationId, dto);
+  }
+
+  @Patch("typing")
+  @RequirePermissions(PERMISSIONS.CONVERSATION_REPLY)
+  @ApiOperation({ summary: "Update operator typing state" })
+  setTyping(
+    @CurrentContext() context: RequestContext,
+    @Param("conversationId") conversationId: string,
+    @Body() dto: UpdateTypingDto,
+  ) {
+    return this.service.setOperatorTyping(context, conversationId, dto.active);
   }
 
   @Post("enhance")

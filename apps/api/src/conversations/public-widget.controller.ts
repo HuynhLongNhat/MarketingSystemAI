@@ -161,6 +161,15 @@ export class PublicWidgetController {
     return this.service.listMessages(this.token(authorization), id, before);
   }
 
+  @Get("conversations/:id/typing")
+  @ApiOperation({ summary: "Get public conversation typing state" })
+  getTypingStatus(
+    @Headers("authorization") authorization: string,
+    @Param("id") id: string,
+  ) {
+    return this.service.getTypingStatus(this.token(authorization), id);
+  }
+
   @Post("conversations/:id/messages")
   @SetMetadata(WIDGET_RATE_LIMIT_KEY, "send-message")
   sendMessage(

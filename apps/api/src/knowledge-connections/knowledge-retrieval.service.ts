@@ -45,6 +45,13 @@ export type DocumentRetrievalResult = {
   matches: DocumentRetrievalMatch[];
   latencyMs: number;
   diagnostic?: DocumentRetrievalDiagnostic;
+  /** Số liệu an toàn để trace, không chứa nội dung. */
+  stats?: {
+    lexicalCandidates: number;
+    semanticCandidates: number | null;
+    hybridMatches: number;
+    embeddingUsed: boolean;
+  };
 };
 
 export type DocumentRetrievalDiagnostic = {
@@ -110,10 +117,23 @@ export class KnowledgeRetrievalService {
       );
     } catch (error) {
       if (lexical.length > 0) {
+        const lexicalOnly = lexical.slice(0, input.limit ?? MAX_RETRIEVAL_RESULTS);
+        this.logger.warn(JSON.stringify({
+          event: "knowledge.retrieval.lexical_only",
+          organizationId: input.organizationId,
+          reason: error instanceof Error ? error.name : "unknown",
+          count: lexicalOnly.length,
+        }));
         return {
           status: "ok",
-          matches: lexical.slice(0, input.limit ?? MAX_RETRIEVAL_RESULTS),
+          matches: lexicalOnly,
           latencyMs: Date.now() - startedAt,
+          stats: {
+            lexicalCandidates: lexical.length,
+            semanticCandidates: null,
+            hybridMatches: lexicalOnly.length,
+            embeddingUsed: false,
+          },
         };
       }
       return this.degraded(input.organizationId, startedAt, error, "provider", input.diagnostic);
@@ -199,6 +219,12 @@ export class KnowledgeRetrievalService {
         matches,
         latencyMs: Date.now() - startedAt,
         diagnostic,
+        stats: {
+          lexicalCandidates: lexical.length,
+          semanticCandidates: semantic.length,
+          hybridMatches: hybrid.length,
+          embeddingUsed: true,
+        },
       };
     } catch (error) {
       return this.degraded(input.organizationId, startedAt, error, "database", input.diagnostic);

@@ -126,6 +126,9 @@ export const ConversationIdView = ({
   const requestGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
   const sendingRef = useRef(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingActiveRef = useRef(false);
+  const lastTypingSignalRef = useRef(0);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -256,6 +259,39 @@ export const ConversationIdView = ({
     return () => clearInterval(interval);
   }, [isLoading, loadError, refreshLatest]);
 
+  const stopOperatorTyping = useCallback(() => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    if (!typingActiveRef.current) return;
+    typingActiveRef.current = false;
+    void messagesApi.setTyping(conversationId, false).catch(() => undefined);
+  }, [conversationId]);
+
+  const reportOperatorTyping = useCallback((value: string) => {
+    if (!value.trim()) {
+      stopOperatorTyping();
+      return;
+    }
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+    const now = Date.now();
+    const sinceLastSignal = now - lastTypingSignalRef.current;
+    const delay = typingActiveRef.current
+      ? Math.max(0, 3500 - sinceLastSignal)
+      : 350;
+
+    typingTimerRef.current = setTimeout(() => {
+      typingTimerRef.current = null;
+      typingActiveRef.current = true;
+      lastTypingSignalRef.current = Date.now();
+      void messagesApi.setTyping(conversationId, true).catch(() => undefined);
+    }, delay);
+  }, [conversationId, stopOperatorTyping]);
+
+  useEffect(() => () => stopOperatorTyping(), [stopOperatorTyping]);
+
   const handleLoadMore = useCallback(async () => {
     if (!hasMore || !nextCursor || loadingMoreRef.current) {
       return;
@@ -334,6 +370,7 @@ export const ConversationIdView = ({
 
     sendingRef.current = true;
     setIsSending(true);
+    stopOperatorTyping();
 
     try {
       const created = await messagesApi.create(conversationId, content);
@@ -450,8 +487,14 @@ export const ConversationIdView = ({
               render={({ field }) => (
                 <AIInputTextarea
                   disabled={isResolved || isSending}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
+                  onChange={(event) => {
+                    field.onChange(event);
+                    reportOperatorTyping(event.target.value);
+                  }}
+                  onBlur={() => {
+                    field.onBlur();
+                    stopOperatorTyping();
+                  }}
                   onKeyDown={(event) => {
                     if (
                       event.key === "Enter" &&

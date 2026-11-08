@@ -6,6 +6,7 @@ import { NestFactory } from "@nestjs/core";
 
 import { environment, validateServerEnvironment } from "./env.js";
 import { WorkerModule } from "./worker.module.js";
+import { ragTraceLog, runtimeFingerprint } from "./conversations/rag-trace.js";
 import { pool, verifyDatabaseEnvironment } from "@workspace/db/node";
 async function bootstrap(): Promise<void> {
   // Validate environment before starting the Worker.
@@ -21,6 +22,9 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   logger.log(`CompanyMarketingSystem Worker started (${environment})`);
+  ragTraceLog(logger, "worker.boot", undefined, {
+    runtime: runtimeFingerprint(),
+  });
 }
 
 bootstrap().catch((error: unknown) => {

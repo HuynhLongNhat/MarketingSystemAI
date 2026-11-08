@@ -20,6 +20,10 @@ import {
 import { TenantJobAuthorization } from "./tenant-job-authorization.js";
 
 import { PublicWidgetService } from "../conversations/public-widget.service.js";
+import {
+  ragTraceLog,
+  runtimeFingerprint,
+} from "../conversations/rag-trace.js";
 
 import type {
   CustomerSupportReplyJobData,
@@ -181,10 +185,27 @@ export class JobsProcessor extends WorkerHost {
       }),
     );
 
+    const trace = {
+      traceId: data.traceId ?? `no-trace-${job.id}`,
+      jobId: job.id === undefined ? null : String(job.id),
+      attempt: job.attemptsMade + 1,
+    };
+
+    // Nếu dòng này không xuất hiện (hoặc thiếu marker mới) trong log của
+    // Worker bạn đang xem, job đã được một Worker/tiến trình khác xử lý.
+    ragTraceLog(this.logger, "worker.received", trace, {
+      organizationId: data.organizationId,
+      conversationId: data.conversationId,
+      triggerMessageId: data.triggerMessageId,
+      queuedAt: data.createdAt ?? null,
+      runtime: runtimeFingerprint(),
+    });
+
     await this.publicWidgetService.processAiReply({
       organizationId: data.organizationId,
       conversationId: data.conversationId,
       triggerMessageId: data.triggerMessageId,
+      trace,
     });
 
     this.logger.log(

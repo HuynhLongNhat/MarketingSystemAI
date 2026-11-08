@@ -20,12 +20,19 @@ import {
 import { and, desc, eq, gt, lt, or } from "drizzle-orm";
 
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
+import { ConversationTypingService } from "./conversation-typing.service.js";
 import { JobsService } from "../jobs/jobs.service.js";
 import {
   decideReplyAction,
   type ReplyDecision,
   safeErrorSummary,
 } from "./reply-guard.js";
+import {
+  newTraceId,
+  ragTraceLog,
+  runtimeFingerprint,
+  type RagTrace,
+} from "./rag-trace.js";
 
 type ContactDetails = {
   name?: string;
@@ -49,6 +56,7 @@ export class PublicWidgetService {
   constructor(
     private readonly aiService: PublicWidgetAiService,
     private readonly jobsService: JobsService,
+    private readonly typing: ConversationTypingService,
   ) {}
 
   private hashToken(token: string) {
@@ -262,6 +270,18 @@ export class PublicWidgetService {
     return this.requireConversation(token, conversationId);
   }
 
+  async getTypingStatus(token: string, conversationId: string) {
+    const conversation = await this.requireConversation(token, conversationId);
+    const assignedToHuman = Boolean(conversation.assignedToUserId);
+
+    return this.typing.getStatus({
+      organizationId: conversation.organizationId,
+      conversationId,
+      allowHuman: assignedToHuman,
+      allowAi: conversation.status === "unresolved" && !assignedToHuman,
+    });
+  }
+
   async listMessages(token: string, conversationId: string, before?: string) {
     const conversation = await this.requireConversation(token, conversationId);
 
@@ -310,8 +330,23 @@ export class PublicWidgetService {
     organizationId: string;
     conversationId: string;
     triggerMessageId: string;
+    trace?: RagTrace;
   }): Promise<void> {
-    const { organizationId, conversationId, triggerMessageId } = input;
+    const { organizationId, conversationId, triggerMessageId, trace } = input;
+
+    const skip = (reason: string) =>
+      ragTraceLog(this.logger, "worker.skipped", trace, {
+        organizationId,
+        conversationId,
+        triggerMessageId,
+        reason,
+      });
+
+    await this.typing.setAiTyping({
+      organizationId,
+      conversationId,
+      triggerMessageId,
+    });
 
     try {
       const [triggerMessage] = await db
@@ -334,6 +369,7 @@ export class PublicWidgetService {
         this.logger.warn(
           `Customer support trigger message not found: ${triggerMessageId}`,
         );
+        skip("trigger_message_not_found");
         return;
       }
 
@@ -355,6 +391,11 @@ export class PublicWidgetService {
         beforeGeneration?.status !== "unresolved" ||
         beforeGeneration.assignedToUserId
       ) {
+        skip(
+          beforeGeneration?.status !== "unresolved"
+            ? `conversation_status_${beforeGeneration?.status ?? "missing"}`
+            : "assigned_to_human",
+        );
         return;
       }
 
@@ -377,6 +418,7 @@ export class PublicWidgetService {
         .limit(1);
 
       if (latestBefore?.id !== triggerMessageId) {
+        skip("superseded_before_generation");
         return;
       }
 
@@ -402,6 +444,7 @@ export class PublicWidgetService {
         .limit(1);
 
       if (alreadyProcessed) {
+        skip("already_processed");
         return;
       }
 
@@ -426,6 +469,7 @@ export class PublicWidgetService {
       const reply = await this.aiService.generateReply(
         history.reverse(),
         organizationId,
+        trace,
       );
 
       const decision: ReplyDecision = await db.transaction(async (tx) => {
@@ -534,6 +578,16 @@ export class PublicWidgetService {
         return action;
       });
 
+      // D: phân biệt "LLM trả lời đúng nhưng lưu sai" với các nhánh khác.
+      ragTraceLog(this.logger, "worker.decision", trace, {
+        organizationId,
+        conversationId,
+        triggerMessageId,
+        decision,
+        replyPresent: Boolean(reply?.trim()),
+        replyLength: reply?.length ?? 0,
+      });
+
       if (decision === "handoff_fallback") {
         this.logger.warn(
           `AI fallback activated for conversation ${conversationId}`,
@@ -554,6 +608,8 @@ export class PublicWidgetService {
 
       // Không nuốt lỗi: BullMQ cần nhận lỗi để thực hiện retry.
       throw error;
+    } finally {
+      await this.typing.clearAiTyping(organizationId, conversationId);
     }
   }
 
@@ -641,10 +697,25 @@ export class PublicWidgetService {
     triggerMessageId: string,
   ): Promise<void> {
     try {
-      await this.jobsService.enqueueCustomerSupportReply({
+      const traceId = newTraceId();
+      const queued = await this.jobsService.enqueueCustomerSupportReply({
         organizationId,
         conversationId,
         triggerMessageId,
+        traceId,
+      });
+
+      await this.typing.setAiTyping({
+        organizationId,
+        conversationId,
+        triggerMessageId,
+      });
+
+      ragTraceLog(this.logger, "api.enqueued", { traceId, jobId: String(queued.jobId) }, {
+        organizationId,
+        conversationId,
+        triggerMessageId,
+        runtime: runtimeFingerprint(),
       });
     } catch (error) {
       this.logger.error(
@@ -771,6 +842,10 @@ export class PublicWidgetService {
     if (result.kind === "inserted") {
       if (result.status === "unresolved" && !result.assignedToUserId) {
         if (this.isHumanSupportRequest(trimmed)) {
+          await this.typing.clearAiTyping(
+            conversation.organizationId,
+            conversationId,
+          );
           await this.handoffToHuman(
             conversation.organizationId,
             conversationId,

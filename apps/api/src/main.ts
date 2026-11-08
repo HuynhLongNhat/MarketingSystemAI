@@ -14,6 +14,7 @@ import { toNodeHandler } from "better-auth/node";
 import type { Request, Response, NextFunction } from "express";
 
 import { AppModule } from "./app.module.js";
+import { ragTraceLog, runtimeFingerprint } from "./conversations/rag-trace.js";
 import { auth } from "./auth.js";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter.js";
 import { RequestLoggingInterceptor } from "./common/interceptors/request-logging.interceptor.js";
@@ -123,6 +124,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(port);
 
   logger.log(`API: http://localhost:${port}/v1`);
+  ragTraceLog(logger, "api.boot", undefined, { runtime: runtimeFingerprint() });
   logger.log(`Auth: http://localhost:${port}/api/auth`);
 
   if (

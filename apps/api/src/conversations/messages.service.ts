@@ -12,6 +12,7 @@ import type {
 } from "../auth/request-context.js";
 
 import { MessagesRepository } from "./messages.repository.js";
+import { ConversationTypingService } from "./conversation-typing.service.js";
 
 import {
   CreateMessageDto,
@@ -22,7 +23,41 @@ import {
 export class MessagesService {
   constructor(
     private readonly repository: MessagesRepository,
+    private readonly typing: ConversationTypingService,
   ) {}
+
+  async setOperatorTyping(
+    context: RequestContext,
+    conversationId: string,
+    active: boolean,
+  ) {
+    const conversation = await this.repository.findConversation(
+      context.organizationId,
+      conversationId,
+    );
+
+    if (!conversation) {
+      throw new NotFoundException("Conversation not found");
+    }
+
+    if (
+      conversation.status === "resolved" ||
+      conversation.assignedToUserId !== context.userId
+    ) {
+      throw new BadRequestException(
+        "Claim this conversation before updating typing state",
+      );
+    }
+
+    await this.typing.setHumanTyping({
+      organizationId: context.organizationId,
+      conversationId,
+      userId: context.userId,
+      active,
+    });
+
+    return { active };
+  }
 
   async listMessages(
     context: RequestContext,
@@ -152,6 +187,13 @@ export class MessagesService {
         content,
         senderId: context.userId,
       });
+
+    await this.typing.setHumanTyping({
+      organizationId: context.organizationId,
+      conversationId,
+      userId: context.userId,
+      active: false,
+    });
 
     if (result.outcome === "not_found") {
       throw new NotFoundException(

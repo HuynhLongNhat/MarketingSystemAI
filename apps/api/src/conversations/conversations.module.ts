@@ -28,6 +28,7 @@ import { PublicWidgetOriginGuard } from "./public-widget-origin.guard.js";
 
 import { HandoffController } from "./handoff.controller.js";
 import { HandoffService } from "./handoff.service.js";
+import { ConversationTypingService } from "./conversation-typing.service.js";
 
 @Module({
   imports: [JobsModule, KnowledgeConnectionsModule],
@@ -52,6 +53,7 @@ import { HandoffService } from "./handoff.service.js";
     PublicWidgetRateLimitGuard,
     PublicWidgetOriginGuard,
     HandoffService,
+    ConversationTypingService,
     AuthGuard,
     PermissionsGuard,
   ],

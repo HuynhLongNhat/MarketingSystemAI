@@ -1,0 +1,972 @@
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/package.json MarketingSystemAI-main/apps/api/package.json
+--- a/apps/api/package.json	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/package.json	2026-11-08 09:59:05.639238623 +0000
+@@ -16,7 +16,7 @@
+     "test:security": "tsc -p tsconfig.security-test.json && node --test dist-security-test/security/security.spec.js",
+     "test:security:http": "tsc -p tsconfig.security-test.json && node --test dist-security-test/security/security-http.spec.js",
+     "test:auth": "tsc -p tsconfig.security-test.json && node --test dist-security-test/auth/ dist-security-test/common/sms/",
+-    "test:chat": "tsc -p tsconfig.security-test.json && node --test dist-security-test/conversations/knowledge-ranking.spec.js dist-security-test/conversations/reply-guard.spec.js dist-security-test/conversations/playground-policy.spec.js dist-security-test/conversations/public-widget-ai.rag.spec.js"
++    "test:chat": "tsc -p tsconfig.security-test.json && node --test dist-security-test/conversations/knowledge-ranking.spec.js dist-security-test/conversations/reply-guard.spec.js dist-security-test/conversations/playground-policy.spec.js dist-security-test/conversations/public-widget-ai.rag.spec.js dist-security-test/conversations/rag-trace.spec.js"
+   },
+   "dependencies": {
+     "@better-auth/drizzle-adapter": "1.7.13",
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/scripts/rag-trace-probe.mjs MarketingSystemAI-main/apps/api/scripts/rag-trace-probe.mjs
+--- a/apps/api/scripts/rag-trace-probe.mjs	1970-01-01 00:00:00.000000000 +0000
++++ b/apps/api/scripts/rag-trace-probe.mjs	2026-11-08 10:00:01.827577456 +0000
+@@ -0,0 +1,78 @@
++/**
++ * DEV ONLY. Chạy đúng code retrieval + prompt + chat completion của Widget
++ * trên DB/provider thật của bạn, không qua queue, không tạo conversation.
++ *
++ *   pnpm --filter @workspace/api build
++ *   cd apps/api
++ *   RAG_TRACE=1 RAG_TRACE_EXPECT="9.500.000" \
++ *   node scripts/rag-trace-probe.mjs <organizationId> "Website bán hàng giá bao nhiêu?" [--llm]
++ *
++ * Không có --llm: chỉ chạy retrieval (phân biệt A/B). Có --llm: gọi cả provider
++ * thật (phân biệt C/D). organizationId PHẢI là org mà Widget đang dùng.
++ * Script này không in nội dung chunk, chỉ in ID/độ dài/số lượng.
++ */
++import "reflect-metadata";
++import "../dist/env.js";
++
++import { KnowledgeEmbeddingService } from "../dist/knowledge-connections/knowledge-embedding.service.js";
++import { KnowledgeRetrievalService } from "../dist/knowledge-connections/knowledge-retrieval.service.js";
++import { PublicWidgetAiService } from "../dist/conversations/public-widget-ai.service.js";
++import { AiUsageRecorder } from "../dist/conversations/ai-usage-recorder.js";
++import { AiUsageQuotaService } from "../dist/conversations/ai-usage-quota.service.js";
++import { expectedEvidencePresence, newTraceId, runtimeFingerprint } from "../dist/conversations/rag-trace.js";
++import { pool } from "@workspace/db/node";
++
++const [organizationId, question, flag] = process.argv.slice(2);
++
++if (!organizationId || !question) {
++  console.error('Usage: node scripts/rag-trace-probe.mjs <organizationId> "<question>" [--llm]');
++  process.exit(2);
++}
++
++const embeddings = new KnowledgeEmbeddingService();
++const retrieval = new KnowledgeRetrievalService(embeddings);
++
++console.log(JSON.stringify({ step: "runtime", ...runtimeFingerprint() }));
++
++const result = await retrieval.retrieve({ organizationId, query: question, diagnostic: true });
++const context = retrieval
++  .formatContext(result.matches)
++  .map((item) => item.content)
++  .join("\n\n");
++
++console.log(JSON.stringify({
++  step: "retrieval",
++  status: result.status,
++  reason: result.reason ?? null,
++  stats: result.stats ?? null,
++  chunkIds: result.matches.map((match) => match.chunkId),
++  chunkLengths: result.matches.map((match) => match.content.length),
++  contextLength: context.length,
++  evidence: expectedEvidencePresence(context),
++  noMatchReason: result.diagnostic?.noMatchReason ?? null,
++  totalChunks: result.diagnostic?.totalChunks ?? null,
++  totalEmbeddings: result.diagnostic?.totalEmbeddings ?? null,
++}));
++
++if (flag === "--llm") {
++  const ai = new PublicWidgetAiService(new AiUsageRecorder(), new AiUsageQuotaService(), retrieval);
++  const traceId = newTraceId();
++  const outcome = await ai.generatePlaygroundReply([{ role: "user", content: question }], organizationId, {
++    traceId,
++    jobId: "probe",
++    attempt: 1,
++  });
++  console.log(JSON.stringify({
++    step: "llm",
++    traceId,
++    ok: outcome.ok,
++    code: outcome.ok ? null : outcome.code,
++    knowledgeMatched: outcome.ok ? outcome.meta.knowledgeMatched : null,
++    model: outcome.ok ? outcome.meta.modelId : null,
++    replyLength: outcome.ok ? outcome.reply.length : null,
++    // Chỉ để bạn tự đọc trong terminal của mình.
++    reply: outcome.ok ? outcome.reply : null,
++  }));
++}
++
++await pool.end();
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/conversations/public-widget-ai.service.ts MarketingSystemAI-main/apps/api/src/conversations/public-widget-ai.service.ts
+--- a/apps/api/src/conversations/public-widget-ai.service.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/conversations/public-widget-ai.service.ts	2026-11-08 10:00:06.532591146 +0000
+@@ -24,6 +24,11 @@
+ import {
+   KnowledgeRetrievalService,
+ } from "../knowledge-connections/knowledge-retrieval.service.js";
++import {
++  expectedEvidencePresence,
++  ragTraceLog,
++  type RagTrace,
++} from "./rag-trace.js";
+ 
+ type ChatMessage = {
+   role: string;
+@@ -342,6 +347,7 @@
+   private async getKnowledgeContext(
+     organizationId: string,
+     latestQuestion: string,
++    trace?: RagTrace,
+   ): Promise<{ context: string | null; count: number }> {
+     const faq = await this.loadRelevantFaq(organizationId, latestQuestion);
+     const documents = await this.retrieval.retrieve({
+@@ -366,8 +372,29 @@
+       );
+     }
+ 
++    const context = sections.length > 0 ? sections.join("\n\n") : null;
++
++    // Phân biệt A (retrieval có kết quả) và B (context bị mất sau retrieval):
++    // so sánh hybridMatches/selectedChunkIds với contextLength/documentSections.
++    ragTraceLog(this.logger, "context.built", trace, {
++      organizationId,
++      queryLength: latestQuestion.length,
++      retrievalStatus: documents.status,
++      retrievalReason: documents.reason ?? null,
++      semanticCandidates: documents.stats?.semanticCandidates ?? null,
++      lexicalCandidates: documents.stats?.lexicalCandidates ?? null,
++      hybridMatches: documents.stats?.hybridMatches ?? documents.matches.length,
++      embeddingUsed: documents.stats?.embeddingUsed ?? null,
++      selectedChunkIds: documents.matches.map((match) => match.chunkId),
++      selectedChunkLengths: documents.matches.map((match) => match.content.length),
++      documentSections: documentContext.length,
++      faqCount,
++      contextLength: context?.length ?? 0,
++      evidence: expectedEvidencePresence(context),
++    });
++
+     return {
+-      context: sections.length > 0 ? sections.join("\n\n") : null,
++      context,
+       count: faqCount + documentContext.length,
+     };
+   }
+@@ -675,8 +702,21 @@
+   private async run(
+     history: ChatMessage[],
+     organizationId: string,
++    trace?: RagTrace,
+   ): Promise<AiGenerationResult> {
+     const startedAt = Date.now();
++    const fail = (
++      code: AiFailureCode,
++      stage: string,
++    ): AiGenerationResult => {
++      ragTraceLog(this.logger, "llm.failed", trace, {
++        organizationId,
++        code,
++        stage,
++        latencyMs: Date.now() - startedAt,
++      });
++      return { ok: false, code };
++    };
+ 
+     const messages = history
+       .filter(
+@@ -695,7 +735,7 @@
+       .find((item) => item.role === "user");
+ 
+     if (!latestUserMessage) {
+-      return { ok: false, code: "no_user_message" };
++      return fail("no_user_message", "history");
+     }
+ 
+     let agent: CustomerSupportAgentConfig | null = null;
+@@ -708,7 +748,7 @@
+         this.logger.warn(
+           "Multiple active customer support Agents found in one organization",
+         );
+-        return { ok: false, code: "agent_ambiguous" };
++        return fail("agent_ambiguous", "agent");
+       }
+ 
+       if (resolution.kind === "selected") {
+@@ -720,13 +760,25 @@
+       this.logger.error(
+         "Could not resolve customer support Agent configuration",
+       );
+-      return { ok: false, code: "not_configured" };
++      return fail("not_configured", "agent_exception");
+     }
+ 
+     if (!runtime) {
+-      return { ok: false, code: "not_configured" };
++      return fail("not_configured", "runtime");
+     }
+ 
++    ragTraceLog(this.logger, "runtime.resolved", trace, {
++      organizationId,
++      agentId: agent?.id ?? null,
++      agentName: agent?.name ?? null,
++      agentPromptLength: agent?.systemPrompt?.length ?? 0,
++      runtimeSource: runtime.source,
++      provider: runtime.provider,
++      modelId: runtime.modelId,
++      endpointHost: new URL(runtime.endpoint).host,
++      historyMessages: messages.length,
++    });
++
+     // Phase one reserves only the request without retrieved context. This is
+     // the minimum known cost before an embedding call, so exhausted quotas do
+     // not spend an embedding request and short questions are not charged for
+@@ -754,7 +806,7 @@
+             `limit=${baseReservation.monthlyTokenLimit}`,
+         );
+ 
+-        return { ok: false, code: "quota_exceeded" };
++        return fail("quota_exceeded", "quota_before_retrieval");
+       }
+ 
+       if (baseReservation.limited && baseReservation.allowed) {
+@@ -764,6 +816,7 @@
+       const knowledge = await this.getKnowledgeContext(
+         organizationId,
+         latestUserMessage.content,
++        trace,
+       );
+       const systemPrompt = this.buildSystemPrompt(knowledge.context, agent);
+       const requestedTokens = estimateReservationTokens(systemPrompt, messages);
+@@ -783,7 +836,7 @@
+             organizationId,
+             requestedTokens: contextReservation.requestedTokens,
+           }));
+-          return { ok: false, code: "quota_exceeded" };
++          return fail("quota_exceeded", "quota_after_retrieval");
+         }
+ 
+         if (contextReservation.limited && contextReservation.allowed) {
+@@ -791,6 +844,16 @@
+         }
+       }
+ 
++      ragTraceLog(this.logger, "llm.request", trace, {
++        organizationId,
++        systemPromptLength: systemPrompt.length,
++        knowledgeInPrompt: knowledge.context !== null &&
++          systemPrompt.includes(knowledge.context),
++        messageCount: messages.length + 1,
++        maxCompletionTokens: MAX_COMPLETION_TOKENS,
++        requestedTokensEstimate: requestedTokens,
++      });
++
+       let lastFailure: ProviderErrorCode = "provider_error";
+ 
+       for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt += 1) {
+@@ -854,10 +917,7 @@
+             );
+ 
+             if (!canRetry) {
+-              return {
+-                ok: false,
+-                code: lastFailure,
+-              };
++              return fail(lastFailure, `http_${response.status}`);
+             }
+ 
+             await sleep(retryAfterMs ?? getRetryDelay(attempt));
+@@ -881,10 +941,17 @@
+ 
+             this.logger.warn("Customer support AI returned an empty response");
+ 
+-            return {
+-              ok: false,
+-              code: "empty_response",
+-            };
++            const choice = (data as {
++              choices?: Array<{ finish_reason?: unknown }>;
++            }).choices?.[0];
++            ragTraceLog(this.logger, "llm.empty", trace, {
++              organizationId,
++              finishReason: choice?.finish_reason ?? null,
++              completionTokens:
++                extractProviderUsage(data.usage).outputTokens,
++            });
++
++            return fail("empty_response", "empty_content");
+           }
+ 
+           const usageRecorded = await this.recordUsage(
+@@ -898,6 +965,18 @@
+ 
+           usageReliable = usageReliable && usageRecorded;
+ 
++          ragTraceLog(this.logger, "llm.ok", trace, {
++            organizationId,
++            replyLength: reply.length,
++            truncated: reply.length > MAX_REPLY_LENGTH,
++            finishReason: (data as {
++              choices?: Array<{ finish_reason?: unknown }>;
++            }).choices?.[0]?.finish_reason ?? null,
++            usage: extractProviderUsage(data.usage),
++            knowledgeMatched: knowledge.count,
++            latencyMs: Date.now() - startedAt,
++          });
++
+           return {
+             ok: true,
+             reply: reply.slice(0, MAX_REPLY_LENGTH),
+@@ -928,10 +1007,7 @@
+ 
+             this.logger.error("Customer support AI generation failed");
+ 
+-            return {
+-              ok: false,
+-              code: "provider_error",
+-            };
++            return fail("provider_error", "unexpected_error");
+           }
+ 
+           const usageRecorded = await this.recordUsage(
+@@ -966,15 +1042,16 @@
+           `code=${lastFailure}`,
+       );
+ 
+-      return {
+-        ok: false,
+-        code: lastFailure,
+-      };
+-    } catch {
++      return fail(lastFailure, "attempts_exhausted");
++    } catch (error) {
+       // Fail closed. The finally block releases any live reservation made
+       // before retrieval, formatting, or a supplemental reservation failed.
+       this.logger.error("Could not prepare customer support AI request");
+-      return { ok: false, code: "provider_error" };
++      ragTraceLog(this.logger, "prepare.error", trace, {
++        organizationId,
++        errorName: error instanceof Error ? error.name : "UnknownError",
++      });
++      return fail("provider_error", "prepare_exception");
+     } finally {
+       await this.settleQuotaReservation(
+         organizationId,
+@@ -987,8 +1064,9 @@
+   async generateReply(
+     history: ChatMessage[],
+     organizationId: string,
++    trace?: RagTrace,
+   ): Promise<string | null> {
+-    const result = await this.run(history, organizationId);
++    const result = await this.run(history, organizationId, trace);
+ 
+     return result.ok ? result.reply : null;
+   }
+@@ -996,8 +1074,9 @@
+   generatePlaygroundReply(
+     history: ChatMessage[],
+     organizationId: string,
++    trace?: RagTrace,
+   ): Promise<AiGenerationResult> {
+-    return this.run(history, organizationId);
++    return this.run(history, organizationId, trace);
+   }
+ 
+   async getPlaygroundOverview(
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/conversations/public-widget.service.ts MarketingSystemAI-main/apps/api/src/conversations/public-widget.service.ts
+--- a/apps/api/src/conversations/public-widget.service.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/conversations/public-widget.service.ts	2026-11-08 09:57:58.074085787 +0000
+@@ -26,6 +26,12 @@
+   type ReplyDecision,
+   safeErrorSummary,
+ } from "./reply-guard.js";
++import {
++  newTraceId,
++  ragTraceLog,
++  runtimeFingerprint,
++  type RagTrace,
++} from "./rag-trace.js";
+ 
+ type ContactDetails = {
+   name?: string;
+@@ -310,8 +316,17 @@
+     organizationId: string;
+     conversationId: string;
+     triggerMessageId: string;
++    trace?: RagTrace;
+   }): Promise<void> {
+-    const { organizationId, conversationId, triggerMessageId } = input;
++    const { organizationId, conversationId, triggerMessageId, trace } = input;
++
++    const skip = (reason: string) =>
++      ragTraceLog(this.logger, "worker.skipped", trace, {
++        organizationId,
++        conversationId,
++        triggerMessageId,
++        reason,
++      });
+ 
+     try {
+       const [triggerMessage] = await db
+@@ -334,6 +349,7 @@
+         this.logger.warn(
+           `Customer support trigger message not found: ${triggerMessageId}`,
+         );
++        skip("trigger_message_not_found");
+         return;
+       }
+ 
+@@ -355,6 +371,11 @@
+         beforeGeneration?.status !== "unresolved" ||
+         beforeGeneration.assignedToUserId
+       ) {
++        skip(
++          beforeGeneration?.status !== "unresolved"
++            ? `conversation_status_${beforeGeneration?.status ?? "missing"}`
++            : "assigned_to_human",
++        );
+         return;
+       }
+ 
+@@ -377,6 +398,7 @@
+         .limit(1);
+ 
+       if (latestBefore?.id !== triggerMessageId) {
++        skip("superseded_before_generation");
+         return;
+       }
+ 
+@@ -402,6 +424,7 @@
+         .limit(1);
+ 
+       if (alreadyProcessed) {
++        skip("already_processed");
+         return;
+       }
+ 
+@@ -426,6 +449,7 @@
+       const reply = await this.aiService.generateReply(
+         history.reverse(),
+         organizationId,
++        trace,
+       );
+ 
+       const decision: ReplyDecision = await db.transaction(async (tx) => {
+@@ -534,6 +558,16 @@
+         return action;
+       });
+ 
++      // D: phân biệt "LLM trả lời đúng nhưng lưu sai" với các nhánh khác.
++      ragTraceLog(this.logger, "worker.decision", trace, {
++        organizationId,
++        conversationId,
++        triggerMessageId,
++        decision,
++        replyPresent: Boolean(reply?.trim()),
++        replyLength: reply?.length ?? 0,
++      });
++
+       if (decision === "handoff_fallback") {
+         this.logger.warn(
+           `AI fallback activated for conversation ${conversationId}`,
+@@ -641,10 +675,19 @@
+     triggerMessageId: string,
+   ): Promise<void> {
+     try {
+-      await this.jobsService.enqueueCustomerSupportReply({
++      const traceId = newTraceId();
++      const queued = await this.jobsService.enqueueCustomerSupportReply({
++        organizationId,
++        conversationId,
++        triggerMessageId,
++        traceId,
++      });
++
++      ragTraceLog(this.logger, "api.enqueued", { traceId, jobId: String(queued.jobId) }, {
+         organizationId,
+         conversationId,
+         triggerMessageId,
++        runtime: runtimeFingerprint(),
+       });
+     } catch (error) {
+       this.logger.error(
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/conversations/rag-trace.spec.ts MarketingSystemAI-main/apps/api/src/conversations/rag-trace.spec.ts
+--- a/apps/api/src/conversations/rag-trace.spec.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/apps/api/src/conversations/rag-trace.spec.ts	2026-11-08 09:59:40.137915351 +0000
+@@ -0,0 +1,209 @@
++import assert from "node:assert/strict";
++import { describe, it } from "node:test";
++
++import {
++  rankLexicalCandidates,
++  reciprocalRankFusion,
++  type HybridCandidate,
++} from "../knowledge-connections/hybrid-ranking.js";
++import { getKeywords } from "./knowledge-ranking.js";
++import { KnowledgeRetrievalService } from "../knowledge-connections/knowledge-retrieval.service.js";
++import { AiUsageRecorder } from "./ai-usage-recorder.js";
++import { AiUsageQuotaService } from "./ai-usage-quota.service.js";
++import { PublicWidgetAiService } from "./public-widget-ai.service.js";
++import { RAG_TRACE_MARKER } from "./rag-trace.js";
++
++// TEST FIXTURE ONLY (không dùng trong production). Mô phỏng 3 chunk của
++// tài liệu kiểm thử "Quy Nhơn Digital". Đây là MOCK test: ranking là code thật,
++// nhưng DB, embedding và LLM đều được giả lập.
++const CHUNKS: HybridCandidate[] = [
++  {
++    documentId: "doc-qnd",
++    documentTitle: "Quy Nhơn Digital.docx",
++    chunkId: "c1",
++    similarity: 0.49,
++    content:
++      "Bảng giá dịch vụ. Website bán hàng: 9.500.000 VNĐ. Website giới thiệu: 5.000.000 VNĐ. " +
++      "Giá chưa gồm VAT 8%. Hosting và tên miền chưa bao gồm.",
++  },
++  {
++    documentId: "doc-qnd",
++    documentTitle: "Quy Nhơn Digital.docx",
++    chunkId: "c2",
++    similarity: 0.49,
++    content:
++      "Chính sách bảo hành. Website bán hàng bảo hành 18 tháng. Website giới thiệu bảo hành 12 tháng. " +
++      "Đặt cọc website 40%.",
++  },
++  {
++    documentId: "doc-qnd",
++    documentTitle: "Quy Nhơn Digital.docx",
++    chunkId: "c3",
++    similarity: 0.49,
++    content: "Giờ làm việc: thứ Hai đến thứ Bảy, 8:00 - 17:30. Chủ nhật nghỉ. Dịch vụ Facebook Ads, Google Ads.",
++  },
++];
++
++// Thứ hạng semantic thật phụ thuộc embedding nên KHÔNG mô phỏng ở đây:
++// tất cả chunk có similarity 0.49 như Preview. Nên ranking được kiểm bằng
++// lexical (xác định) và RRF chỉ dùng để dựng context trong test bên dưới.
++function lexicalTop(query: string): HybridCandidate | undefined {
++  return rankLexicalCandidates(CHUNKS, query)[0];
++}
++
++function hybrid(query: string): HybridCandidate[] {
++  const lexical = rankLexicalCandidates(CHUNKS, query);
++  return reciprocalRankFusion(CHUNKS, lexical, 5);
++}
++
++describe("Quy Nhơn Digital fixture - ranking thật (mock DB/LLM)", () => {
++  it("giá website bán hàng: chunk bảng giá đứng đầu và chứa 9.500.000", () => {
++    const top = lexicalTop("Website bán hàng giá bao nhiêu?");
++    assert.equal(top?.chunkId, "c1");
++    assert.ok(top?.content.includes("9.500.000"));
++    assert.ok(top?.content.includes("VAT 8%"));
++  });
++
++  it("giá website giới thiệu", () => {
++    const top = lexicalTop("Website giới thiệu giá bao nhiêu?");
++    assert.equal(top?.chunkId, "c1");
++    assert.ok(top?.content.includes("5.000.000"));
++  });
++
++  it("bảo hành website bán hàng", () => {
++    const top = lexicalTop("Website bán hàng bảo hành bao lâu?");
++    assert.equal(top?.chunkId, "c2");
++    assert.ok(top?.content.includes("18 tháng"));
++  });
++
++  it("ghi nhận: 'bán' và 'bảo' bị bỏ vì STOP_WORDS bỏ dấu trùng 'ban'/'bao'", () => {
++    // Không phải root cause (từ còn lại vẫn đủ phân biệt), nhưng là điểm yếu thật.
++    const keywords = [...getKeywords("Website bán hàng bảo hành bao lâu?")];
++    assert.deepEqual(keywords, ["website", "hang", "hanh"]);
++  });
++
++  it("Chủ nhật có làm việc không?", () => {
++    const top = lexicalTop("Chủ nhật có làm việc không?");
++    assert.equal(top?.chunkId, "c3");
++  });
++});
++
++describe("Trace và prompt", () => {
++  it("context chứa giá tới được request gửi LLM; log trace không chứa nội dung", async () => {
++    const logs: string[] = [];
++    const retrieval = {
++      retrieve: async (input: { query: string }) => {
++        const matches = hybrid(input.query).map((row) => ({ ...row }));
++        return {
++          status: "ok" as const,
++          matches,
++          latencyMs: 1,
++          stats: {
++            lexicalCandidates: 3,
++            semanticCandidates: 3,
++            hybridMatches: matches.length,
++            embeddingUsed: true,
++          },
++        };
++      },
++      formatContext: KnowledgeRetrievalService.prototype.formatContext,
++    };
++    const service = new PublicWidgetAiService(
++      { record: async () => true } as unknown as AiUsageRecorder,
++      { reserve: async () => ({ limited: false, reservationId: null }) } as unknown as AiUsageQuotaService,
++      retrieval as unknown as KnowledgeRetrievalService,
++    );
++    Reflect.set(service, "resolveAgent", async () => ({ kind: "none" }));
++    Reflect.set(service, "loadRelevantFaq", async () => []);
++    Reflect.set(service, "resolveRuntime", async () => ({
++      endpoint: "https://example.invalid/chat/completions",
++      apiKey: "SECRET-KEY-SHOULD-NOT-LOG",
++      modelId: "test-model",
++      provider: "openrouter",
++      connectionName: null,
++      source: "default",
++    }));
++    const logger = Reflect.get(service, "logger") as { log: (m: string) => void };
++    logger.log = (message: string) => { logs.push(message); };
++
++    process.env.RAG_TRACE = "1";
++    process.env.RAG_TRACE_EXPECT = "9.500.000,VAT 8%";
++
++    const originalFetch = globalThis.fetch;
++    let sentBody = "";
++    Object.defineProperty(globalThis, "fetch", {
++      configurable: true,
++      value: async (_url: string, init: { body: string }) => {
++        sentBody = init.body;
++        return new Response(
++          JSON.stringify({
++            choices: [{ message: { content: "9.500.000 VNĐ, chưa gồm VAT 8%." }, finish_reason: "stop" }],
++            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
++          }),
++          { status: 200, headers: { "content-type": "application/json" } },
++        );
++      },
++    });
++
++    try {
++      const reply = await service.generateReply(
++        [{ role: "user", content: "Website bán hàng giá bao nhiêu?" }],
++        "org-1",
++        { traceId: "trace-1", jobId: "job-1", attempt: 1 },
++      );
++      assert.ok(reply?.includes("9.500.000"));
++    } finally {
++      Object.defineProperty(globalThis, "fetch", { configurable: true, value: originalFetch });
++      delete process.env.RAG_TRACE;
++      delete process.env.RAG_TRACE_EXPECT;
++    }
++
++    // Context (có giá) nằm trong system prompt gửi tới chat completion.
++    assert.ok(sentBody.includes("9.500.000"));
++
++    const events = logs.map((line) => JSON.parse(line) as Record<string, unknown>);
++    const built = events.find((e) => e.event === "rag.context.built");
++    const request = events.find((e) => e.event === "rag.llm.request");
++    const ok = events.find((e) => e.event === "rag.llm.ok");
++
++    assert.ok(built && request && ok);
++    assert.equal(built.traceId, "trace-1");
++    assert.equal(built.marker, RAG_TRACE_MARKER);
++    assert.deepEqual(built.evidence, { expect_1: true, expect_2: true });
++    assert.equal(request.knowledgeInPrompt, true);
++    assert.ok(Number(built.contextLength) > 0);
++
++    // Không rò rỉ nội dung, câu hỏi hay API key trong log.
++    const all = logs.join("\n");
++    assert.ok(!all.includes("SECRET-KEY-SHOULD-NOT-LOG"));
++    assert.ok(!all.includes("Website bán hàng giá bao nhiêu"));
++    assert.ok(!all.includes("Bảng giá dịch vụ"));
++  });
++
++  it("ghi rõ mã lỗi khi LLM thất bại (trước đây bị nuốt thành null)", async () => {
++    const logs: string[] = [];
++    const service = new PublicWidgetAiService(
++      { record: async () => true } as unknown as AiUsageRecorder,
++      { reserve: async () => ({ limited: false, reservationId: null }) } as unknown as AiUsageQuotaService,
++      { retrieve: async () => ({ status: "no_match", matches: [], latencyMs: 1 }), formatContext: () => [] } as unknown as KnowledgeRetrievalService,
++    );
++    Reflect.set(service, "resolveAgent", async () => ({ kind: "none" }));
++    Reflect.set(service, "loadRelevantFaq", async () => []);
++    Reflect.set(service, "resolveRuntime", async () => null);
++    (Reflect.get(service, "logger") as { log: (m: string) => void }).log = (m) => { logs.push(m); };
++    process.env.RAG_TRACE = "1";
++    try {
++      const reply = await service.generateReply(
++        [{ role: "user", content: "xin chào" }],
++        "org-1",
++        { traceId: "trace-2" },
++      );
++      assert.equal(reply, null);
++    } finally {
++      delete process.env.RAG_TRACE;
++    }
++    const failed = logs.map((l) => JSON.parse(l) as Record<string, unknown>).find((e) => e.event === "rag.llm.failed");
++    assert.equal(failed?.code, "not_configured");
++    assert.equal(failed?.stage, "runtime");
++  });
++});
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/conversations/rag-trace.ts MarketingSystemAI-main/apps/api/src/conversations/rag-trace.ts
+--- a/apps/api/src/conversations/rag-trace.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/apps/api/src/conversations/rag-trace.ts	2026-11-08 09:57:13.087571421 +0000
+@@ -0,0 +1,98 @@
++import { randomUUID } from "node:crypto";
++
++/**
++ * Instrumentation cho đường đi Customer Support RAG.
++ *
++ * - Chỉ ghi metadata an toàn: ID, số lượng, độ dài, outcome.
++ * - KHÔNG ghi nội dung câu hỏi, nội dung chunk, lịch sử chat, API key, token.
++ * - Bật mặc định ngoài production; tắt hẳn bằng RAG_TRACE=0, ép bật bằng RAG_TRACE=1.
++ */
++
++/**
++ * Đổi chuỗi này mỗi khi sửa luồng RAG. Nếu log của Worker không có
++ * marker mới nhất, Worker đang chạy code cũ (hoặc một Worker khác nhận job).
++ */
++export const RAG_TRACE_MARKER = "rag-trace-v1";
++
++export type RagTrace = {
++  traceId: string;
++  jobId?: string | null;
++  attempt?: number;
++};
++
++export function isRagTraceEnabled(): boolean {
++  const flag = process.env.RAG_TRACE?.trim();
++  if (flag === "0") return false;
++  if (flag === "1") return true;
++  return (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development") !== "production";
++}
++
++export function newTraceId(): string {
++  return randomUUID();
++}
++
++function dbTarget(): string | null {
++  const raw = process.env.DATABASE_URL;
++  if (!raw) return null;
++  try {
++    const url = new URL(raw);
++    // Không bao giờ in username/password.
++    return `${url.hostname}:${url.port || "5432"}${url.pathname}`;
++  } catch {
++    return "unparseable";
++  }
++}
++
++/**
++ * Dấu vân tay runtime: dùng để so API với Worker (cùng source? cùng Redis?
++ * cùng DB?). Không chứa secret.
++ */
++export function runtimeFingerprint() {
++  return {
++    marker: RAG_TRACE_MARKER,
++    pid: process.pid,
++    startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
++    env: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
++    redis: `${process.env.REDIS_HOST ?? "127.0.0.1"}:${process.env.REDIS_PORT ?? 6379}`,
++    db: dbTarget(),
++    gitSha: process.env.GIT_SHA ?? process.env.COMMIT_SHA ?? null,
++  };
++}
++
++export function ragTraceLog(
++  logger: { log: (message: string) => void },
++  event: string,
++  trace: RagTrace | undefined,
++  fields: Record<string, unknown> = {},
++): void {
++  if (!isRagTraceEnabled()) return;
++
++  logger.log(
++    JSON.stringify({
++      event: `rag.${event}`,
++      traceId: trace?.traceId ?? null,
++      jobId: trace?.jobId ?? null,
++      attempt: trace?.attempt ?? null,
++      marker: RAG_TRACE_MARKER,
++      ...fields,
++    }),
++  );
++}
++
++/**
++ * Chỉ dùng với test fixture (dev). RAG_TRACE_EXPECT="9.500.000,18 thang"
++ * -> kiểm tra các chuỗi này có nằm trong context gửi LLM hay không và chỉ
++ * log true/false. Bị vô hiệu ở production.
++ */
++export function expectedEvidencePresence(context: string | null): Record<string, boolean> | null {
++  const raw = process.env.RAG_TRACE_EXPECT?.trim();
++  const env = process.env.APP_ENV ?? process.env.NODE_ENV ?? "development";
++  if (!raw || env === "production") return null;
++
++  const haystack = (context ?? "").toLowerCase();
++  const result: Record<string, boolean> = {};
++  raw.split(",").map((item) => item.trim()).filter(Boolean).forEach((needle, index) => {
++    result[`expect_${index + 1}`] = haystack.includes(needle.toLowerCase());
++  });
++  return result;
++}
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/jobs/jobs.processor.ts MarketingSystemAI-main/apps/api/src/jobs/jobs.processor.ts
+--- a/apps/api/src/jobs/jobs.processor.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/jobs/jobs.processor.ts	2026-11-08 09:57:58.074387922 +0000
+@@ -20,6 +20,10 @@
+ import { TenantJobAuthorization } from "./tenant-job-authorization.js";
+ 
+ import { PublicWidgetService } from "../conversations/public-widget.service.js";
++import {
++  ragTraceLog,
++  runtimeFingerprint,
++} from "../conversations/rag-trace.js";
+ 
+ import type {
+   CustomerSupportReplyJobData,
+@@ -181,10 +185,27 @@
+       }),
+     );
+ 
++    const trace = {
++      traceId: data.traceId ?? `no-trace-${job.id}`,
++      jobId: job.id === undefined ? null : String(job.id),
++      attempt: job.attemptsMade + 1,
++    };
++
++    // Nếu dòng này không xuất hiện (hoặc thiếu marker mới) trong log của
++    // Worker bạn đang xem, job đã được một Worker/tiến trình khác xử lý.
++    ragTraceLog(this.logger, "worker.received", trace, {
++      organizationId: data.organizationId,
++      conversationId: data.conversationId,
++      triggerMessageId: data.triggerMessageId,
++      queuedAt: data.createdAt ?? null,
++      runtime: runtimeFingerprint(),
++    });
++
+     await this.publicWidgetService.processAiReply({
+       organizationId: data.organizationId,
+       conversationId: data.conversationId,
+       triggerMessageId: data.triggerMessageId,
++      trace,
+     });
+ 
+     this.logger.log(
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/jobs/jobs.service.ts MarketingSystemAI-main/apps/api/src/jobs/jobs.service.ts
+--- a/apps/api/src/jobs/jobs.service.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/jobs/jobs.service.ts	2026-11-08 09:57:58.073785152 +0000
+@@ -12,6 +12,8 @@
+   conversationId: string;
+   triggerMessageId: string;
+   createdAt: string;
++  /** Correlation ID xuyên suốt API -> BullMQ -> Worker -> LLM (chỉ để trace). */
++  traceId?: string;
+ }
+ 
+ export interface KnowledgeIngestionJobData {
+@@ -94,11 +96,13 @@
+     organizationId: string;
+     conversationId: string;
+     triggerMessageId: string;
++    traceId?: string;
+   }) {
+     const {
+       organizationId,
+       conversationId,
+       triggerMessageId,
++      traceId,
+     } = input;
+ 
+     if (
+@@ -119,6 +123,7 @@
+       conversationId,
+       triggerMessageId,
+       createdAt: new Date().toISOString(),
++      ...(traceId ? { traceId } : {}),
+     };
+ 
+     const job = await this.queue.add(
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/knowledge-connections/knowledge-retrieval.service.ts MarketingSystemAI-main/apps/api/src/knowledge-connections/knowledge-retrieval.service.ts
+--- a/apps/api/src/knowledge-connections/knowledge-retrieval.service.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/knowledge-connections/knowledge-retrieval.service.ts	2026-11-08 09:57:20.457913423 +0000
+@@ -45,6 +45,13 @@
+   matches: DocumentRetrievalMatch[];
+   latencyMs: number;
+   diagnostic?: DocumentRetrievalDiagnostic;
++  /** Số liệu an toàn để trace, không chứa nội dung. */
++  stats?: {
++    lexicalCandidates: number;
++    semanticCandidates: number | null;
++    hybridMatches: number;
++    embeddingUsed: boolean;
++  };
+ };
+ 
+ export type DocumentRetrievalDiagnostic = {
+@@ -110,10 +117,23 @@
+       );
+     } catch (error) {
+       if (lexical.length > 0) {
++        const lexicalOnly = lexical.slice(0, input.limit ?? MAX_RETRIEVAL_RESULTS);
++        this.logger.warn(JSON.stringify({
++          event: "knowledge.retrieval.lexical_only",
++          organizationId: input.organizationId,
++          reason: error instanceof Error ? error.name : "unknown",
++          count: lexicalOnly.length,
++        }));
+         return {
+           status: "ok",
+-          matches: lexical.slice(0, input.limit ?? MAX_RETRIEVAL_RESULTS),
++          matches: lexicalOnly,
+           latencyMs: Date.now() - startedAt,
++          stats: {
++            lexicalCandidates: lexical.length,
++            semanticCandidates: null,
++            hybridMatches: lexicalOnly.length,
++            embeddingUsed: false,
++          },
+         };
+       }
+       return this.degraded(input.organizationId, startedAt, error, "provider", input.diagnostic);
+@@ -199,6 +219,12 @@
+         matches,
+         latencyMs: Date.now() - startedAt,
+         diagnostic,
++        stats: {
++          lexicalCandidates: lexical.length,
++          semanticCandidates: semantic.length,
++          hybridMatches: hybrid.length,
++          embeddingUsed: true,
++        },
+       };
+     } catch (error) {
+       return this.degraded(input.organizationId, startedAt, error, "database", input.diagnostic);
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/main.ts MarketingSystemAI-main/apps/api/src/main.ts
+--- a/apps/api/src/main.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/main.ts	2026-11-08 09:58:03.503310550 +0000
+@@ -14,6 +14,7 @@
+ import type { Request, Response, NextFunction } from "express";
+ 
+ import { AppModule } from "./app.module.js";
++import { ragTraceLog, runtimeFingerprint } from "./conversations/rag-trace.js";
+ import { auth } from "./auth.js";
+ import { AllExceptionsFilter } from "./common/all-exceptions.filter.js";
+ import { RequestLoggingInterceptor } from "./common/interceptors/request-logging.interceptor.js";
+@@ -123,6 +124,7 @@
+   await app.listen(port);
+ 
+   logger.log(`API: http://localhost:${port}/v1`);
++  ragTraceLog(logger, "api.boot", undefined, { runtime: runtimeFingerprint() });
+   logger.log(`Auth: http://localhost:${port}/api/auth`);
+ 
+   if (
+diff -ruN '--exclude=node_modules' '--exclude=dist' '--exclude=dist-security-test' '--exclude=*.tsbuildinfo' MarketingSystemAI-main/apps/api/src/worker.ts MarketingSystemAI-main/apps/api/src/worker.ts
+--- a/apps/api/src/worker.ts	2026-11-08 09:53:32.000000000 +0000
++++ b/apps/api/src/worker.ts	2026-11-08 09:57:58.074561079 +0000
+@@ -6,6 +6,7 @@
+ 
+ import { environment, validateServerEnvironment } from "./env.js";
+ import { WorkerModule } from "./worker.module.js";
++import { ragTraceLog, runtimeFingerprint } from "./conversations/rag-trace.js";
+ import { pool, verifyDatabaseEnvironment } from "@workspace/db/node";
+ async function bootstrap(): Promise<void> {
+   // Validate environment before starting the Worker.
+@@ -21,6 +22,9 @@
+   app.enableShutdownHooks();
+ 
+   logger.log(`CompanyMarketingSystem Worker started (${environment})`);
++  ragTraceLog(logger, "worker.boot", undefined, {
++    runtime: runtimeFingerprint(),
++  });
+ }
+ 
+ bootstrap().catch((error: unknown) => {
