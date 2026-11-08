@@ -261,6 +261,7 @@ export class KnowledgeEmbeddingService {
   private async embed(
     contents: string[],
     configuration: EmbeddingConfiguration,
+    timeoutMs = 45_000,
   ): Promise<number[][]> {
     let response: Response;
 
@@ -276,7 +277,7 @@ export class KnowledgeEmbeddingService {
           input: contents,
           dimensions: configuration.dimensions,
         }),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(timeoutMs),
         redirect: "error",
       });
     } catch {
@@ -563,6 +564,29 @@ export class KnowledgeEmbeddingService {
       modelId: configuration.modelId,
       totalChunks: chunks.length,
       generated: embedded,
+    };
+  }
+
+  async embedQuery(
+    organizationId: string,
+    query: string,
+    timeoutMs = 3_500,
+  ) {
+    const configuration = await this.configuration(organizationId);
+    const [embedding] = await this.embed(
+      [query],
+      configuration,
+      timeoutMs,
+    );
+
+    if (!embedding) {
+      throw new Error("Embedding provider returned no query vector");
+    }
+
+    return {
+      embedding,
+      provider: configuration.provider,
+      modelId: configuration.modelId,
     };
   }
 }

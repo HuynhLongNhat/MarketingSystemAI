@@ -14,6 +14,17 @@ export interface KnowledgePreviewResponse {
   totalConsidered: number;
   matchCount: number;
   matches: KnowledgePreviewMatch[];
+  documents: {
+    status: "ok" | "no_match" | "degraded";
+    reason: string | null;
+    matches: Array<{
+      documentId: string;
+      documentTitle: string;
+      chunkId: string;
+      similarity: number;
+      content: string;
+    }>;
+  };
 }
 
 export const knowledgePreviewApi = {

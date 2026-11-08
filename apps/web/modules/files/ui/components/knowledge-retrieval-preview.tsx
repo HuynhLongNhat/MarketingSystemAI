@@ -301,6 +301,31 @@ export function KnowledgeRetrievalPreview() {
                 ))}
               </div>
             )}
+
+            <section className="space-y-3 border-t pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Tài liệu semantic search</p>
+                <Badge variant={result.documents.status === "degraded" ? "destructive" : "secondary"}>
+                  {result.documents.status === "degraded"
+                    ? "Không khả dụng"
+                    : `${result.documents.matches.length} chunks phù hợp`}
+                </Badge>
+              </div>
+              {result.documents.reason && (
+                <p className="text-xs text-muted-foreground">
+                  Semantic retrieval: {result.documents.reason}.
+                </p>
+              )}
+              {result.documents.matches.map((match) => (
+                <article key={match.chunkId} className="space-y-2 rounded-xl border bg-background p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium">{match.documentTitle}</p>
+                    <Badge variant="outline">{Math.round(match.similarity * 100)}%</Badge>
+                  </div>
+                  <p className="line-clamp-5 whitespace-pre-wrap text-sm text-muted-foreground">{match.content}</p>
+                </article>
+              ))}
+            </section>
           </section>
         )}
       </CardContent>

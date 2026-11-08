@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard.js";
 import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
 import { JobsModule } from "../jobs/jobs.module.js";
+import { KnowledgeConnectionsModule } from "../knowledge-connections/knowledge-connections.module.js";
 
 import { ConversationsController } from "./conversations.controller.js";
 import { ConversationsRepository } from "./conversations.repository.js";
@@ -29,7 +30,7 @@ import { HandoffController } from "./handoff.controller.js";
 import { HandoffService } from "./handoff.service.js";
 
 @Module({
-  imports: [JobsModule],
+  imports: [JobsModule, KnowledgeConnectionsModule],
   controllers: [
     ConversationsController,
     MessagesController,

@@ -40,6 +40,9 @@ import {
 import {
   KnowledgeEmbeddingController,
 } from "./knowledge-embedding.controller.js";
+import {
+  KnowledgeRetrievalService,
+} from "./knowledge-retrieval.service.js";
 
 @Module({
   imports: [
@@ -55,6 +58,7 @@ import {
     GoogleDrivePickerService,
     GoogleDriveIngestionService,
     KnowledgeEmbeddingService,
+    KnowledgeRetrievalService,
     AuthGuard,
     PermissionsGuard,
   ],
@@ -63,6 +67,7 @@ import {
     GoogleDrivePickerService,
     GoogleDriveIngestionService,
     KnowledgeEmbeddingService,
+    KnowledgeRetrievalService,
   ],
 })
 export class KnowledgeConnectionsModule {}

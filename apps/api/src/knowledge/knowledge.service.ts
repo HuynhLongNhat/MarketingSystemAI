@@ -18,6 +18,9 @@ import type { RequestContext } from "../auth/request-context.js";
 import {
   selectKnowledgeMatches,
 } from "../conversations/knowledge-ranking.js";
+import {
+  KnowledgeRetrievalService,
+} from "../knowledge-connections/knowledge-retrieval.service.js";
 
 import {
   CreateKnowledgeDto,
@@ -27,6 +30,9 @@ import {
 
 @Injectable()
 export class KnowledgeService {
+  constructor(
+    private readonly retrieval: KnowledgeRetrievalService,
+  ) {}
   private normalizeRequired(
     value: string,
     field: string,
@@ -98,6 +104,11 @@ export class KnowledgeService {
       query,
     );
 
+    const documents = await this.retrieval.retrieve({
+      organizationId: context.organizationId,
+      query,
+    });
+
     return {
       query,
       totalConsidered: entries.length,
@@ -109,6 +120,17 @@ export class KnowledgeService {
         score: match.score,
         matchedKeywords: match.matchedKeywords,
       })),
+      documents: {
+        status: documents.status,
+        reason: documents.reason ?? null,
+        matches: documents.matches.map((match) => ({
+          documentId: match.documentId,
+          documentTitle: match.documentTitle,
+          chunkId: match.chunkId,
+          similarity: match.similarity,
+          content: match.content,
+        })),
+      },
     };
   }
 
