@@ -140,14 +140,15 @@ export function KnowledgeRetrievalPreview() {
 
               <CardDescription>
                 Xem FAQ và tài liệu semantic mà chatbot có thể
-                sử dụng để trả lời một câu hỏi của khách hàng.
+                sử dụng để trả lời một câu hỏi của khách hàng. Màn hình này
+                chỉ kiểm tra truy xuất, không sinh câu trả lời AI.
               </CardDescription>
             </div>
           </div>
 
           <Badge variant="outline" className="gap-1.5">
             <ShieldCheck className="size-3" />
-            Không lưu câu hỏi
+            Không gọi model chat
           </Badge>
         </div>
       </CardHeader>
@@ -320,7 +321,9 @@ export function KnowledgeRetrievalPreview() {
                 <article key={match.chunkId} className="space-y-2 rounded-xl border bg-background p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">{match.documentTitle}</p>
-                    <Badge variant="outline">{Math.round(match.similarity * 100)}%</Badge>
+                    <Badge variant="outline">
+                      Semantic {Math.round(match.similarity * 100)}%
+                    </Badge>
                   </div>
                   <p className="line-clamp-5 whitespace-pre-wrap text-sm text-muted-foreground">{match.content}</p>
                 </article>

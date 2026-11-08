@@ -330,6 +330,7 @@ export class KnowledgeRetrievalService {
       candidatesAfterFilters,
       documentNotReadyCandidates,
       candidatesAboveThreshold: input.candidatesAboveThreshold,
+      finalCandidateCount: input.finalCandidates.length,
     });
 
     return {
@@ -355,7 +356,11 @@ export class KnowledgeRetrievalService {
     candidatesAfterFilters: number;
     documentNotReadyCandidates: number;
     candidatesAboveThreshold: number;
+    finalCandidateCount: number;
   }): DocumentRetrievalDiagnostic["noMatchReason"] {
+    // A hybrid result is usable even when its vector-only similarity is below
+    // the old diagnostic guardrail. Do not present that guardrail as a failure.
+    if (input.finalCandidateCount > 0) return null;
     if (input.totalEmbeddings === 0) return "no_embeddings";
     if (input.matchingProviderModelEmbeddings === 0) return "provider_model_mismatch";
     if (input.candidatesAfterFilters === 0) {
