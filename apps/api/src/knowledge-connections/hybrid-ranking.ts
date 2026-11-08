@@ -1,5 +1,18 @@
 import { getKeywords, normalizeText } from "../conversations/knowledge-ranking.js";
 
+// This list is deliberately narrower than FAQ stop words. In particular,
+// `ban` (bán) and `bao` (bảo) are meaningful in product and warranty queries
+// after diacritics are normalized, so neither may be discarded here.
+const POSTGRES_LEXICAL_STOP_WORDS = new Set([
+  "toi", "minh", "anh", "chi", "em", "cho", "con", "cac", "nhung",
+  "mot", "nhu", "khong", "la", "va", "cua", "duoc", "nay", "khi",
+  "thi", "nao", "sao", "nhe", "voi", "hay", "can", "muon", "xin",
+  "vui", "long", "lam", "nhieu", "cung", "biet", "hoi", "the",
+  "gi", "co", "lau", "and", "for", "you", "are", "how",
+  "what", "can", "your", "this", "that", "with", "have", "not",
+  "does", "from", "the",
+]);
+
 export type HybridCandidate = {
   documentId: string;
   documentTitle: string;
@@ -9,6 +22,21 @@ export type HybridCandidate = {
   lexicalScore?: number;
   hybridScore?: number;
 };
+
+/**
+ * Produces an OR tsquery from Vietnamese terms. Ranking and candidate filtering
+ * still happen in PostgreSQL; this merely removes conversational filler that
+ * should not turn a natural-language question into an overly strict AND query.
+ */
+export function toPostgresLexicalQuery(query: string): string {
+  const terms = [...new Set(
+    normalizeText(query)
+      .split(" ")
+      .filter((term) => term.length >= 2 && !POSTGRES_LEXICAL_STOP_WORDS.has(term)),
+  )];
+
+  return terms.join(" | ");
+}
 
 export function rankLexicalCandidates(
   candidates: HybridCandidate[],

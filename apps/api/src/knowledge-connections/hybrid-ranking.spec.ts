@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { rankLexicalCandidates, reciprocalRankFusion } from "./hybrid-ranking.js";
+import {
+  rankLexicalCandidates,
+  reciprocalRankFusion,
+  toPostgresLexicalQuery,
+} from "./hybrid-ranking.js";
 
 const candidates = [
   {
@@ -28,6 +32,13 @@ const candidates = [
 ];
 
 describe("hybrid document retrieval", () => {
+  it("builds a Vietnamese OR tsquery without dropping bán or bảo", () => {
+    assert.equal(
+      toPostgresLexicalQuery("Website bán hàng bảo hành bao lâu?"),
+      "website | ban | hang | bao | hanh",
+    );
+  });
+
   it("prioritizes the exact sales-website price evidence over a higher weak semantic candidate", () => {
     const lexical = rankLexicalCandidates(candidates, "Website bán hàng giá bao nhiêu?");
     const final = reciprocalRankFusion(candidates, lexical, 5);

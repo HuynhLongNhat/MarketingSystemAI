@@ -176,6 +176,13 @@
       "when": 1794073600000,
       "tag": "0025_website_services_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794102400000,
+      "tag": "0026_knowledge_chunks_lexical_search",
+      "breakpoints": true
     }
   ]
 }

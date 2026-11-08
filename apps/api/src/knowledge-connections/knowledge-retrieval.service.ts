@@ -14,8 +14,8 @@ import {
   KnowledgeEmbeddingService,
 } from "./knowledge-embedding.service.js";
 import {
-  rankLexicalCandidates,
   reciprocalRankFusion,
+  toPostgresLexicalQuery,
 } from "./hybrid-ranking.js";
 
 const MAX_QUERY_LENGTH = 500;
@@ -102,12 +102,15 @@ export class KnowledgeRetrievalService {
     let lexicalCandidates: DocumentRetrievalMatch[];
 
     try {
-      lexicalCandidates = await this.loadLexicalCandidates(input.organizationId);
+      lexicalCandidates = await this.loadLexicalCandidates(
+        input.organizationId,
+        query,
+      );
     } catch (error) {
       return this.degraded(input.organizationId, startedAt, error, "database", input.diagnostic);
     }
 
-    const lexical = rankLexicalCandidates(lexicalCandidates, query);
+    const lexical = lexicalCandidates;
     let queryEmbedding: Awaited<ReturnType<KnowledgeEmbeddingService["embedQuery"]>>;
 
     try {
@@ -233,13 +236,26 @@ export class KnowledgeRetrievalService {
 
   private async loadLexicalCandidates(
     organizationId: string,
+    query: string,
   ): Promise<DocumentRetrievalMatch[]> {
+    // Keep candidate selection and ranking inside PostgreSQL. In particular, do
+    // not fetch an arbitrary first 200 chunks and rank them in Node: that loses
+    // relevant evidence as soon as an organization has a larger knowledge base.
+    // The migration adds the matching unaccented FTS expression index.
+    const lexicalQuery = toPostgresLexicalQuery(query);
+    if (!lexicalQuery) return [];
+    const normalizedContent = sql<string>`public.immutable_unaccent(lower(${knowledgeChunks.content}))`;
+    const searchVector = sql`to_tsvector('simple', ${normalizedContent})`;
+    const searchQuery = sql`to_tsquery('simple', ${lexicalQuery})`;
+    const lexicalScore = sql<number>`ts_rank_cd(${searchVector}, ${searchQuery})`.mapWith(Number);
+
     const rows = await db
       .select({
         documentId: knowledgeDocuments.id,
         documentTitle: knowledgeDocuments.title,
         chunkId: knowledgeChunks.id,
         content: knowledgeChunks.content,
+        lexicalScore,
       })
       .from(knowledgeChunks)
       .innerJoin(
@@ -254,8 +270,13 @@ export class KnowledgeRetrievalService {
         eq(knowledgeDocuments.organizationId, organizationId),
         eq(knowledgeDocuments.sourceType, "google_drive"),
         eq(knowledgeDocuments.status, "ready"),
+        eq(knowledgeDocuments.embeddingStatus, "completed"),
+        sql`${searchVector} @@ ${searchQuery}`,
       ))
-      .limit(200);
+      // LIMIT is intentionally after ORDER BY relevance. This constrains the
+      // RRF candidate set without excluding a matching chunk by insertion order.
+      .orderBy(sql`${lexicalScore} desc`, knowledgeChunks.id)
+      .limit(MAX_HYBRID_CANDIDATES);
 
     return rows.map((row) => ({ ...row, similarity: 0 }));
   }
