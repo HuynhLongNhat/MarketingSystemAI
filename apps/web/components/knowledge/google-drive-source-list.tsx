@@ -111,7 +111,6 @@ export function GoogleDriveSourceList({
                   ) : (
                     <Trash2 className="size-4 text-destructive" />
                   )}
-                  Remove source
                 </Button>
               </div>
             </div>

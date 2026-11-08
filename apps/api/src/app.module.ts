@@ -16,6 +16,7 @@ import { AgentTemplatesModule } from "./agent-templates/agent-templates.module.j
 import { OfficeModule } from "./office/office.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
 import { KnowledgeConnectionsModule } from "./knowledge-connections/knowledge-connections.module.js";
+import { WebsiteServicesModule } from "./website-services/website-services.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -39,7 +40,8 @@ import { KnowledgeConnectionsModule } from "./knowledge-connections/knowledge-co
     AgentTemplatesModule,
     OfficeModule,
     NotificationsModule,
-    KnowledgeConnectionsModule
+    KnowledgeConnectionsModule,
+    WebsiteServicesModule,
   ],
   controllers: [HealthController],
 })

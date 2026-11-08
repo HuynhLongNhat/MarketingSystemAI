@@ -171,3 +171,17 @@ export type {
   KnowledgeExternalSource,
   NewKnowledgeExternalSource,
 } from "./knowledge-connectors-schema.js";
+
+export {
+  websiteProjects,
+  WEBSITE_PROJECT_STATUSES,
+  WEBSITE_PROJECT_TYPES,
+} from "./website-services-schema.js";
+
+export type {
+  WebsiteProject,
+  NewWebsiteProject,
+  WebsiteProjectStatus,
+  WebsiteProjectType,
+  WebsiteProjectConfig,
+} from "./website-services-schema.js";

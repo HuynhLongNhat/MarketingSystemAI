@@ -28,6 +28,8 @@ import {
   type AiProviderType,
   type CatalogProvider,
   type ConnectionTestResult,
+  type OrganizationAiUsage,
+  type ProviderUsage,
 } from "@/lib/ai-providers-api";
 import { authClient } from "@/lib/auth-client";
 import { ModelPicker } from "@/modules/workforce/model-picker";
@@ -328,6 +330,9 @@ export function AiProvidersView() {
     AiProviderConnection[]
   >([]);
   const [defaults, setDefaults] = useState<AiModelDefault[]>([]);
+  const [usage, setUsage] = useState<OrganizationAiUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [providerUsage, setProviderUsage] = useState<Record<string, ProviderUsage>>({});
   const [drafts, setDrafts] = useState(emptyDrafts);
 
   const [provider, setProvider] =
@@ -397,6 +402,25 @@ export function AiProvidersView() {
       setLoading(false);
     }
   }, [organizationId]);
+
+  const loadUsage = useCallback(async () => {
+    if (!organizationId) return;
+    setUsageLoading(true);
+    try { setUsage(await aiProvidersApi.organizationUsage()); }
+    catch { toast.error("Không thể tải mức sử dụng AI."); }
+    finally { setUsageLoading(false); }
+  }, [organizationId]);
+
+  useEffect(() => { void loadUsage(); }, [loadUsage]);
+
+  const refreshConnectionUsage = useCallback(async (id: string) => {
+    setBusyId(id);
+    try { const next = await aiProvidersApi.connectionUsage(id); setProviderUsage((current) => ({ ...current, [id]: next })); }
+    catch { toast.error("Không thể tải usage của API key."); }
+    finally { setBusyId(null); }
+  }, []);
+
+  useEffect(() => { connections.filter((item) => item.provider === "openrouter").forEach((item) => { void refreshConnectionUsage(item.id); }); }, [connections, refreshConnectionUsage]);
 
   useEffect(() => {
     void loadData();
@@ -799,6 +823,19 @@ export function AiProvidersView() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div><CardTitle>Usage & Limits</CardTitle><CardDescription>Hạn mức token nội bộ của Organization, tách riêng với spending limit của provider.</CardDescription></div>
+          <Button type="button" size="sm" variant="outline" disabled={usageLoading} onClick={() => void loadUsage()}>{usageLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Làm mới</Button>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Tokens tháng này</p><p className="mt-1 text-xl font-semibold">{usage ? usage.usedTokens.toLocaleString() : "—"}</p></div>
+          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Hạn mức tháng</p><p className="mt-1 text-xl font-semibold">{usage?.monthlyTokenLimit === null ? "Chưa cấu hình" : usage ? usage.monthlyTokenLimit.toLocaleString() : "—"}</p></div>
+          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Còn lại / Requests</p><p className="mt-1 text-xl font-semibold">{usage?.remainingTokens === null ? "Không xác định" : usage ? usage.remainingTokens.toLocaleString() : "—"}</p><p className="text-xs text-muted-foreground">{usage ? `${usage.requestCount} requests trong tháng` : ""}</p></div>
+          <p className="sm:col-span-3 text-xs text-muted-foreground">Provider spending/credits chưa hiển thị vì chưa có endpoint usage đã xác minh cho connection. Embedding usage hiện chưa được theo dõi riêng.</p>
+        </CardContent>
+      </Card>
+
       <section className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold">
@@ -859,6 +896,15 @@ export function AiProvidersView() {
                       : "Chưa có API key"}
                   </p>
 
+                  {connection.provider === "openrouter" && (() => {
+                    const usage = providerUsage[connection.id];
+                    const percent = usage?.spendingLimit && usage.usage !== null && usage.usage !== undefined ? Math.min(100, Math.round((usage.usage / usage.spendingLimit) * 100)) : null;
+                    return <div className="mt-3 w-full max-w-md rounded-xl border bg-muted/30 p-3 text-xs">
+                      <div className="flex justify-between gap-3"><span className="font-medium">OpenRouter API key usage</span><span className={usage?.status === "available" ? "text-emerald-600" : "text-amber-600"}>{usage?.status ?? "Đang tải"}</span></div>
+                      {usage?.status === "available" && usage.spendingLimit !== null && usage.spendingLimit !== undefined ? <><div className="mt-2 flex justify-between"><span>${usage.usage ?? 0} đã dùng</span><span>${usage.remaining ?? "—"} còn lại / ${usage.spendingLimit}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className={percent !== null && percent >= 90 ? "h-full bg-red-500" : percent !== null && percent >= 70 ? "h-full bg-amber-500" : "h-full bg-emerald-500"} style={{ width: `${percent ?? 0}%` }} /></div></> : <p className="mt-2 text-muted-foreground">{usage?.status === "available" ? "Provider không cung cấp spending limit cho key này." : "Chưa lấy được usage của key."}</p>}
+                    </div>;
+                  })()}
+
                   {testResult && (
                     <div className="flex items-start gap-2 text-xs text-muted-foreground">
                       {testResult.success ? (
@@ -891,6 +937,7 @@ export function AiProvidersView() {
                     )}
                     Kiểm tra
                   </Button>
+                  {connection.provider === "openrouter" && <Button type="button" size="sm" variant="outline" disabled={connectionBusy} onClick={() => void refreshConnectionUsage(connection.id)}><RefreshCw className={connectionBusy ? "size-4 animate-spin" : "size-4"} /> Usage</Button>}
 
                   <Button
                     type="button"

@@ -60,6 +60,17 @@ export class AiProvidersController {
     return this.service.listConnections(ctx);
   }
 
+  @Get("usage/organization")
+  @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
+  @ApiOperation({ summary: "Get internal organization AI usage and quota" })
+  organizationUsage(@CurrentContext() ctx: RequestContext) {
+    return this.service.organizationUsage(ctx);
+  }
+
+  @Get(":id/usage")
+  @RequirePermissions(PERMISSIONS.AI_PROVIDER_READ)
+  connectionUsage(@CurrentContext() ctx: RequestContext, @Param("id") id: string) { return this.service.connectionUsage(ctx, id); }
+
   @Post()
   @RequirePermissions(PERMISSIONS.AI_PROVIDER_MANAGE)
   @ApiOperation({

@@ -27,6 +27,7 @@ import {
   Settings2,
   ShieldCheck,
   Target,
+  PanelTop,
   Users,
   Workflow,
 } from "lucide-react";
@@ -102,6 +103,7 @@ const navigation: NavigationGroup[] = [
     items: [
       { id: "marketing-overview", label: { vi: "Tổng quan #", en: "Overview #" }, icon: LayoutDashboard, planned: true },
       { id: "content", label: { vi: "Content Marketing #", en: "Content Marketing #" }, icon: ClipboardList, planned: true },
+      { id: "website-services", label: { vi: "Website Services", en: "Website Services" }, icon: PanelTop, href: "/marketing/websites" },
       { id: "social", label: { vi: "Social Media #", en: "Social Media #" }, icon: Users, planned: true },
       { id: "email", label: { vi: "Email Campaigns #", en: "Email Campaigns #" }, icon: Mail, planned: true },
       { id: "seo", label: { vi: "SEO #", en: "SEO #" }, icon: Search, planned: true },

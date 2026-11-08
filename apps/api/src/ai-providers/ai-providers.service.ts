@@ -6,11 +6,13 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 import {
   aiModelDefaults,
   aiProviderConnections,
+  aiUsageLogs,
+  aiUsageQuotas,
   db,
 } from "@workspace/db/node";
 
@@ -22,6 +24,7 @@ import type {
 import type { RequestContext } from "../auth/request-context.js";
 import { tenantWhere } from "../common/tenant/tenant-query.js";
 import { encryptCredential } from "../ai-credentials/credential-crypto.js";
+import { decryptCredential } from "../ai-credentials/credential-crypto.js";
 import { getEmbeddingModelDimensions } from "./provider-registry.js";
 
 import {
@@ -63,6 +66,31 @@ function databaseErrorCode(error: unknown): string | undefined {
 
 @Injectable()
 export class AiProvidersService {
+  async connectionUsage(context: RequestContext, id: string) {
+    const connection = await this.findConnection(context, id);
+    if (connection.provider !== "openrouter") return { status: "unsupported" as const, checkedAt: new Date().toISOString() };
+    try {
+      if (connection.keyVersion !== "v1") return { status: "unavailable" as const, checkedAt: new Date().toISOString() };
+      const apiKey = decryptCredential({ encryptedApiKey: connection.encryptedApiKey, keyIv: connection.keyIv, keyAuthTag: connection.keyAuthTag, keyVersion: "v1" }, { organizationId: context.organizationId, connectionId: connection.id, provider: connection.provider });
+      const response = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(5_000) });
+      if (!response.ok) return { status: response.status === 401 ? "unauthorized" as const : response.status === 429 ? "rate_limited" as const : "unavailable" as const, checkedAt: new Date().toISOString() };
+      const body = await response.json() as { data?: { usage?: number; limit?: number | null; limit_remaining?: number | null; is_free_tier?: boolean; expires_at?: string | null } };
+      const data = body.data;
+      return { status: "available" as const, usage: data?.usage ?? null, spendingLimit: data?.limit ?? null, remaining: data?.limit_remaining ?? null, freeTier: data?.is_free_tier ?? null, expiresAt: data?.expires_at ?? null, checkedAt: new Date().toISOString() };
+    } catch { return { status: "unavailable" as const, checkedAt: new Date().toISOString() }; }
+  }
+  async organizationUsage(context: RequestContext) {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const [[usage], [quota]] = await Promise.all([
+      db.select({ tokens: sql<string>`coalesce(sum(${aiUsageLogs.totalTokens}), 0)::text`, requests: sql<string>`count(*)::text` }).from(aiUsageLogs).where(and(eq(aiUsageLogs.organizationId, context.organizationId), gte(aiUsageLogs.createdAt, start), lt(aiUsageLogs.createdAt, next))),
+      db.select({ limit: aiUsageQuotas.monthlyTokenLimit }).from(aiUsageQuotas).where(eq(aiUsageQuotas.organizationId, context.organizationId)).limit(1),
+    ]);
+    const usedTokens = Number(usage?.tokens ?? 0);
+    const monthlyTokenLimit = quota?.limit ?? null;
+    return { periodStart: start.toISOString(), periodEnd: next.toISOString(), usedTokens, requestCount: Number(usage?.requests ?? 0), monthlyTokenLimit, remainingTokens: monthlyTokenLimit === null ? null : Math.max(0, monthlyTokenLimit - usedTokens), tracking: { embeddings: "not_separately_tracked" } };
+  }
   private validatePurpose(purpose: string): AiModelPurpose {
     if (
       !AI_MODEL_PURPOSES.includes(

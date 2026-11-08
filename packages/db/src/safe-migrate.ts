@@ -44,6 +44,14 @@ const pool = new Pool({
 });
 
 try {
+  try {
+    await pool.query("CREATE EXTENSION IF NOT EXISTS vector");
+  } catch {
+    throw new Error(
+      "pgvector extension is required. Ask the database administrator to enable the vector extension before running migrations.",
+    );
+  }
+
   await verifyDatabaseEnvironment(pool, environment as DatabaseEnvironment);
 } finally {
   await pool.end();

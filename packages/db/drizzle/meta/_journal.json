@@ -169,6 +169,13 @@
       "when": 1794070000000,
       "tag": "0024_knowledge_job_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794073600000,
+      "tag": "0025_website_services_projects",
+      "breakpoints": true
     }
   ]
 }

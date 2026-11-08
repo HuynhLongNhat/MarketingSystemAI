@@ -56,6 +56,8 @@ export interface AiModelDefault {
   createdAt: string;
   updatedAt: string;
 }
+export interface OrganizationAiUsage { periodStart: string; periodEnd: string; usedTokens: number; requestCount: number; monthlyTokenLimit: number | null; remainingTokens: number | null; tracking: { embeddings: "not_separately_tracked" }; }
+export interface ProviderUsage { status: "available"|"unsupported"|"unauthorized"|"rate_limited"|"unavailable"; usage?: number|null; spendingLimit?: number|null; remaining?: number|null; freeTier?: boolean|null; expiresAt?: string|null; checkedAt: string; }
 
 export interface SetAiModelDefaultInput {
   connectionId: string;
@@ -107,6 +109,8 @@ export interface ConnectionTestResult {
 const BASE_PATH = "/ai-providers";
 
 export const aiProvidersApi = {
+  organizationUsage() { return apiFetch<OrganizationAiUsage>(`${BASE_PATH}/usage/organization`); },
+  connectionUsage(id: string) { return apiFetch<ProviderUsage>(`${BASE_PATH}/${encodeURIComponent(id)}/usage`); },
   listConnections() {
     return apiFetch<AiProviderConnection[]>(BASE_PATH);
   },

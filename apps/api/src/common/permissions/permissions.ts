@@ -36,6 +36,9 @@ export const PERMISSIONS = {
 
   AGENT_READ: "agent:read",
   AGENT_MANAGE: "agent:manage",
+
+  WEBSITE_SERVICES_READ: "website_services:read",
+  WEBSITE_SERVICES_MANAGE: "website_services:manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -61,6 +64,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
       PERMISSIONS.KNOWLEDGE_READ,
       PERMISSIONS.DEPARTMENT_READ,
       PERMISSIONS.AGENT_READ,
+      PERMISSIONS.WEBSITE_SERVICES_READ,
     ],
   };
 
