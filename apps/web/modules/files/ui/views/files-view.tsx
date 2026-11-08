@@ -1,13 +1,7 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  Loader2Icon,
-  PencilIcon,
-  PlusIcon,
-  TrashIcon,
-} from "lucide-react";
+import { Loader2Icon, PencilIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -40,7 +34,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table";
 import { GoogleDrivePicker } from "@/components/knowledge/google-drive-picker";
-
+import { KnowledgeRetrievalPreview } from "../components/knowledge-retrieval-preview";
 const EMPTY_FORM: KnowledgeInput = {
   question: "",
   answer: "",
@@ -59,25 +53,17 @@ export const FilesView = () => {
   const [loadError, setLoadError] = useState(false);
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<KnowledgeEntry | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<KnowledgeEntry | null>(null);
 
   const [form, setForm] = useState<KnowledgeInput>({
     ...EMPTY_FORM,
   });
 
-  const [formErrors, setFormErrors] = useState<FormErrors>(
-    {},
-  );
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
 
-  const [deleting, setDeleting] = useState<KnowledgeEntry | null>(
-    null,
-  );
+  const [deleting, setDeleting] = useState<KnowledgeEntry | null>(null);
 
-  const loadEntries = useCallback(async (
-    showLoading = false,
-  ) => {
+  const loadEntries = useCallback(async (showLoading = false) => {
     if (showLoading) {
       setLoading(true);
     }
@@ -120,10 +106,7 @@ export const FilesView = () => {
     setDialogOpen(true);
   };
 
-  const updateField = (
-    field: keyof KnowledgeInput,
-    value: string,
-  ) => {
+  const updateField = (field: keyof KnowledgeInput, value: string) => {
     setForm((current) => ({
       ...current,
       [field]: value,
@@ -232,35 +215,41 @@ export const FilesView = () => {
         </div>
 
         {loadError && (
-         <>
-          <div
-            role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-4"
-          >
-            <p className="text-sm text-destructive">
-              Không thể cập nhật danh sách kiến thức.
-            </p>
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              onClick={() => void loadEntries(true)}
+          <>
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-4"
             >
-              Thử lại
-            </Button>
-          </div>
-        </> 
+              <p className="text-sm text-destructive">
+                Không thể cập nhật danh sách kiến thức.
+              </p>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loading}
+                onClick={() => void loadEntries(true)}
+              >
+                Thử lại
+              </Button>
+            </div>
+          </>
         )}
 
         <section className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold">Documents & Sources</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Theo dõi nguồn Google Drive, tiến trình indexing và embedding. Semantic retrieval chưa được hiển thị vì chưa có API truy xuất vector.
+              Theo dõi nguồn Google Drive, tiến trình indexing và embedding.
+              Semantic retrieval chưa được hiển thị vì chưa có API truy xuất
+              vector.
             </p>
           </div>
           <GoogleDrivePicker />
+        </section>
+        {/* Semantic Search & FAQ Retrieval Preview */}
+        <section className="space-y-3">
+          <KnowledgeRetrievalPreview />
         </section>
 
         <section className="space-y-3">
@@ -271,112 +260,97 @@ export const FilesView = () => {
             </p>
           </div>
 
-        <div className="overflow-hidden rounded-lg border bg-background">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-5">
-                  Câu hỏi
-                </TableHead>
-
-                <TableHead className="px-5">
-                  Danh mục
-                </TableHead>
-
-                <TableHead className="px-5">
-                  Câu trả lời
-                </TableHead>
-
-                <TableHead className="w-28 px-5">
-                  Thao tác
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {loading ? (
+          <div className="overflow-hidden rounded-lg border bg-background">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="h-28 text-center"
-                  >
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                      <Loader2Icon className="size-4 animate-spin" />
-                      Đang tải dữ liệu...
-                    </div>
-                  </TableCell>
+                  <TableHead className="px-5">Câu hỏi</TableHead>
+
+                  <TableHead className="px-5">Danh mục</TableHead>
+
+                  <TableHead className="px-5">Câu trả lời</TableHead>
+
+                  <TableHead className="w-28 px-5">Thao tác</TableHead>
                 </TableRow>
-              ) : items.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="h-28 text-center text-muted-foreground"
-                  >
-                    {loadError
-                      ? "Chưa tải được dữ liệu."
-                      : "Chưa có kiến thức nào."}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                items.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="max-w-64 px-5 py-4 font-medium">
-                      <p className="whitespace-normal break-words">
-                        {entry.question}
-                      </p>
-                    </TableCell>
+              </TableHeader>
 
-                    <TableCell className="px-5">
-                      {entry.category ? (
-                        <Badge variant="outline">
-                          {entry.category}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          —
-                        </span>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="max-w-80 px-5">
-                      <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                        {entry.answer}
-                      </p>
-                    </TableCell>
-
-                    <TableCell className="px-5">
-                      <div className="flex gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label="Sửa kiến thức"
-                          onClick={() => openEdit(entry)}
-                        >
-                          <PencilIcon className="size-4" />
-                        </Button>
-
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label="Xóa kiến thức"
-                          onClick={() => setDeleting(entry)}
-                        >
-                          <TrashIcon className="size-4 text-destructive" />
-                        </Button>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-28 text-center">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                        <Loader2Icon className="size-4 animate-spin" />
+                        Đang tải dữ liệu...
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : items.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="h-28 text-center text-muted-foreground"
+                    >
+                      {loadError
+                        ? "Chưa tải được dữ liệu."
+                        : "Chưa có kiến thức nào."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  items.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="max-w-64 px-5 py-4 font-medium">
+                        <p className="whitespace-normal break-words">
+                          {entry.question}
+                        </p>
+                      </TableCell>
 
-          {!loading && (
-            <div className="border-t px-5 py-3 text-xs text-muted-foreground">
-              Đang hiển thị {items.length} mục kiến thức
-            </div>
-          )}
-        </div>
+                      <TableCell className="px-5">
+                        {entry.category ? (
+                          <Badge variant="outline">{entry.category}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="max-w-80 px-5">
+                        <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                          {entry.answer}
+                        </p>
+                      </TableCell>
+
+                      <TableCell className="px-5">
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Sửa kiến thức"
+                            onClick={() => openEdit(entry)}
+                          >
+                            <PencilIcon className="size-4" />
+                          </Button>
+
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Xóa kiến thức"
+                            onClick={() => setDeleting(entry)}
+                          >
+                            <TrashIcon className="size-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+
+            {!loading && (
+              <div className="border-t px-5 py-3 text-xs text-muted-foreground">
+                Đang hiển thị {items.length} mục kiến thức
+              </div>
+            )}
+          </div>
         </section>
       </div>
 
@@ -396,22 +370,17 @@ export const FilesView = () => {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {editing
-                ? "Chỉnh sửa kiến thức"
-                : "Thêm kiến thức"}
+              {editing ? "Chỉnh sửa kiến thức" : "Thêm kiến thức"}
             </DialogTitle>
 
             <DialogDescription>
-              Quản lý thông tin để AI có thể tư vấn
-              khách hàng chính xác hơn.
+              Quản lý thông tin để AI có thể tư vấn khách hàng chính xác hơn.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="knowledge-question">
-                Câu hỏi
-              </Label>
+              <Label htmlFor="knowledge-question">Câu hỏi</Label>
 
               <Input
                 id="knowledge-question"
@@ -419,10 +388,7 @@ export const FilesView = () => {
                 value={form.question}
                 aria-invalid={Boolean(formErrors.question)}
                 onChange={(event) =>
-                  updateField(
-                    "question",
-                    event.target.value,
-                  )
+                  updateField("question", event.target.value)
                 }
                 placeholder="Ví dụ: Shop có hỗ trợ đổi trả không?"
               />
@@ -435,9 +401,7 @@ export const FilesView = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="knowledge-answer">
-                Câu trả lời
-              </Label>
+              <Label htmlFor="knowledge-answer">Câu trả lời</Label>
 
               <Textarea
                 id="knowledge-answer"
@@ -446,19 +410,12 @@ export const FilesView = () => {
                 className="resize-y"
                 value={form.answer}
                 aria-invalid={Boolean(formErrors.answer)}
-                onChange={(event) =>
-                  updateField(
-                    "answer",
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => updateField("answer", event.target.value)}
                 placeholder="Nhập câu trả lời cho khách hàng..."
               />
 
               {formErrors.answer && (
-                <p className="text-xs text-destructive">
-                  {formErrors.answer}
-                </p>
+                <p className="text-xs text-destructive">{formErrors.answer}</p>
               )}
             </div>
 
@@ -472,10 +429,7 @@ export const FilesView = () => {
                 maxLength={100}
                 value={form.category ?? ""}
                 onChange={(event) =>
-                  updateField(
-                    "category",
-                    event.target.value,
-                  )
+                  updateField("category", event.target.value)
                 }
                 placeholder="Ví dụ: Chính sách"
               />
@@ -491,19 +445,10 @@ export const FilesView = () => {
               Hủy
             </Button>
 
-            <Button
-              disabled={saving}
-              onClick={() => void saveEntry()}
-            >
-              {saving && (
-                <Loader2Icon className="mr-2 size-4 animate-spin" />
-              )}
+            <Button disabled={saving} onClick={() => void saveEntry()}>
+              {saving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
 
-              {saving
-                ? "Đang lưu..."
-                : editing
-                  ? "Cập nhật"
-                  : "Thêm"}
+              {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Thêm"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -520,13 +465,10 @@ export const FilesView = () => {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              Xóa kiến thức?
-            </DialogTitle>
+            <DialogTitle>Xóa kiến thức?</DialogTitle>
 
             <DialogDescription>
-              Bạn có chắc muốn xóa mục này?
-              Hành động này không thể hoàn tác.
+              Bạn có chắc muốn xóa mục này? Hành động này không thể hoàn tác.
             </DialogDescription>
           </DialogHeader>
 
@@ -550,9 +492,7 @@ export const FilesView = () => {
               disabled={saving}
               onClick={() => void deleteEntry()}
             >
-              {saving && (
-                <Loader2Icon className="mr-2 size-4 animate-spin" />
-              )}
+              {saving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
 
               {saving ? "Đang xóa..." : "Xóa"}
             </Button>

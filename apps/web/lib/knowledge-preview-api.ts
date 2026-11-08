@@ -24,6 +24,50 @@ export interface KnowledgePreviewResponse {
       similarity: number;
       content: string;
     }>;
+    diagnostic?: {
+      totalChunks: number;
+      totalEmbeddings: number;
+      matchingProviderModelEmbeddings: number;
+      candidatesAfterFilters: number;
+      candidatesAboveThreshold: number;
+      documentNotReadyCandidates: number;
+      threshold: number;
+      provider: string | null;
+      modelId: string | null;
+      topCandidates: Array<{
+        documentId: string;
+        documentTitle: string;
+        chunkId: string;
+        content: string;
+        similarity: number;
+      }>;
+      lexicalCandidates: Array<{
+        documentId: string;
+        documentTitle: string;
+        chunkId: string;
+        content: string;
+        similarity: number;
+        lexicalScore?: number;
+      }>;
+      finalCandidates: Array<{
+        documentId: string;
+        documentTitle: string;
+        chunkId: string;
+        content: string;
+        similarity: number;
+        lexicalScore?: number;
+        hybridScore?: number;
+      }>;
+      noMatchReason:
+        | "no_embeddings"
+        | "provider_model_mismatch"
+        | "document_not_ready"
+        | "document_filter"
+        | "below_threshold"
+        | "provider_error"
+        | "database_error"
+        | null;
+    };
   };
 }
 

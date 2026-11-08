@@ -107,6 +107,7 @@ export class KnowledgeService {
     const documents = await this.retrieval.retrieve({
       organizationId: context.organizationId,
       query,
+      diagnostic: true,
     });
 
     return {
@@ -130,6 +131,7 @@ export class KnowledgeService {
           similarity: match.similarity,
           content: match.content,
         })),
+        diagnostic: documents.diagnostic,
       },
     };
   }

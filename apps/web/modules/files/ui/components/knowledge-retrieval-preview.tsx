@@ -139,15 +139,15 @@ export function KnowledgeRetrievalPreview() {
               </CardTitle>
 
               <CardDescription>
-                Xem FAQ mà chatbot sẽ sử dụng để trả lời
-                một câu hỏi của khách hàng.
+                Xem FAQ và tài liệu semantic mà chatbot có thể
+                sử dụng để trả lời một câu hỏi của khách hàng.
               </CardDescription>
             </div>
           </div>
 
           <Badge variant="outline" className="gap-1.5">
             <ShieldCheck className="size-3" />
-            Không gọi AI
+            Không lưu câu hỏi
           </Badge>
         </div>
       </CardHeader>
@@ -194,8 +194,8 @@ export function KnowledgeRetrievalPreview() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Kiểm tra bằng thuật toán tìm kiếm từ khóa.
-            Điểm khớp không phải tỷ lệ chính xác của AI.
+            FAQ dùng tìm kiếm từ khóa; tài liệu semantic dùng embedding
+            provider đang cấu hình. Điểm khớp không phải tỷ lệ chính xác của AI.
           </p>
         </form>
 
@@ -326,9 +326,131 @@ export function KnowledgeRetrievalPreview() {
                 </article>
               ))}
             </section>
+
+            {result.documents.diagnostic && (
+              <section className="space-y-3 border-t pt-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">
+                    Chẩn đoán semantic search
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Chỉ hiển thị dữ liệu của Organization đang chọn. Threshold
+                    không bị thay đổi bởi màn hình này.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
+                  {[
+                    ["Chunks", result.documents.diagnostic.totalChunks],
+                    ["Embeddings", result.documents.diagnostic.totalEmbeddings],
+                    ["Đúng model", result.documents.diagnostic.matchingProviderModelEmbeddings],
+                    ["Qua filters", result.documents.diagnostic.candidatesAfterFilters],
+                    ["Semantic ≥ threshold", result.documents.diagnostic.candidatesAboveThreshold],
+                    ["Threshold (tham khảo)", result.documents.diagnostic.threshold],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="rounded-lg border bg-muted/30 p-2.5">
+                      <p className="text-muted-foreground">{label}</p>
+                      <p className="mt-1 font-semibold tabular-nums">{typeof value === "number" && String(label).startsWith("Threshold") ? value.toFixed(2) : value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-lg border px-3 py-2 text-xs">
+                  <span className="font-medium">Provider/model query: </span>
+                  {result.documents.diagnostic.provider && result.documents.diagnostic.modelId
+                    ? `${result.documents.diagnostic.provider} / ${result.documents.diagnostic.modelId}`
+                    : "Không xác định do lỗi provider hoặc database"}
+                  {result.documents.diagnostic.noMatchReason && (
+                    <p className="mt-1 text-muted-foreground">
+                      Lý do: {semanticReason(result.documents.diagnostic.noMatchReason)}
+                    </p>
+                  )}
+                </div>
+
+                {result.documents.diagnostic.topCandidates.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Top chunks trước khi lọc threshold
+                    </p>
+                    {result.documents.diagnostic.topCandidates.map((candidate, index) => (
+                      <article key={candidate.chunkId} className="rounded-lg border bg-background p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-medium">#{index + 1} · {candidate.documentTitle}</p>
+                          <Badge variant="outline">{candidate.similarity.toFixed(4)}</Badge>
+                        </div>
+                        <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">{candidate.content}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {result.documents.diagnostic.lexicalCandidates.length > 0 && (
+                  <DiagnosticCandidates
+                    title="Lexical matches (không dùng LLM)"
+                    candidates={result.documents.diagnostic.lexicalCandidates}
+                    score="lexical"
+                  />
+                )}
+
+                {result.documents.diagnostic.finalCandidates.length > 0 && (
+                  <DiagnosticCandidates
+                    title="Final hybrid ranking (RRF)"
+                    candidates={result.documents.diagnostic.finalCandidates}
+                    score="hybrid"
+                  />
+                )}
+              </section>
+            )}
           </section>
         )}
       </CardContent>
     </Card>
   );
+}
+
+function DiagnosticCandidates({
+  title,
+  candidates,
+  score,
+}: {
+  title: string;
+  candidates: Array<{
+    chunkId: string;
+    documentTitle: string;
+    content: string;
+    lexicalScore?: number;
+    hybridScore?: number;
+  }>;
+  score: "lexical" | "hybrid";
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">{title}</p>
+      {candidates.map((candidate, index) => {
+        const value = score === "lexical" ? candidate.lexicalScore : candidate.hybridScore;
+        return (
+          <article key={`${score}-${candidate.chunkId}`} className="rounded-lg border bg-background p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-sm font-medium">#{index + 1} · {candidate.documentTitle}</p>
+              <Badge variant="outline">{value?.toFixed(4) ?? "—"}</Badge>
+            </div>
+            <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">{candidate.content}</p>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function semanticReason(reason: NonNullable<KnowledgePreviewResponse["documents"]["diagnostic"]>["noMatchReason"]) {
+  const labels: Record<NonNullable<typeof reason>, string> = {
+    no_embeddings: "Organization chưa có embeddings.",
+    provider_model_mismatch: "Embeddings có nhưng không khớp provider/model của query.",
+    document_not_ready: "Document hoặc embedding chưa ở trạng thái ready/completed.",
+    document_filter: "Embeddings bị loại bởi bộ lọc nguồn/document.",
+    below_threshold: "Có candidates nhưng similarity thấp hơn 0.72.",
+    provider_error: "Provider embedding không trả được query vector.",
+    database_error: "Không thể truy vấn semantic search database.",
+  };
+  return reason ? labels[reason] : "Có kết quả semantic search.";
 }
