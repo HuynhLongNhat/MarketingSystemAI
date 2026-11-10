@@ -178,6 +178,26 @@ export {
   WEBSITE_PROJECT_TYPES,
 } from "./website-services-schema.js";
 
+export {
+  crmContacts,
+  crmChannelIdentities,
+  crmConversationContacts,
+  crmLeads,
+  CRM_CHANNEL_TYPES,
+  CRM_LEAD_STATUSES,
+} from "./crm-schema.js";
+
+export type {
+  CrmChannelType,
+  CrmLeadStatus,
+  CrmContact,
+  NewCrmContact,
+  CrmChannelIdentity,
+  NewCrmChannelIdentity,
+  CrmLead,
+  NewCrmLead,
+} from "./crm-schema.js";
+
 export type {
   WebsiteProject,
   NewWebsiteProject,

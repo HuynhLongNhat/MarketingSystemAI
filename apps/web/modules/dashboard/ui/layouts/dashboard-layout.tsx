@@ -2,6 +2,7 @@
 import { AuthGuard } from "@/modules/auth/ui/components/auth-guard";
 import { OrganizationGuard } from "@/modules/auth/ui/components/organization-guard";
 import { DashboardSidebar } from "@/modules/dashboard/ui/components/dashboard-sidebar";
+import { DashboardTopbar } from "@/modules/dashboard/ui/components/dashboard-topbar";
 import { SidebarProvider } from "@workspace/ui/components/sidebar";
 import { Provider } from "jotai";
 import { cookies } from "next/headers";
@@ -23,6 +24,7 @@ export const DashboardLayout = async ({
             <DashboardSidebar />
 
             <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+              <DashboardTopbar />
               {children}
             </main>
           </SidebarProvider>
