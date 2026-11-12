@@ -17,6 +17,7 @@ import { OfficeModule } from "./office/office.module.js";
 import { NotificationsModule } from "./notifications/notifications.module.js";
 import { KnowledgeConnectionsModule } from "./knowledge-connections/knowledge-connections.module.js";
 import { WebsiteServicesModule } from "./website-services/website-services.module.js";
+import { CrmContactsModule } from "./crm/contacts/contacts.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -42,6 +43,7 @@ import { WebsiteServicesModule } from "./website-services/website-services.modul
     NotificationsModule,
     KnowledgeConnectionsModule,
     WebsiteServicesModule,
+    CrmContactsModule,
   ],
   controllers: [HealthController],
 })

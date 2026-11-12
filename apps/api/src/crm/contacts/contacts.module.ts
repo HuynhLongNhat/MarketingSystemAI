@@ -1,0 +1,2 @@
+import { Module } from "@nestjs/common"; import { AuthGuard } from "../../auth/auth.guard.js"; import { PermissionsGuard } from "../../common/permissions/permissions.guard.js"; import { ContactsController } from "./contacts.controller.js"; import { ContactsService } from "./contacts.service.js";
+@Module({ controllers:[ContactsController], providers:[ContactsService,AuthGuard,PermissionsGuard] }) export class CrmContactsModule {}

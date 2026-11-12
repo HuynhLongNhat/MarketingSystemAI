@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "node dist/safe-migrate.js",
     "check-types": "tsc --noEmit",
-    "test:knowledge:postgres": "node scripts/postgres-lexical-retrieval.integration.mjs"
+    "test:knowledge:postgres": "node scripts/postgres-lexical-retrieval.integration.mjs",
+    "test:crm:integration": "node scripts/crm-tenant-isolation.integration.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

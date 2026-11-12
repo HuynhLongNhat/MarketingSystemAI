@@ -6,7 +6,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { MoreHorizontalIcon, Wand2Icon } from "lucide-react";
+import { LockKeyholeIcon, MoreHorizontalIcon, Wand2Icon } from "lucide-react";
 
 import { Button } from "@workspace/ui/components/button";
 import { Form, FormField } from "@workspace/ui/components/form";
@@ -43,6 +43,8 @@ import {
 } from "@/lib/conversations-api";
 
 import { messagesApi, type ConversationMessage } from "@/lib/messages-api";
+import { ApiError } from "@/lib/api-client";
+import { authClient } from "@/lib/auth-client";
 
 import { ConversationStatusButton } from "../components/conversation-status-button";
 import { HandoffControls } from "../components/handoff-controls";
@@ -122,6 +124,7 @@ export const ConversationIdView = ({
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const { data: session } = authClient.useSession();
 
   const requestGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
@@ -142,6 +145,7 @@ export const ConversationIdView = ({
     if (
       !conversation ||
       conversation.status === "resolved" ||
+      conversation.assignedToUserId !== session?.user.id ||
       isEnhancing ||
       isSending
     ) {
@@ -357,8 +361,12 @@ export const ConversationIdView = ({
     if (
       !conversation ||
       conversation.status === "resolved" ||
+      conversation.assignedToUserId !== session?.user.id ||
       sendingRef.current
     ) {
+      if (conversation?.status !== "resolved") {
+        toast.error("Bạn cần nhận hội thoại này trước khi trả lời.");
+      }
       return;
     }
 
@@ -381,7 +389,12 @@ export const ConversationIdView = ({
       await refreshLatest();
     } catch (error) {
       console.error("Failed to send message:", error);
-      toast.error("Failed to send message");
+      if (error instanceof ApiError && error.status === 403) {
+        toast.error("Bạn không còn quyền trả lời hội thoại này. Trạng thái đã được cập nhật.");
+        await refreshLatest();
+      } else {
+        toast.error("Không thể gửi tin nhắn. Vui lòng thử lại.");
+      }
     } finally {
       sendingRef.current = false;
       setIsSending(false);
@@ -404,6 +417,17 @@ export const ConversationIdView = ({
   }
 
   const isResolved = conversation.status === "resolved";
+  const isAssignedToMe =
+    Boolean(session?.user.id) &&
+    conversation.assignedToUserId === session?.user.id;
+  const composerDisabled = isResolved || !isAssignedToMe || isSending;
+  const composerHint = isResolved
+    ? "Hội thoại này đã được xử lý xong."
+    : !conversation.assignedToUserId
+      ? "Nhận hội thoại này trước khi trả lời khách hàng."
+      : !isAssignedToMe
+        ? "Hội thoại đang do nhân viên khác phụ trách."
+        : null;
 
   return (
     <div className="flex h-full flex-col bg-muted">
@@ -479,6 +503,12 @@ export const ConversationIdView = ({
       </AIConversation>
 
       <div className="p-2">
+        {composerHint && (
+          <div className="mb-2 flex items-center gap-2 rounded-md border border-dashed bg-background px-3 py-2 text-xs text-muted-foreground">
+            <LockKeyholeIcon className="size-3.5 shrink-0" />
+            <span>{composerHint}</span>
+          </div>
+        )}
         <Form {...form}>
           <AIInput onSubmit={form.handleSubmit(onSubmit)}>
             <FormField
@@ -486,10 +516,12 @@ export const ConversationIdView = ({
               name="message"
               render={({ field }) => (
                 <AIInputTextarea
-                  disabled={isResolved || isSending}
+                  disabled={composerDisabled}
                   onChange={(event) => {
                     field.onChange(event);
-                    reportOperatorTyping(event.target.value);
+                    if (isAssignedToMe) {
+                      reportOperatorTyping(event.target.value);
+                    }
                   }}
                   onBlur={() => {
                     field.onBlur();
@@ -506,9 +538,7 @@ export const ConversationIdView = ({
                     }
                   }}
                   placeholder={
-                    isResolved
-                      ? "This conversation has been resolved"
-                      : "Type your response as an operator..."
+                    composerHint ?? "Nhập phản hồi với vai trò nhân viên..."
                   }
                   value={field.value}
                 />
@@ -521,9 +551,8 @@ export const ConversationIdView = ({
                   type="button"
                   onClick={() => void handleEnhanceResponse()}
                   disabled={
-                    isResolved ||
+                    composerDisabled ||
                     isEnhancing ||
-                    isSending ||
                     !form.formState.isValid
                   }
                 >
@@ -533,7 +562,7 @@ export const ConversationIdView = ({
               </AIInputTools>
 
               <AIInputSubmit
-                disabled={isResolved || !form.formState.isValid || isSending}
+                disabled={composerDisabled || !form.formState.isValid}
                 status="ready"
                 type="submit"
               />

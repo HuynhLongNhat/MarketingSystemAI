@@ -12,6 +12,9 @@ CREATE TABLE "crm_contacts" (
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+-- Composite foreign keys below need this key to exist before they are added.
+CREATE UNIQUE INDEX "crm_contacts_id_org_uq" ON "crm_contacts" USING btree ("id","organization_id");
+--> statement-breakpoint
 CREATE TABLE "crm_channel_identities" (
   "id" text PRIMARY KEY NOT NULL,
   "organization_id" text NOT NULL,
@@ -61,8 +64,6 @@ ALTER TABLE "crm_leads" ADD CONSTRAINT "crm_leads_organization_id_organization_i
 ALTER TABLE "crm_leads" ADD CONSTRAINT "crm_leads_contact_org_fk" FOREIGN KEY ("contact_id","organization_id") REFERENCES "public"."crm_contacts"("id","organization_id") ON DELETE cascade;
 --> statement-breakpoint
 ALTER TABLE "crm_leads" ADD CONSTRAINT "crm_leads_owner_user_id_user_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."user"("id") ON DELETE set null;
---> statement-breakpoint
-CREATE UNIQUE INDEX "crm_contacts_id_org_uq" ON "crm_contacts" USING btree ("id","organization_id");
 --> statement-breakpoint
 CREATE INDEX "crm_contacts_org_updated_idx" ON "crm_contacts" USING btree ("organization_id","updated_at");
 --> statement-breakpoint

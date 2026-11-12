@@ -1,15 +1,4 @@
-import { ContactRound } from "lucide-react";
-
-import { CrmEmptyState } from "@/modules/dashboard/ui/components/crm-empty-state";
-
-export default function ContactsPage() {
-  return (
-    <CrmEmptyState
-      eyebrow="CRM Foundation"
-      title="Khách hàng"
-      description="Danh bạ CRM sẽ hợp nhất các định danh đã được xác minh từ website widget và những kênh kết nối trong tương lai."
-      icon={ContactRound}
-      details="Chưa có API quản lý liên hệ trong Phase 1, nên trang này không hiển thị dữ liệu mẫu. Contact vẫn tách biệt với khách truy cập và phiên widget hiện có."
-    />
-  );
-}
+"use client";
+import Link from "next/link"; import { useCallback, useEffect, useState } from "react"; import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Button } from "@workspace/ui/components/button"; import { Input } from "@workspace/ui/components/input"; import { toast } from "sonner"; import { crmContactsApi, type CrmContact } from "@/lib/crm-contacts-api";
+export default function ContactsPage(){const [items,setItems]=useState<CrmContact[]>([]),[loading,setLoading]=useState(true),[search,setSearch]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0);const load=useCallback(async()=>{setLoading(true);try{const r=await crmContactsApi.list({search,page,limit:20,sort:"updated"});setItems(r.items);setTotal(r.total)}catch{toast.error("Không thể tải danh sách khách hàng")}finally{setLoading(false)}},[search,page]);useEffect(()=>{void load()},[load]);async function remove(c:CrmContact){if(!confirm(`Xóa ${c.displayName??"khách hàng"}? Hội thoại gốc không bị xóa.`))return;try{await crmContactsApi.remove(c.id);toast.success("Đã xóa khách hàng");await load()}catch{toast.error("Không thể xóa khách hàng đang có lead hoặc channel identity")}}return <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6"><header className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold">Khách hàng</h1><p className="text-sm text-muted-foreground">Quản lý thông tin và lịch sử tương tác của khách hàng.</p></div><Button disabled title="Tạo khách hàng từ hồ sơ hội thoại sẽ sớm được bổ sung"><Plus/>Thêm khách hàng</Button></header><div className="relative max-w-md"><Search className="absolute left-3 top-3 size-4 text-muted-foreground"/><Input className="pl-9" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Tìm tên, số điện thoại hoặc email..."/></div>{loading?<div className="flex justify-center p-12"><Loader2 className="animate-spin"/></div>:items.length===0?<div className="rounded-lg border border-dashed p-12 text-center text-sm text-muted-foreground">{search?"Không tìm thấy khách hàng phù hợp.":"Chưa có khách hàng."}</div>:<><div className="overflow-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/40 text-left"><tr><th className="p-3">Khách hàng</th><th className="p-3">Số điện thoại</th><th className="p-3">Email</th><th className="p-3">Tags</th><th className="p-3">Cập nhật</th><th className="p-3"/></tr></thead><tbody>{items.map(c=><tr className="border-t" key={c.id}><td className="p-3 font-medium"><Link className="hover:underline" href={`/contacts/${c.id}`}>{c.displayName??"Chưa đặt tên"}</Link></td><td className="p-3">{c.phone??"—"}</td><td className="p-3">{c.email??"—"}</td><td className="p-3">{c.tags.join(", ")||"—"}</td><td className="p-3">{new Date(c.updatedAt).toLocaleDateString("vi-VN")}</td><td className="p-3"><Button size="icon" variant="ghost" onClick={()=>void remove(c)}><Trash2 className="size-4"/></Button></td></tr>)}</tbody></table></div><div className="flex justify-between text-sm"><span>{total} khách hàng</span><span><Button variant="outline" disabled={page===1} onClick={()=>setPage(p=>p-1)}>Trước</Button> <Button variant="outline" disabled={items.length<20} onClick={()=>setPage(p=>p+1)}>Sau</Button></span></div></>}</main>}

@@ -19,6 +19,12 @@ export const PERMISSIONS = {
   CONVERSATION_ASSIGN: "conversation:assign",
   CONVERSATION_REPLY: "conversation:reply",
 
+  CRM_CONTACT_READ: "crm_contact:read",
+  CRM_CONTACT_CREATE: "crm_contact:create",
+  CRM_CONTACT_UPDATE: "crm_contact:update",
+  CRM_CONTACT_DELETE: "crm_contact:delete",
+  CRM_CONTACT_LINK: "crm_contact:link",
+
   KNOWLEDGE_READ: "knowledge:read",
   KNOWLEDGE_UPDATE: "knowledge:update",
 
@@ -61,6 +67,10 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
       PERMISSIONS.CONVERSATION_READ,
       PERMISSIONS.CONVERSATION_CLAIM,
       PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.CRM_CONTACT_READ,
+      PERMISSIONS.CRM_CONTACT_CREATE,
+      PERMISSIONS.CRM_CONTACT_UPDATE,
+      PERMISSIONS.CRM_CONTACT_LINK,
       PERMISSIONS.KNOWLEDGE_READ,
       PERMISSIONS.DEPARTMENT_READ,
       PERMISSIONS.AGENT_READ,
