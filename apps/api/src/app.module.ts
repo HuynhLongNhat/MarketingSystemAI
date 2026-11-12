@@ -18,6 +18,7 @@ import { NotificationsModule } from "./notifications/notifications.module.js";
 import { KnowledgeConnectionsModule } from "./knowledge-connections/knowledge-connections.module.js";
 import { WebsiteServicesModule } from "./website-services/website-services.module.js";
 import { CrmContactsModule } from "./crm/contacts/contacts.module.js";
+import { TasksModule } from "./tasks/tasks.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -44,6 +45,7 @@ import { CrmContactsModule } from "./crm/contacts/contacts.module.js";
     KnowledgeConnectionsModule,
     WebsiteServicesModule,
     CrmContactsModule,
+    TasksModule,
   ],
   controllers: [HealthController],
 })

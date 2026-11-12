@@ -1,0 +1,23 @@
+name: Deploy staging (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      ref: { description: 'Commit SHA or ref already validated by CI', required: true, type: string }
+jobs:
+  deploy:
+    environment: staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate staging configuration
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$STAGING_HOST" || { echo 'Missing STAGING_HOST'; exit 1; }
+          test -n "$STAGING_SSH_PRIVATE_KEY" || { echo 'Missing STAGING_SSH_PRIVATE_KEY'; exit 1; }
+          test -n "$STAGING_SSH_KNOWN_HOSTS" || { echo 'Missing STAGING_SSH_KNOWN_HOSTS'; exit 1; }
+      - uses: actions/checkout@v4
+        with: { ref: ${{ inputs.ref }} }
+      - name: Deploy immutable checked-out revision
+        run: echo 'Deployment intentionally requires a reviewed VM deployment script and is not enabled automatically.'

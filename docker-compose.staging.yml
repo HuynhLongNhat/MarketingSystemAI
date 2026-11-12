@@ -1,0 +1,62 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      APP_ENV: staging
+      NODE_ENV: production
+      PORT: 3002
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [staging-private]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      APP_ENV: staging
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [staging-private]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes: [redis-staging-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [staging-private]
+
+networks:
+  staging-private:
+    driver: bridge
+volumes:
+  redis-staging-data:

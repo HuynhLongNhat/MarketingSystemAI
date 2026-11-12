@@ -31,6 +31,7 @@ export interface KnowledgeEmbeddingJobData {
   token: string;
   createdAt: string;
 }
+export interface AiTaskJobData { taskId:string; organizationId:string; createdAt:string; }
 
 @Injectable()
 export class JobsService {
@@ -91,6 +92,7 @@ export class JobsService {
       organizationId: context.organizationId,
     };
   }
+  async enqueueAiTask(input:{taskId:string;organizationId:string}) { const job=await this.queue.add(JOB_NAMES.AI_TASK_EXECUTE,{...input,createdAt:new Date().toISOString()} satisfies AiTaskJobData,{jobId:`ai-task-${input.taskId}`,attempts:2,backoff:{type:"exponential",delay:3000},removeOnComplete:100,removeOnFail:100}); return {jobId:job.id}; }
 
   async enqueueCustomerSupportReply(input: {
     organizationId: string;

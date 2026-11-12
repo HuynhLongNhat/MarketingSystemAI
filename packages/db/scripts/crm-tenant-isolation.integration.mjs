@@ -1,19 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import { config } from "dotenv";
 import { Client } from "pg";
 
-// Match Drizzle's local-development convention. Existing shell variables still
-// take precedence, so CI can provide CRM_TEST_DATABASE_URL without a file.
-config({ path: resolve(process.cwd(), "../../.env.local") });
-
-// Prefer a dedicated test DB. For local development this may reuse DATABASE_URL:
-// every fixture stays inside one transaction which is rolled back before exit.
-// This script never runs migrations, TRUNCATE, DROP, or cleanup deletes.
-const databaseUrl = process.env.CRM_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+// Isolation tests must never fall back to the development connection. Even with
+// rollback, a crash or operational mistake must not target real local data.
+const databaseUrl = process.env.CRM_TEST_DATABASE_URL;
 if (!databaseUrl) {
-  console.log("SKIP: neither CRM_TEST_DATABASE_URL nor DATABASE_URL is configured.");
+  console.log("SKIP: CRM_TEST_DATABASE_URL is not configured.");
   process.exit(0);
 }
 

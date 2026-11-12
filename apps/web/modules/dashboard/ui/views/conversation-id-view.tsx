@@ -48,6 +48,7 @@ import { authClient } from "@/lib/auth-client";
 
 import { ConversationStatusButton } from "../components/conversation-status-button";
 import { HandoffControls } from "../components/handoff-controls";
+import { ConversationContactPanel } from "../components/conversation-contact-panel";
 
 const PAGE_SIZE = 20;
 const POLLING_INTERVAL = 5000;
@@ -449,6 +450,8 @@ export const ConversationIdView = ({
         assignedToUserId={conversation.assignedToUserId ?? null}
         onUpdated={refreshLatest}
       />
+
+      <ConversationContactPanel conversationId={conversationId} />
 
       <AIConversation className="max-h-[calc(100vh-180px)]">
         <AIConversationContent>

@@ -7,4 +7,5 @@ export const JOB_NAMES = {
   CUSTOMER_SUPPORT_REPLY: "customer-support.reply",
   KNOWLEDGE_INGEST_SOURCE: "knowledge.ingest-source",
   KNOWLEDGE_EMBED_DOCUMENT: "knowledge.embed-document",
+  AI_TASK_EXECUTE: "ai-task.execute",
 } as const;
