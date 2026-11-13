@@ -2,6 +2,7 @@
 import { Injectable } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
+import { randomUUID } from "node:crypto";
 
 import type { RequestContext } from "../auth/request-context.js";
 import { createTenantJobData } from "./tenant-job.js";
@@ -92,7 +93,7 @@ export class JobsService {
       organizationId: context.organizationId,
     };
   }
-  async enqueueAiTask(input:{taskId:string;organizationId:string}) { const job=await this.queue.add(JOB_NAMES.AI_TASK_EXECUTE,{...input,createdAt:new Date().toISOString()} satisfies AiTaskJobData,{jobId:`ai-task-${input.taskId}`,attempts:2,backoff:{type:"exponential",delay:3000},removeOnComplete:100,removeOnFail:100}); return {jobId:job.id}; }
+  async enqueueAiTask(input:{taskId:string;organizationId:string; recovery?:boolean}) { const job=await this.queue.add(JOB_NAMES.AI_TASK_EXECUTE,{taskId:input.taskId,organizationId:input.organizationId,createdAt:new Date().toISOString()} satisfies AiTaskJobData,{jobId:input.recovery?`ai-task-recovery-${input.taskId}-${randomUUID()}`:`ai-task-${input.taskId}`,attempts:2,backoff:{type:"exponential",delay:3000},removeOnComplete:100,removeOnFail:100}); return {jobId:job.id}; }
 
   async enqueueCustomerSupportReply(input: {
     organizationId: string;
