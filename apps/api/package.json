@@ -13,10 +13,11 @@
     "start:worker": "node dist/worker.js",
     "start:worker:dev": "nest start --entryFile worker --watch",
     "test:queue": "node dist/jobs/test-enqueue.js",
-    "test:security": "tsc -p tsconfig.security-test.json && node --test dist-security-test/security/security.spec.js",
-    "test:security:http": "tsc -p tsconfig.security-test.json && node --test dist-security-test/security/security-http.spec.js",
-    "test:auth": "tsc -p tsconfig.security-test.json && node --test dist-security-test/auth/ dist-security-test/common/sms/",
-    "test:chat": "tsc -p tsconfig.security-test.json && node --test dist-security-test/conversations/knowledge-ranking.spec.js dist-security-test/conversations/reply-guard.spec.js dist-security-test/conversations/playground-policy.spec.js dist-security-test/conversations/public-widget-ai.rag.spec.js dist-security-test/conversations/rag-trace.spec.js"
+    "test:security": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/security.spec.js",
+    "test:security:http": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/security-http.spec.js",
+    "test:auth": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/auth/ dist-security-test/common/sms/",
+    "test:chat": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/conversations/knowledge-ranking.spec.js dist-security-test/conversations/reply-guard.spec.js dist-security-test/conversations/playground-policy.spec.js dist-security-test/conversations/public-widget-ai.rag.spec.js dist-security-test/conversations/rag-trace.spec.js",
+    "test:tasks:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/tasks/tasks.integration.spec.js"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.13",

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, lt, ne, or } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   aiProviderConnections,
@@ -12,7 +12,7 @@ import { PROVIDER_REGISTRY } from "../ai-providers/provider-registry.js";
 import { AiUsageQuotaService } from "../conversations/ai-usage-quota.service.js";
 import { AiUsageRecorder } from "../conversations/ai-usage-recorder.js";
 import type { AiTaskJobData } from "../jobs/jobs.service.js";
-import { canWorkerClaimTask } from "./task-execution-state.js";
+import { canAttemptTaskExecution, canWorkerClaimTask, MAX_TASK_EXECUTIONS } from "./task-execution-state.js";
 
 const TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_TOKENS = 2_000;
@@ -44,8 +44,11 @@ export class TaskAiExecutionService {
   private readonly logger = new Logger(TaskAiExecutionService.name);
   constructor(private readonly usage: AiUsageRecorder, private readonly quota: AiUsageQuotaService) {}
 
-  private prompt(task: { title: string; description: string }) {
-    return `Bạn là chuyên gia nghiên cứu thị trường. Hãy lập báo cáo bằng tiếng Việt cho nhiệm vụ sau.\n\nTiêu đề: ${task.title}\nYêu cầu/bối cảnh: ${task.description}\n\nBắt buộc dùng đúng các mục Markdown: Tóm tắt điều hành; Tổng quan thị trường; Khách hàng mục tiêu; Phân tích đối thủ (sơ bộ); Cơ hội kinh doanh; Rủi ro và giả định; Kế hoạch hành động 30 ngày; Giới hạn báo cáo.\n\nMVP này KHÔNG có Web Search hay dữ liệu Internet trực tiếp. Không được bịa số liệu, nguồn dẫn, thị phần, giá cả hoặc tuyên bố rằng đã nghiên cứu Internet. Hãy nêu rõ kết luận chỉ là khung phân tích dựa trên mô tả người dùng và các giả định cần kiểm chứng.`;
+  private prompt(task: { title: string; description: string; agentName: string | null; agentRole: string | null; agentSystemPrompt: string | null }) {
+    const agentContext = task.agentName
+      ? `\n\nBạn đang thực hiện nhiệm vụ với tư cách Agent “${task.agentName}” (${task.agentRole ?? "không xác định vai trò"}). Hướng dẫn Agent sau là cấu hình đã được chốt khi tạo task; chỉ tuân theo khi không mâu thuẫn với các giới hạn báo cáo và không gọi hay giả định có tool: \n${task.agentSystemPrompt ?? ""}`
+      : "";
+    return `Bạn là chuyên gia nghiên cứu thị trường. Hãy lập báo cáo bằng tiếng Việt cho nhiệm vụ sau.\n\nTiêu đề: ${task.title}\nYêu cầu/bối cảnh: ${task.description}${agentContext}\n\nBắt buộc dùng đúng các mục Markdown: Tóm tắt điều hành; Tổng quan thị trường; Khách hàng mục tiêu; Phân tích đối thủ (sơ bộ); Cơ hội kinh doanh; Rủi ro và giả định; Kế hoạch hành động 30 ngày; Giới hạn báo cáo.\n\nMVP này KHÔNG có Web Search, dữ liệu Internet trực tiếp hoặc tool được tích hợp. Không được bịa số liệu, nguồn dẫn, thị phần, giá cả hoặc tuyên bố rằng đã nghiên cứu Internet. Hãy nêu rõ kết luận chỉ là khung phân tích dựa trên mô tả người dùng và các giả định cần kiểm chứng.`;
   }
 
   private async event(taskId: string, organizationId: string, type: string, message: string) {
@@ -58,6 +61,11 @@ export class TaskAiExecutionService {
   }
 
   private async runtime(task: typeof aiTasks.$inferSelect): Promise<Runtime> {
+    // Agent tasks always use the immutable connection/model captured at creation.
+    // A malformed snapshot is a configuration error, never a fallback to General.
+    if (task.agentName && (!task.agentConnectionId || !task.agentModelId || task.connectionId !== task.agentConnectionId || task.modelId !== task.agentModelId)) {
+      throw new TaskProviderError("Task có snapshot cấu hình Agent không hợp lệ.", false);
+    }
     if (!task.connectionId || !task.modelId) throw new TaskProviderError("Task thiếu cấu hình AI Provider.", false);
     const [connection] = await db.select().from(aiProviderConnections).where(and(eq(aiProviderConnections.organizationId, task.organizationId), eq(aiProviderConnections.id, task.connectionId), eq(aiProviderConnections.enabled, true))).limit(1);
     if (!connection) throw new TaskProviderError("AI Provider đã cấu hình không khả dụng.", false);
@@ -102,12 +110,18 @@ export class TaskAiExecutionService {
     const [task] = await db.select().from(aiTasks).where(and(eq(aiTasks.id, data.taskId), eq(aiTasks.organizationId, data.organizationId))).limit(1);
     // A delayed or retried BullMQ job must never resurrect a terminal task.
     if (!task || !canWorkerClaimTask(task.status)) return;
+    if (!canAttemptTaskExecution(task.attemptCount)) {
+      const [exhausted] = await db.update(aiTasks).set({ status: "failed", error: "Task đã vượt số lần thực thi tối đa.", executionToken: null, leaseExpiresAt: null, completedAt: new Date(), updatedAt: new Date() }).where(and(eq(aiTasks.id, task.id), eq(aiTasks.organizationId, task.organizationId), eq(aiTasks.status, "queued"), gte(aiTasks.attemptCount, MAX_TASK_EXECUTIONS))).returning({ id: aiTasks.id });
+      if (exhausted) await this.event(task.id, task.organizationId, "failed", "Task đã vượt số lần thực thi tối đa.");
+      return;
+    }
     const started = Date.now();
     const executionToken = randomUUID();
     const now = new Date();
-    const claimed = await db.update(aiTasks).set({ status: "running", executionToken, leaseExpiresAt: new Date(now.getTime() + LEASE_MS), attemptCount: attempt, startedAt: task.startedAt ?? now, error: null, updatedAt: now }).where(and(
+    const claimed = await db.update(aiTasks).set({ status: "running", executionToken, leaseExpiresAt: new Date(now.getTime() + LEASE_MS), attemptCount: sql`${aiTasks.attemptCount} + 1`, startedAt: task.startedAt ?? now, error: null, updatedAt: now }).where(and(
       eq(aiTasks.id, task.id),
       eq(aiTasks.organizationId, task.organizationId),
+      lt(aiTasks.attemptCount, MAX_TASK_EXECUTIONS),
       or(
         eq(aiTasks.status, "queued"),
         and(eq(aiTasks.status, "running"), or(isNull(aiTasks.leaseExpiresAt), lt(aiTasks.leaseExpiresAt, now))),

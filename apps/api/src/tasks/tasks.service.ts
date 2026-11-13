@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { aiModelDefaults, aiProviderConnections, aiTaskEvents, aiTasks, db } from "@workspace/db/node";
+import { aiAgents, aiModelDefaults, aiProviderConnections, aiTaskEvents, aiTasks, db } from "@workspace/db/node";
 import type { RequestContext } from "../auth/request-context.js";
 import { JobsService } from "../jobs/jobs.service.js";
 import type { CreateTaskDto } from "./tasks.dto.js";
@@ -20,13 +20,29 @@ export class TasksService {
   async create(ctx: RequestContext, dto: CreateTaskDto) {
     const title = dto.title.trim(), description = dto.description.trim();
     if (!title || !description) throw new BadRequestException("Task title and description are required");
-    const [model] = await db.select().from(aiModelDefaults).where(and(eq(aiModelDefaults.organizationId, ctx.organizationId), eq(aiModelDefaults.purpose, "general"))).limit(1);
-    if (!model) throw new BadRequestException("Configure a General AI model before creating a task");
-    const [connection] = await db.select().from(aiProviderConnections).where(and(eq(aiProviderConnections.organizationId, ctx.organizationId), eq(aiProviderConnections.id, model.connectionId), eq(aiProviderConnections.enabled, true))).limit(1);
-    if (!connection) throw new BadRequestException("Configured AI provider connection is unavailable");
+    let connectionId: string, modelId: string;
+    let agentSnapshot: Pick<typeof aiTasks.$inferInsert, "agentId" | "agentName" | "agentRole" | "agentSystemPrompt" | "agentConnectionId" | "agentModelId"> = {};
+    if (dto.agentId) {
+      const [agent] = await db.select().from(aiAgents).where(and(eq(aiAgents.id, dto.agentId), eq(aiAgents.organizationId, ctx.organizationId))).limit(1);
+      if (!agent) throw new BadRequestException("Selected AI agent does not belong to this organization");
+      if (agent.status !== "active") throw new BadRequestException("Selected AI agent is not active");
+      if (!agent.connectionId || !agent.modelId) throw new BadRequestException("Selected AI agent must have its own provider connection and model");
+      const [connection] = await db.select({ id: aiProviderConnections.id }).from(aiProviderConnections).where(and(eq(aiProviderConnections.organizationId, ctx.organizationId), eq(aiProviderConnections.id, agent.connectionId), eq(aiProviderConnections.enabled, true))).limit(1);
+      if (!connection) throw new BadRequestException("Selected AI agent provider connection is unavailable");
+      connectionId = agent.connectionId;
+      modelId = agent.modelId;
+      agentSnapshot = { agentId: agent.id, agentName: agent.name, agentRole: agent.role, agentSystemPrompt: agent.systemPrompt, agentConnectionId: agent.connectionId, agentModelId: agent.modelId };
+    } else {
+      const [model] = await db.select().from(aiModelDefaults).where(and(eq(aiModelDefaults.organizationId, ctx.organizationId), eq(aiModelDefaults.purpose, "general"))).limit(1);
+      if (!model) throw new BadRequestException("Configure a General AI model before creating a task");
+      const [connection] = await db.select().from(aiProviderConnections).where(and(eq(aiProviderConnections.organizationId, ctx.organizationId), eq(aiProviderConnections.id, model.connectionId), eq(aiProviderConnections.enabled, true))).limit(1);
+      if (!connection) throw new BadRequestException("Configured AI provider connection is unavailable");
+      connectionId = connection.id;
+      modelId = model.modelId;
+    }
     const id = randomUUID();
-    const [task] = await db.insert(aiTasks).values({ id, organizationId: ctx.organizationId, createdBy: ctx.userId, title, description, connectionId: connection.id, modelId: model.modelId, leaseExpiresAt: this.queueLeaseExpiresAt() }).returning();
-    await this.event(id, ctx.organizationId, "queued", "Task đang chờ Worker xử lý.");
+    const [task] = await db.insert(aiTasks).values({ id, organizationId: ctx.organizationId, createdBy: ctx.userId, title, description, connectionId, modelId, ...agentSnapshot, leaseExpiresAt: this.queueLeaseExpiresAt() }).returning();
+    await this.event(id, ctx.organizationId, "queued", dto.agentId ? `Task đang chờ Worker xử lý bởi Agent ${agentSnapshot.agentName}.` : "Task đang chờ Worker xử lý.");
     try { await this.jobs.enqueueAiTask({ taskId: id, organizationId: ctx.organizationId }); }
     catch (error) {
       await db.update(aiTasks).set({ status: "failed", error: "Không thể đưa task vào hàng đợi xử lý.", completedAt: new Date(), updatedAt: new Date() }).where(eq(aiTasks.id, id));
@@ -50,9 +66,9 @@ export class TasksService {
     }
   }
 
-  async list(ctx: RequestContext, status?: string) {
+  async list(ctx: RequestContext, status?: string, agentId?: string) {
     await this.recoverExpiredTasks(ctx.organizationId);
-    return db.select().from(aiTasks).where(and(eq(aiTasks.organizationId, ctx.organizationId), ...(status ? [eq(aiTasks.status, status as typeof aiTasks.status.enumValues[number])] : []))).orderBy(desc(aiTasks.updatedAt)).limit(100);
+    return db.select().from(aiTasks).where(and(eq(aiTasks.organizationId, ctx.organizationId), ...(status ? [eq(aiTasks.status, status as typeof aiTasks.status.enumValues[number])] : []), ...(agentId ? [eq(aiTasks.agentId, agentId)] : []))).orderBy(desc(aiTasks.updatedAt)).limit(100);
   }
 
   async get(ctx: RequestContext, id: string) {

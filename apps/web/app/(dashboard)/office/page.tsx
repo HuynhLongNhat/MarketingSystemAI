@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Info,
@@ -17,6 +18,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "@workspace/ui/components/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
+import { Input } from "@workspace/ui/components/input";
+import { Textarea } from "@workspace/ui/components/textarea";
 
 import {
   workforceApi,
@@ -30,6 +34,7 @@ import {
 } from "@/lib/office-api";
 
 import { ApiError } from "@/lib/api-client";
+import { tasksApi } from "@/lib/tasks-api";
 
 import { OFFICE_LAYOUT } from "@/modules/office/config/office-layout";
 
@@ -89,6 +94,7 @@ function errorMessage(error: unknown): string {
 }
 
 export default function OfficePage() {
+  const router = useRouter();
   const mountRef = useRef<HTMLDivElement>(null);
 
   const controllerRef =
@@ -117,6 +123,11 @@ export default function OfficePage() {
     useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] =
     useState("");
+  const [taskAgent, setTaskAgent] = useState<AiAgent | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [creatingTask, setCreatingTask] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   const requestIdRef = useRef(0);
   const savingRef = useRef(false);
@@ -348,6 +359,27 @@ export default function OfficePage() {
     ? deskByAgent.get(selectedAgentId)
     : undefined;
 
+  async function createAgentTask(event: React.FormEvent) {
+    event.preventDefault();
+    if (!taskAgent || !taskTitle.trim() || !taskDescription.trim()) {
+      setTaskError("Nhập tiêu đề và mô tả nhiệm vụ.");
+      return;
+    }
+    setCreatingTask(true);
+    setTaskError(null);
+    try {
+      const task = await tasksApi.create({ title: taskTitle, description: taskDescription, agentId: taskAgent.id });
+      setTaskAgent(null);
+      setTaskTitle("");
+      setTaskDescription("");
+      router.push(`/tasks/${task.id}`);
+    } catch (error) {
+      setTaskError(errorMessage(error));
+    } finally {
+      setCreatingTask(false);
+    }
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-5rem)] w-full min-w-0 flex-col gap-3 p-3 md:p-4">
       {/* OFFICE HEADER & TOOLBAR */}
@@ -544,6 +576,16 @@ export default function OfficePage() {
                       </p>
                     )}
 
+                    {selectedAssignment.agent.status === "active" ? (
+                      <Button className="w-full" disabled={loadingData} onClick={() => { setTaskError(null); setTaskAgent(selectedAssignment.agent); }}>
+                        Giao nhiệm vụ
+                      </Button>
+                    ) : (
+                      <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                        Chỉ Agent đang kích hoạt mới nhận được nhiệm vụ.
+                      </p>
+                    )}
+
                     <Button
                       variant="outline"
                       className="w-full"
@@ -672,6 +714,18 @@ export default function OfficePage() {
           ) : null
         }
       />
+      <Dialog open={taskAgent !== null} onOpenChange={(open) => !creatingTask && !open && setTaskAgent(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Giao nhiệm vụ cho {taskAgent?.name}</DialogTitle></DialogHeader>
+          <form className="space-y-4" onSubmit={createAgentTask}>
+            <p className="text-sm text-muted-foreground">Agent dùng cấu hình đã chốt khi tạo task. Báo cáo không có Web Search hoặc tool.</p>
+            <Input autoFocus maxLength={200} value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Tiêu đề nhiệm vụ" aria-label="Tiêu đề nhiệm vụ" />
+            <Textarea maxLength={12000} rows={6} value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} placeholder="Mô tả yêu cầu cần thực hiện" aria-label="Mô tả nhiệm vụ" />
+            {taskError && <p role="alert" className="text-sm text-destructive">{taskError}</p>}
+            <DialogFooter><Button type="button" variant="outline" disabled={creatingTask} onClick={() => setTaskAgent(null)}>Hủy</Button><Button disabled={creatingTask}>{creatingTask ? "Đang tạo..." : "Tạo nhiệm vụ"}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
