@@ -32,7 +32,7 @@ function token(value: unknown): number | null {
 
 function safeError(error: unknown): string {
   if (error instanceof TaskProviderError) return error.message;
-  return "Không thể tạo báo cáo do lỗi không xác định của AI Provider.";
+  return "Không thể hoàn tất nhiệm vụ do lỗi không xác định của AI Provider.";
 }
 
 function isRetryableStatus(status: number) {
@@ -45,10 +45,11 @@ export class TaskAiExecutionService {
   constructor(private readonly usage: AiUsageRecorder, private readonly quota: AiUsageQuotaService) {}
 
   private prompt(task: { title: string; description: string; agentName: string | null; agentRole: string | null; agentSystemPrompt: string | null }) {
-    const agentContext = task.agentName
-      ? `\n\nBạn đang thực hiện nhiệm vụ với tư cách Agent “${task.agentName}” (${task.agentRole ?? "không xác định vai trò"}). Hướng dẫn Agent sau là cấu hình đã được chốt khi tạo task; chỉ tuân theo khi không mâu thuẫn với các giới hạn báo cáo và không gọi hay giả định có tool: \n${task.agentSystemPrompt ?? ""}`
-      : "";
-    return `Bạn là chuyên gia nghiên cứu thị trường. Hãy lập báo cáo bằng tiếng Việt cho nhiệm vụ sau.\n\nTiêu đề: ${task.title}\nYêu cầu/bối cảnh: ${task.description}${agentContext}\n\nBắt buộc dùng đúng các mục Markdown: Tóm tắt điều hành; Tổng quan thị trường; Khách hàng mục tiêu; Phân tích đối thủ (sơ bộ); Cơ hội kinh doanh; Rủi ro và giả định; Kế hoạch hành động 30 ngày; Giới hạn báo cáo.\n\nMVP này KHÔNG có Web Search, dữ liệu Internet trực tiếp hoặc tool được tích hợp. Không được bịa số liệu, nguồn dẫn, thị phần, giá cả hoặc tuyên bố rằng đã nghiên cứu Internet. Hãy nêu rõ kết luận chỉ là khung phân tích dựa trên mô tả người dùng và các giả định cần kiểm chứng.`;
+    const limitations = "MVP này KHÔNG có Web Search, dữ liệu Internet trực tiếp hoặc tool được tích hợp. Không được gọi, giả lập hoặc tuyên bố đã dùng tool/Web Search. Không được bịa số liệu, nguồn dẫn, thị phần, giá cả hoặc tuyên bố rằng đã nghiên cứu Internet; hãy nêu rõ các giả định và dữ liệu cần kiểm chứng khi phù hợp.";
+    if (task.agentName) {
+      return `Bạn đang thực hiện nhiệm vụ với tư cách Agent “${task.agentName}”, vai trò “${task.agentRole ?? "không xác định"}”.\n\nĐây là system prompt snapshot của Agent tại thời điểm tạo task. Thực hiện theo hướng dẫn này khi không mâu thuẫn với các giới hạn hệ thống bên dưới:\n--- AGENT SYSTEM PROMPT ---\n${task.agentSystemPrompt ?? ""}\n--- END AGENT SYSTEM PROMPT ---\n\nNhiệm vụ\nTiêu đề: ${task.title}\nYêu cầu/bối cảnh: ${task.description}\n\nHãy hoàn thành nhiệm vụ theo đúng chuyên môn và định dạng phù hợp với yêu cầu, bằng tiếng Việt trừ khi nhiệm vụ yêu cầu ngôn ngữ khác.\n\n${limitations}`;
+    }
+    return `Bạn là chuyên gia nghiên cứu thị trường. Hãy lập báo cáo bằng tiếng Việt cho nhiệm vụ sau.\n\nTiêu đề: ${task.title}\nYêu cầu/bối cảnh: ${task.description}\n\nBắt buộc dùng đúng các mục Markdown: Tóm tắt điều hành; Tổng quan thị trường; Khách hàng mục tiêu; Phân tích đối thủ (sơ bộ); Cơ hội kinh doanh; Rủi ro và giả định; Kế hoạch hành động 30 ngày; Giới hạn báo cáo.\n\n${limitations}`;
   }
 
   private async event(taskId: string, organizationId: string, type: string, message: string) {
@@ -130,7 +131,7 @@ export class TaskAiExecutionService {
     // Cancellation can race with a Worker that already read the task.
     // Do not send a chargeable provider request unless this Worker claimed it.
     if (!claimed.length) return;
-    await this.event(task.id, task.organizationId, "running", `Worker đang tạo báo cáo (lần thử ${attempt}).`);
+    await this.event(task.id, task.organizationId, "running", task.agentName ? `Worker đang thực thi nhiệm vụ của Agent ${task.agentName} (lần thử ${attempt}).` : `Worker đang tạo báo cáo (lần thử ${attempt}).`);
     const heartbeat = setInterval(() => {
       void this.renewLease(task.id, task.organizationId, executionToken).catch(() => {
         this.logger.warn(`Could not renew AI task lease: ${task.id}`);
@@ -152,7 +153,7 @@ export class TaskAiExecutionService {
         // Record only after the terminal state is stored. A BullMQ retry will
         // then observe `completed` and cannot create a duplicate usage entry.
         usageReliable = await this.usage.record({ organizationId: task.organizationId, provider: runtime.provider, modelId: runtime.modelId, purpose: "market_research_task", status: "success", inputTokens: token(result.usage.input), outputTokens: token(result.usage.output), totalTokens: token(result.usage.total), latencyMs: Date.now() - started });
-        await this.event(task.id, task.organizationId, "completed", "Báo cáo nghiên cứu thị trường đã hoàn tất.");
+        await this.event(task.id, task.organizationId, "completed", task.agentName ? `Nhiệm vụ của Agent ${task.agentName} đã hoàn tất.` : "Báo cáo nghiên cứu thị trường đã hoàn tất.");
       } else {
         // The provider may already have charged the request, but this Worker
         // lost its lease (for example to cancellation or recovery). Retain
