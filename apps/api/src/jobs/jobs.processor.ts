@@ -33,6 +33,7 @@ import type {
 
 import { JobsService } from "./jobs.service.js";
 import { TaskAiExecutionService } from "../tasks/task-ai-execution.service.js";
+import { parseAiTaskJobData } from "./ai-task-job.js";
 
 import {
   GoogleDriveIngestionService,
@@ -93,13 +94,15 @@ export class JobsProcessor extends WorkerHost {
   }
 
   private async handleAiTask(job: Job) {
-    const data = job.data as { taskId?: unknown; organizationId?: unknown } | undefined;
-    if (!data || typeof data.taskId !== "string" || !data.taskId || typeof data.organizationId !== "string" || !data.organizationId) {
+    let data;
+    try {
+      data = parseAiTaskJobData(job.data);
+    } catch {
       throw new UnrecoverableError("Invalid AI task job data");
     }
     const attempts = job.opts.attempts ?? 1;
     await this.taskAiExecution.execute(
-      { taskId: data.taskId, organizationId: data.organizationId, createdAt: typeof job.data?.createdAt === "string" ? job.data.createdAt : new Date().toISOString() },
+      data,
       job.attemptsMade + 1,
       job.attemptsMade + 1 >= attempts,
     );

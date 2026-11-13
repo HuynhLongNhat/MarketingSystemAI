@@ -12,6 +12,7 @@ import { PROVIDER_REGISTRY } from "../ai-providers/provider-registry.js";
 import { AiUsageQuotaService } from "../conversations/ai-usage-quota.service.js";
 import { AiUsageRecorder } from "../conversations/ai-usage-recorder.js";
 import type { AiTaskJobData } from "../jobs/jobs.service.js";
+import { canWorkerClaimTask } from "./task-execution-state.js";
 
 const TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_TOKENS = 2_000;
@@ -92,9 +93,13 @@ export class TaskAiExecutionService {
 
   async execute(data: AiTaskJobData, attempt: number, finalAttempt: boolean): Promise<void> {
     const [task] = await db.select().from(aiTasks).where(and(eq(aiTasks.id, data.taskId), eq(aiTasks.organizationId, data.organizationId))).limit(1);
-    if (!task || task.status === "cancelled" || task.status === "completed") return;
+    // A delayed or retried BullMQ job must never resurrect a terminal task.
+    if (!task || !canWorkerClaimTask(task.status)) return;
     const started = Date.now();
-    await db.update(aiTasks).set({ status: "running", startedAt: task.startedAt ?? new Date(), error: null, updatedAt: new Date() }).where(and(eq(aiTasks.id, task.id), eq(aiTasks.organizationId, task.organizationId), ne(aiTasks.status, "cancelled")));
+    const claimed = await db.update(aiTasks).set({ status: "running", startedAt: task.startedAt ?? new Date(), error: null, updatedAt: new Date() }).where(and(eq(aiTasks.id, task.id), eq(aiTasks.organizationId, task.organizationId), ne(aiTasks.status, "cancelled"), ne(aiTasks.status, "completed"), ne(aiTasks.status, "failed"))).returning({ id: aiTasks.id });
+    // Cancellation can race with a Worker that already read the task.
+    // Do not send a chargeable provider request unless this Worker claimed it.
+    if (!claimed.length) return;
     await this.event(task.id, task.organizationId, "running", `Worker đang tạo báo cáo (lần thử ${attempt}).`);
     let runtime: Runtime | null = null;
     let reservationId: string | null = null;
