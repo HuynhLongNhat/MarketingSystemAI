@@ -32,6 +32,7 @@ import type {
 } from "./jobs.service.js";
 
 import { JobsService } from "./jobs.service.js";
+import { TaskAiExecutionService } from "../tasks/task-ai-execution.service.js";
 
 import {
   GoogleDriveIngestionService,
@@ -59,6 +60,7 @@ export class JobsProcessor extends WorkerHost {
     private readonly ingestion: GoogleDriveIngestionService,
     private readonly embeddings: KnowledgeEmbeddingService,
     private readonly jobs: JobsService,
+    private readonly taskAiExecution: TaskAiExecutionService,
   ) {
     super();
   }
@@ -80,11 +82,28 @@ export class JobsProcessor extends WorkerHost {
       case JOB_NAMES.KNOWLEDGE_EMBED_DOCUMENT:
         return this.handleKnowledgeEmbedding(job);
 
+      case JOB_NAMES.AI_TASK_EXECUTE:
+        return this.handleAiTask(job);
+
       default:
         throw new UnrecoverableError(
           `Unsupported job type: ${job.name}`,
         );
     }
+  }
+
+  private async handleAiTask(job: Job) {
+    const data = job.data as { taskId?: unknown; organizationId?: unknown } | undefined;
+    if (!data || typeof data.taskId !== "string" || !data.taskId || typeof data.organizationId !== "string" || !data.organizationId) {
+      throw new UnrecoverableError("Invalid AI task job data");
+    }
+    const attempts = job.opts.attempts ?? 1;
+    await this.taskAiExecution.execute(
+      { taskId: data.taskId, organizationId: data.organizationId, createdAt: typeof job.data?.createdAt === "string" ? job.data.createdAt : new Date().toISOString() },
+      job.attemptsMade + 1,
+      job.attemptsMade + 1 >= attempts,
+    );
+    return { success: true, taskId: data.taskId, organizationId: data.organizationId };
   }
 
   private async handleHealthCheck(job: Job) {

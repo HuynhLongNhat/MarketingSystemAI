@@ -1,1 +1,17 @@
-import { Module } from "@nestjs/common"; import { JobsModule } from "../jobs/jobs.module.js"; import { AuthGuard } from "../auth/auth.guard.js"; import { PermissionsGuard } from "../common/permissions/permissions.guard.js"; import { TasksController } from "./tasks.controller.js"; import { TasksService } from "./tasks.service.js"; @Module({imports:[JobsModule],controllers:[TasksController],providers:[TasksService,AuthGuard,PermissionsGuard],exports:[TasksService]}) export class TasksModule{}
+import { Module } from "@nestjs/common";
+import { JobsModule } from "../jobs/jobs.module.js";
+import { AuthGuard } from "../auth/auth.guard.js";
+import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
+import { AiUsageQuotaService } from "../conversations/ai-usage-quota.service.js";
+import { AiUsageRecorder } from "../conversations/ai-usage-recorder.js";
+import { TasksController } from "./tasks.controller.js";
+import { TaskAiExecutionService } from "./task-ai-execution.service.js";
+import { TasksService } from "./tasks.service.js";
+
+@Module({
+  imports: [JobsModule],
+  controllers: [TasksController],
+  providers: [TasksService, TaskAiExecutionService, AiUsageRecorder, AiUsageQuotaService, AuthGuard, PermissionsGuard],
+  exports: [TasksService, TaskAiExecutionService],
+})
+export class TasksModule {}
