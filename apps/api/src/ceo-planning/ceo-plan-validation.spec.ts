@@ -8,6 +8,10 @@ const valid = `# Mục tiêu\nTăng trưởng có kiểm soát.\n## Phân tích 
 test("accepts a complete CEO plan", () => assert.equal(validateCeoPlanReport(valid), null));
 test("rejects a report missing a required section", () => assert.match(validateCeoPlanReport(valid.replace("## Chỉ số theo dõi\nTỷ lệ chuyển đổi.", "")) ?? "", /Chỉ số theo dõi/));
 test("rejects a truncated markdown table", () => assert.match(validateCeoPlanReport(valid.replace("| Phân tích | Research Agent |", "| Phân tích |")) ?? "", /bảng Markdown/));
+test("rejects the real incomplete final table row returned by the provider", () => {
+  const realCutoff = `${valid}\n| 6 | **`;
+  assert.match(validateCeoPlanReport(realCutoff) ?? "", /bảng Markdown/);
+});
 test("allows approval only for a completed, valid plan", () => {
   assert.match(ceoPlanApprovalError({ status: "running", result: valid }) ?? "", /hoàn tất/);
   assert.match(ceoPlanApprovalError({ status: "completed", result: "# Mục tiêu" }) ?? "", /thiếu mục/);
