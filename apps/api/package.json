@@ -13,6 +13,7 @@
     "start:worker": "node dist/worker.js",
     "start:worker:dev": "nest start --entryFile worker --watch",
     "test:queue": "node dist/jobs/test-enqueue.js",
+    "research:tavily": "pnpm run build && node dist/search-providers/tavily-search.harness.js",
     "test:security": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/security.spec.js",
     "test:security:http": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/security-http.spec.js",
     "test:auth": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/auth/ dist-security-test/common/sms/",
@@ -23,6 +24,7 @@
     ,"test:search-providers:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/search-providers.integration.spec.js"
     ,"test:search-providers:http": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/search-providers-http.spec.js"
     ,"test:agent-capabilities": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/agents/agent-capabilities.spec.js"
+    ,"test:search-adapter": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/tavily-search.adapter.spec.js"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.13",

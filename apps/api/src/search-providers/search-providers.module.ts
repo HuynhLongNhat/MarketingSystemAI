@@ -5,6 +5,8 @@ import { SearchProviderConnectionTestService } from "./search-provider-connectio
 import { SearchProvidersController } from "./search-providers.controller.js";
 import { SearchProvidersService } from "./search-providers.service.js";
 import { SearchProviderTestRateLimiter } from "./search-provider-test-rate-limiter.service.js";
+import { SearchProviderRuntimeService } from "./search-provider-runtime.service.js";
+import { TavilySearchAdapter } from "./tavily-search.adapter.js";
 
-@Module({ controllers: [SearchProvidersController], providers: [SearchProvidersService, SearchProviderConnectionTestService, SearchProviderTestRateLimiter, AuthGuard, PermissionsGuard], exports: [SearchProvidersService] })
+@Module({ controllers: [SearchProvidersController], providers: [SearchProvidersService, SearchProviderConnectionTestService, SearchProviderTestRateLimiter, TavilySearchAdapter, SearchProviderRuntimeService, AuthGuard, PermissionsGuard], exports: [SearchProvidersService, SearchProviderRuntimeService] })
 export class SearchProvidersModule {}
