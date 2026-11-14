@@ -19,6 +19,7 @@ import { KnowledgeConnectionsModule } from "./knowledge-connections/knowledge-co
 import { WebsiteServicesModule } from "./website-services/website-services.module.js";
 import { CrmContactsModule } from "./crm/contacts/contacts.module.js";
 import { TasksModule } from "./tasks/tasks.module.js";
+import { SearchProvidersModule } from "./search-providers/search-providers.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -46,6 +47,7 @@ import { TasksModule } from "./tasks/tasks.module.js";
     WebsiteServicesModule,
     CrmContactsModule,
     TasksModule,
+    SearchProvidersModule,
   ],
   controllers: [HealthController],
 })

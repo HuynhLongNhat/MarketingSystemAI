@@ -225,6 +225,13 @@
       "when": 1794790800000,
       "tag": "0032_research_source_run_task_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794877200000,
+      "tag": "0033_search_provider_connections",
+      "breakpoints": true
     }
   ]
 }

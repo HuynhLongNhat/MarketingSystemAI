@@ -106,6 +106,7 @@ const navigation: NavigationGroup[] = [
     icon: Settings2,
     items: [
       { id: "providers", label: { vi: "AI Providers & Models", en: "AI Providers & Models" }, icon: Settings2, href: "/settings/ai-providers" },
+      { id: "search-providers", label: { vi: "Search Providers", en: "Search Providers" }, icon: Plug, href: "/settings/search-providers" },
       { id: "members", label: { vi: "Thành viên & quyền", en: "Team & Permissions" }, icon: Users, href: "/settings/members" },
       { id: "billing", label: { vi: "Thanh toán", en: "Billing" }, icon: CircleDollarSign, href: "/billing" },
     ],

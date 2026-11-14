@@ -93,6 +93,16 @@ export {
   AI_USAGE_STATUSES,
 } from "./ai-schema.js";
 
+export {
+  searchProviderConnections,
+  SEARCH_PROVIDER_TYPES,
+} from "./search-providers-schema.js";
+export type {
+  SearchProviderType,
+  SearchProviderConnection,
+  NewSearchProviderConnection,
+} from "./search-providers-schema.js";
+
 export type {
   AiProviderType,
   AiProviderConnection,
