@@ -18,15 +18,21 @@ import type { AiTaskJobData } from "../jobs/jobs.service.js";
 import { SearchProviderRuntimeService } from "../search-providers/search-provider-runtime.service.js";
 import { SearchProviderRuntimeError } from "../search-providers/search-provider.adapter.js";
 import { canAttemptTaskExecution, canWorkerClaimTask, MAX_TASK_EXECUTIONS } from "./task-execution-state.js";
+import { validateCeoPlanReport } from "../ceo-planning/ceo-plan-validation.js";
 
 const TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_TOKENS = 2_000;
+const CEO_PLAN_MAX_OUTPUT_TOKENS = 4_000;
 const LEASE_MS = 90_000;
 const LEASE_HEARTBEAT_MS = 20_000;
 
 type Usage = { input?: unknown; output?: unknown; total?: unknown };
 type Runtime = { provider: string; protocol: "openai" | "anthropic" | "google"; endpoint: string; apiKey: string; modelId: string };
 type ResearchDecision = { useResearch: boolean; query: string | null; fallback: boolean };
+
+export function isTruncatedFinishReason(value: unknown) {
+  return typeof value === "string" && ["length", "max_tokens", "max_output_tokens", "MAX_TOKENS"].includes(value);
+}
 
 export class TaskProviderError extends Error {
   constructor(message: string, readonly retryable: boolean) { super(message); }
@@ -162,15 +168,15 @@ export class TaskAiExecutionService {
     return { provider: connection.provider, protocol: "google", endpoint: `${endpoint}/models/${encodeURIComponent(task.modelId)}:generateContent`, apiKey, modelId: task.modelId };
   }
 
-  private async request(runtime: Runtime, prompt: string): Promise<{ text: string; usage: Usage }> {
+  private async request(runtime: Runtime, prompt: string, maxOutputTokens = MAX_OUTPUT_TOKENS): Promise<{ text: string; usage: Usage }> {
     let response: Response;
     try {
       if (runtime.protocol === "anthropic") {
-        response = await fetch(runtime.endpoint, { method: "POST", headers: { "x-api-key": runtime.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" }, body: JSON.stringify({ model: runtime.modelId, max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.3, messages: [{ role: "user", content: prompt }] }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
+        response = await fetch(runtime.endpoint, { method: "POST", headers: { "x-api-key": runtime.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" }, body: JSON.stringify({ model: runtime.modelId, max_tokens: maxOutputTokens, temperature: 0.3, messages: [{ role: "user", content: prompt }] }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
       } else if (runtime.protocol === "google") {
-        response = await fetch(runtime.endpoint, { method: "POST", headers: { "x-goog-api-key": runtime.apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: MAX_OUTPUT_TOKENS } }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
+        response = await fetch(runtime.endpoint, { method: "POST", headers: { "x-goog-api-key": runtime.apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens } }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
       } else {
-        response = await fetch(runtime.endpoint, { method: "POST", headers: { Authorization: `Bearer ${runtime.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: runtime.modelId, temperature: 0.3, max_completion_tokens: MAX_OUTPUT_TOKENS, messages: [{ role: "system", content: "Trả lời chính xác theo yêu cầu, không bịa dữ liệu." }, { role: "user", content: prompt }] }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
+        response = await fetch(runtime.endpoint, { method: "POST", headers: { Authorization: `Bearer ${runtime.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: runtime.modelId, temperature: 0.3, max_completion_tokens: maxOutputTokens, messages: [{ role: "system", content: "Trả lời chính xác theo yêu cầu, không bịa dữ liệu." }, { role: "user", content: prompt }] }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
       }
     } catch (error) {
       throw new TaskProviderError(error instanceof Error && error.name === "TimeoutError" ? "AI Provider hết thời gian phản hồi." : "Không thể kết nối AI Provider.", true);
@@ -179,9 +185,11 @@ export class TaskAiExecutionService {
       await response.body?.cancel();
       throw new TaskProviderError(`AI Provider trả về HTTP ${response.status}.`, isRetryableStatus(response.status));
     }
-    const body = await response.json() as { choices?: Array<{ message?: { content?: string } }>; content?: Array<{ text?: string }>; usage?: { input_tokens?: unknown; output_tokens?: unknown; prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown }; usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown }; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const body = await response.json() as { choices?: Array<{ message?: { content?: string }; finish_reason?: unknown }>; content?: Array<{ text?: string }>; stop_reason?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown; prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown }; usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown }; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: unknown }> };
     const text = runtime.protocol === "anthropic" ? body.content?.map((part) => part.text ?? "").join("") : runtime.protocol === "google" ? body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") : body.choices?.[0]?.message?.content;
     if (!text?.trim()) throw new TaskProviderError("AI Provider trả về nội dung trống.", false);
+    const finishReason = runtime.protocol === "anthropic" ? body.stop_reason : runtime.protocol === "google" ? body.candidates?.[0]?.finishReason : body.choices?.[0]?.finish_reason;
+    if (isTruncatedFinishReason(finishReason)) throw new TaskProviderError("AI Provider đã dừng output vì giới hạn token; kế hoạch/báo cáo chưa hoàn chỉnh. Hãy rút gọn yêu cầu hoặc dùng model có output limit lớn hơn.", false);
     const usage = runtime.protocol === "google" ? { input: body.usageMetadata?.promptTokenCount, output: body.usageMetadata?.candidatesTokenCount, total: body.usageMetadata?.totalTokenCount } : { input: body.usage?.input_tokens ?? body.usage?.prompt_tokens, output: body.usage?.output_tokens ?? body.usage?.completion_tokens, total: body.usage?.total_tokens };
     return { text: text.trim(), usage };
   }
@@ -262,10 +270,15 @@ export class TaskAiExecutionService {
         if (decision.useResearch) evidence = await this.webResearch(task, executionToken, decision.query ?? undefined);
       }
       const prompt = this.prompt(task, evidence);
-      const reservation = await this.quota.reserve(task.organizationId, Math.max(1, Math.ceil(Buffer.byteLength(prompt, "utf8") / 2) + MAX_OUTPUT_TOKENS));
+      const maxOutputTokens = task.title.startsWith("Kế hoạch CEO:") ? CEO_PLAN_MAX_OUTPUT_TOKENS : MAX_OUTPUT_TOKENS;
+      const reservation = await this.quota.reserve(task.organizationId, Math.max(1, Math.ceil(Buffer.byteLength(prompt, "utf8") / 2) + maxOutputTokens));
       if (reservation.limited && !reservation.allowed) throw new TaskProviderError("Đã vượt quota token AI của Organization.", false);
       reservationId = reservation.limited ? reservation.reservationId : null;
-      const result = await this.request(runtime, prompt);
+      const result = await this.request(runtime, prompt, maxOutputTokens);
+      if (task.title.startsWith("Kế hoạch CEO:")) {
+        const reportError = validateCeoPlanReport(result.text);
+        if (reportError) throw new TaskProviderError(`CEO chưa tạo kế hoạch hoàn chỉnh: ${reportError}`, false);
+      }
       const completed = await db.update(aiTasks).set({ status: "completed", result: result.text, error: null, executionToken: null, leaseExpiresAt: null, completedAt: new Date(), updatedAt: new Date() }).where(and(eq(aiTasks.id, task.id), eq(aiTasks.organizationId, task.organizationId), eq(aiTasks.executionToken, executionToken), ne(aiTasks.status, "cancelled"))).returning({ id: aiTasks.id });
       if (completed.length) {
         // Record only after the terminal state is stored. A BullMQ retry will

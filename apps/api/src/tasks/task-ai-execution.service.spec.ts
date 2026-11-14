@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { AiUsageQuotaService } from "../conversations/ai-usage-quota.service.js";
 import { AiUsageRecorder } from "../conversations/ai-usage-recorder.js";
-import { TaskAiExecutionService } from "./task-ai-execution.service.js";
+import { TaskAiExecutionService, isTruncatedFinishReason } from "./task-ai-execution.service.js";
 
 function service() {
   return new TaskAiExecutionService(
@@ -21,6 +21,10 @@ type PromptTask = {
 };
 
 describe("AI task prompts", () => {
+  it("recognizes provider token-limit completion reasons", () => {
+    assert.equal(isTruncatedFinishReason("length"), true);
+    assert.equal(isTruncatedFinishReason("stop"), false);
+  });
   it("keeps the UC-00 market-research template for tasks without an Agent", () => {
     const prompt = (Reflect.get(service(), "prompt") as (task: PromptTask) => string)({
       title: "Thị trường spa", description: "Việt Nam", agentName: null, agentRole: null, agentSystemPrompt: null,

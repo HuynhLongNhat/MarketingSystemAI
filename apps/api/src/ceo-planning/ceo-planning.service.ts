@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { ceoPlans, db } from "@workspace/db/node";
+import { aiTasks, ceoPlans, db } from "@workspace/db/node";
 import type { RequestContext } from "../auth/request-context.js";
 import { TasksService } from "../tasks/tasks.service.js";
 import type { CreateCeoPlanDto, DecideCeoPlanDto } from "./ceo-planning.dto.js";
+import { ceoPlanApprovalError } from "./ceo-plan-validation.js";
 
 @Injectable()
 export class CeoPlanningService {
@@ -25,6 +26,11 @@ export class CeoPlanningService {
   async decide(ctx: RequestContext, id: string, dto: DecideCeoPlanDto) {
     const plan = await this.get(ctx, id);
     if (plan.approvalStatus !== "pending") throw new BadRequestException("Kế hoạch này đã được quyết định.");
+    if (dto.decision === "approved") {
+      const [task] = await db.select({ status: aiTasks.status, result: aiTasks.result }).from(aiTasks).where(and(eq(aiTasks.id, plan.taskId), eq(aiTasks.organizationId, ctx.organizationId))).limit(1);
+      const reportError = ceoPlanApprovalError(task);
+      if (reportError) throw new BadRequestException(`Không thể phê duyệt: ${reportError}`);
+    }
     const [updated] = await db.update(ceoPlans).set({ approvalStatus: dto.decision, decisionNote: dto.note?.trim() || null, decidedBy: ctx.userId, decidedAt: new Date(), updatedAt: new Date() }).where(and(eq(ceoPlans.id, id), eq(ceoPlans.organizationId, ctx.organizationId), eq(ceoPlans.approvalStatus, "pending"))).returning();
     if (!updated) throw new BadRequestException("Không thể cập nhật quyết định kế hoạch.");
     return updated;
