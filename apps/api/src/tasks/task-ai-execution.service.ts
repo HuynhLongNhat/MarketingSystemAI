@@ -50,6 +50,14 @@ function safeError(error: unknown): string {
   return "Không thể hoàn tất nhiệm vụ do lỗi không xác định của AI Provider.";
 }
 
+/** Log enough to correlate an execution fault without ever serialising prompts or credentials. */
+function safeExecutionFailure(error: unknown) {
+  if (error instanceof TaskProviderError) return { kind: "provider", retryable: error.retryable };
+  if (error instanceof HttpException) return { kind: "http", status: error.getStatus() };
+  if (error instanceof Error) return { kind: "internal", name: error.name || "Error" };
+  return { kind: "internal", name: typeof error };
+}
+
 function isRetryableStatus(status: number) {
   return status === 408 || status === 429 || status >= 500;
 }
@@ -179,13 +187,19 @@ export class TaskAiExecutionService {
         response = await fetch(runtime.endpoint, { method: "POST", headers: { Authorization: `Bearer ${runtime.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: runtime.modelId, temperature: 0.3, max_completion_tokens: maxOutputTokens, messages: [{ role: "system", content: "Trả lời chính xác theo yêu cầu, không bịa dữ liệu." }, { role: "user", content: prompt }] }), signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
       }
     } catch (error) {
-      throw new TaskProviderError(error instanceof Error && error.name === "TimeoutError" ? "AI Provider hết thời gian phản hồi." : "Không thể kết nối AI Provider.", true);
+      const name = error instanceof Error ? error.name : "";
+      throw new TaskProviderError(name === "TimeoutError" || name === "AbortError" ? "AI Provider hết thời gian phản hồi." : "Không thể kết nối AI Provider.", true);
     }
     if (!response.ok) {
       await response.body?.cancel();
       throw new TaskProviderError(`AI Provider trả về HTTP ${response.status}.`, isRetryableStatus(response.status));
     }
-    const body = await response.json() as { choices?: Array<{ message?: { content?: string }; finish_reason?: unknown }>; content?: Array<{ text?: string }>; stop_reason?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown; prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown }; usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown }; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: unknown }> };
+    let body: { choices?: Array<{ message?: { content?: string }; finish_reason?: unknown }>; content?: Array<{ text?: string }>; stop_reason?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown; prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown }; usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown }; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: unknown }> };
+    try {
+      body = await response.json() as typeof body;
+    } catch {
+      throw new TaskProviderError("AI Provider trả về phản hồi không hợp lệ.", true);
+    }
     const text = runtime.protocol === "anthropic" ? body.content?.map((part) => part.text ?? "").join("") : runtime.protocol === "google" ? body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") : body.choices?.[0]?.message?.content;
     if (!text?.trim()) throw new TaskProviderError("AI Provider trả về nội dung trống.", false);
     const finishReason = runtime.protocol === "anthropic" ? body.stop_reason : runtime.protocol === "google" ? body.candidates?.[0]?.finishReason : body.choices?.[0]?.finish_reason;
@@ -294,6 +308,13 @@ export class TaskAiExecutionService {
     } catch (error) {
       if (error instanceof TaskCancelledError) { usageReliable = false; return; }
       const message = safeError(error);
+      this.logger.error(JSON.stringify({
+        event: "ai_task.execution_failed",
+        taskId: task.id,
+        organizationId: task.organizationId,
+        attempt,
+        ...safeExecutionFailure(error),
+      }), error instanceof Error ? error.stack?.split("\n").slice(1, 7).join("\n") : undefined);
       if (error instanceof TaskProviderError && error.retryable && !finalAttempt) {
         // Keep a short queue lease during BullMQ backoff. Dashboard polling
         // must not enqueue a second recovery job before this retry runs.

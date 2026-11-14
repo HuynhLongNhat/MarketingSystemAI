@@ -81,4 +81,21 @@ describe("AI task prompts", () => {
       globalThis.fetch = previousFetch;
     }
   });
+
+  it("normalizes an aborted provider request into a safe timeout error", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      const error = new Error("request aborted");
+      error.name = "AbortError";
+      throw error;
+    };
+    try {
+      await assert.rejects(
+        () => (Reflect.get(service(), "request") as (runtime: object, prompt: string) => Promise<unknown>)({ provider: "openrouter", protocol: "openai", endpoint: "https://example.invalid", apiKey: "redacted", modelId: "free-model" }, "test"),
+        /hết thời gian phản hồi/,
+      );
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
 });
