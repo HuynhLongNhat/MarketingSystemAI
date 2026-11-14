@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   Bot,
+  BrainCircuit,
   Building2,
   ChevronDown,
   CircleDollarSign,
@@ -69,6 +70,7 @@ const navigation: NavigationGroup[] = [
     items: [
       { id: "dashboard", label: { vi: "Tổng quan", en: "Overview" }, icon: LayoutDashboard, href: "/" },
       { id: "office", label: { vi: "Văn phòng AI", en: "AI Office" }, icon: Building2, href: "/office" },
+      { id: "ceo-planning", label: { vi: "CEO AI Planning", en: "CEO AI Planning" }, icon: BrainCircuit, href: "/ceo-planning" },
       { id: "employees", label: { vi: "Nhân viên AI", en: "AI Employees" }, icon: Bot, href: "/workforce?tab=agents" },
       { id: "tasks", label: { vi: "Công việc", en: "Tasks" }, icon: ClipboardList, href: "/tasks" },
     ],

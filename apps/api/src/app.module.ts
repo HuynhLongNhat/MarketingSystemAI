@@ -20,6 +20,7 @@ import { WebsiteServicesModule } from "./website-services/website-services.modul
 import { CrmContactsModule } from "./crm/contacts/contacts.module.js";
 import { TasksModule } from "./tasks/tasks.module.js";
 import { SearchProvidersModule } from "./search-providers/search-providers.module.js";
+import { CeoPlanningModule } from "./ceo-planning/ceo-planning.module.js";
 @Module({
   imports: [
     DatabaseModule,
@@ -48,6 +49,7 @@ import { SearchProvidersModule } from "./search-providers/search-providers.modul
     CrmContactsModule,
     TasksModule,
     SearchProvidersModule,
+    CeoPlanningModule,
   ],
   controllers: [HealthController],
 })
