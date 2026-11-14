@@ -239,6 +239,13 @@
       "when": 1794963600000,
       "tag": "0034_contact_session_revocation",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795050000000,
+      "tag": "0035_ai_task_research_query",
+      "breakpoints": true
     }
   ]
 }

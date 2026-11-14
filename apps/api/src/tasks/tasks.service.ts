@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { aiAgents, aiModelDefaults, aiProviderConnections, aiTaskEvents, aiTasks, db } from "@workspace/db/node";
+import { aiAgents, aiModelDefaults, aiProviderConnections, aiTaskEvents, aiTaskReportCitations, aiTaskResearchRuns, aiTaskResearchSources, aiTasks, db } from "@workspace/db/node";
 import type { RequestContext } from "../auth/request-context.js";
 import { JobsService } from "../jobs/jobs.service.js";
 import type { CreateTaskDto } from "./tasks.dto.js";
@@ -20,6 +20,9 @@ export class TasksService {
   async create(ctx: RequestContext, dto: CreateTaskDto) {
     const title = dto.title.trim(), description = dto.description.trim();
     if (!title || !description) throw new BadRequestException("Task title and description are required");
+    // New Agent tasks let the configured model decide at execution time whether
+    // current public evidence is needed. General-model tasks retain UC-00 behavior.
+    const webResearchEnabled = Boolean(dto.agentId);
     let connectionId: string, modelId: string;
     let agentSnapshot: Pick<typeof aiTasks.$inferInsert, "agentId" | "agentName" | "agentRole" | "agentSystemPrompt" | "agentConnectionId" | "agentModelId"> = {};
     if (dto.agentId) {
@@ -41,8 +44,8 @@ export class TasksService {
       modelId = model.modelId;
     }
     const id = randomUUID();
-    const [task] = await db.insert(aiTasks).values({ id, organizationId: ctx.organizationId, createdBy: ctx.userId, title, description, connectionId, modelId, ...agentSnapshot, leaseExpiresAt: this.queueLeaseExpiresAt() }).returning();
-    await this.event(id, ctx.organizationId, "queued", dto.agentId ? `Task đang chờ Worker xử lý bởi Agent ${agentSnapshot.agentName}.` : "Task đang chờ Worker xử lý.");
+    const [task] = await db.insert(aiTasks).values({ id, organizationId: ctx.organizationId, createdBy: ctx.userId, title, description, connectionId, modelId, ...agentSnapshot, webResearchEnabled, researchProvider: webResearchEnabled ? "tavily" : null, researchPolicyVersion: webResearchEnabled ? "v1" : null, leaseExpiresAt: this.queueLeaseExpiresAt() }).returning();
+    await this.event(id, ctx.organizationId, "queued", webResearchEnabled ? `Task đang chờ Worker xử lý bởi Agent ${agentSnapshot.agentName}; Agent sẽ tự quyết định có cần Web Research.` : "Task đang chờ Worker xử lý.");
     try { await this.jobs.enqueueAiTask({ taskId: id, organizationId: ctx.organizationId }); }
     catch (error) {
       await db.update(aiTasks).set({ status: "failed", error: "Không thể đưa task vào hàng đợi xử lý.", completedAt: new Date(), updatedAt: new Date() }).where(eq(aiTasks.id, id));
@@ -75,8 +78,12 @@ export class TasksService {
     await this.recoverExpiredTasks(ctx.organizationId);
     const [task] = await db.select().from(aiTasks).where(and(eq(aiTasks.organizationId, ctx.organizationId), eq(aiTasks.id, id))).limit(1);
     if (!task) throw new NotFoundException("Task not found");
-    const events = await db.select().from(aiTaskEvents).where(and(eq(aiTaskEvents.organizationId, ctx.organizationId), eq(aiTaskEvents.taskId, id))).orderBy(aiTaskEvents.createdAt);
-    return { ...task, events };
+    const [events, researchRuns, researchSources] = await Promise.all([
+      db.select().from(aiTaskEvents).where(and(eq(aiTaskEvents.organizationId, ctx.organizationId), eq(aiTaskEvents.taskId, id))).orderBy(aiTaskEvents.createdAt),
+      db.select().from(aiTaskResearchRuns).where(and(eq(aiTaskResearchRuns.organizationId, ctx.organizationId), eq(aiTaskResearchRuns.taskId, id))).orderBy(desc(aiTaskResearchRuns.createdAt)),
+      db.select({ id: aiTaskResearchSources.id, ordinal: aiTaskResearchSources.ordinal, title: aiTaskResearchSources.title, canonicalUrl: aiTaskResearchSources.canonicalUrl, displayUrl: aiTaskResearchSources.displayUrl, domain: aiTaskResearchSources.domain, excerpt: aiTaskResearchSources.excerpt, status: aiTaskResearchSources.status, retrievedAt: aiTaskResearchSources.retrievedAt, citationNumber: aiTaskReportCitations.citationNumber }).from(aiTaskResearchSources).leftJoin(aiTaskReportCitations, and(eq(aiTaskReportCitations.sourceId, aiTaskResearchSources.id), eq(aiTaskReportCitations.taskId, aiTaskResearchSources.taskId), eq(aiTaskReportCitations.organizationId, aiTaskResearchSources.organizationId))).where(and(eq(aiTaskResearchSources.organizationId, ctx.organizationId), eq(aiTaskResearchSources.taskId, id))).orderBy(aiTaskResearchSources.ordinal),
+    ]);
+    return { ...task, events, researchRuns, researchSources };
   }
 
   async cancel(ctx: RequestContext, id: string) {

@@ -41,7 +41,9 @@ describe("AI task research schema integration", { concurrency: false }, () => {
     const [task] = await db.select().from(aiTasks).where(eq(aiTasks.id, taskId));
     assert.equal(task?.webResearchEnabled, false);
 
-    await db.insert(aiTaskResearchRuns).values([{ id: runId, organizationId, taskId, provider: "tavily", status: "completed", queryCount: 2, requestCount: 3, sourceCount: 2, startedAt: new Date(), completedAt: new Date() }, { id: sameOrganizationOtherRunId, organizationId, taskId: sameOrganizationOtherTaskId, provider: "tavily" }, { id: otherRunId, organizationId: otherOrganizationId, taskId: otherTaskId, provider: "tavily" }]);
+    await db.insert(aiTaskResearchRuns).values([{ id: runId, organizationId, taskId, provider: "tavily", query: "market research", status: "completed", queryCount: 2, requestCount: 3, sourceCount: 2, startedAt: new Date(), completedAt: new Date() }, { id: sameOrganizationOtherRunId, organizationId, taskId: sameOrganizationOtherTaskId, provider: "tavily", query: "other task" }, { id: otherRunId, organizationId: otherOrganizationId, taskId: otherTaskId, provider: "tavily", query: "other organization" }]);
+    const [run] = await db.select().from(aiTaskResearchRuns).where(eq(aiTaskResearchRuns.id, runId));
+    assert.equal(run?.query, "market research");
     await db.insert(aiTaskResearchSources).values([{ id: sourceId, organizationId, taskId, researchRunId: runId, ordinal: 1, canonicalUrl: "https://example.com/a", displayUrl: "https://example.com/a", title: "A", domain: "example.com", excerpt: "Evidence", status: "retrieved", retrievedAt: new Date() }, { id: otherSourceId, organizationId: otherOrganizationId, taskId: otherTaskId, researchRunId: otherRunId, ordinal: 1, canonicalUrl: "https://example.org/b", displayUrl: "https://example.org/b", title: "B", domain: "example.org", status: "retrieved", retrievedAt: new Date() }]);
     await db.insert(aiTaskReportCitations).values({ id: randomUUID(), organizationId, taskId, sourceId, citationNumber: 1 });
 

@@ -40,6 +40,23 @@ describe("AI task prompts", () => {
     assert.match(prompt, /KHÔNG có Web Search/);
   });
 
+  it("adds persisted web evidence to an Agent prompt without inventing additional sources", () => {
+    const prompt = (Reflect.get(service(), "prompt") as (task: PromptTask, evidence?: unknown) => string)({
+      title: "Xu hướng AI", description: "Dành cho doanh nghiệp nhỏ", agentName: "Research", agentRole: "Analyst", agentSystemPrompt: "Ưu tiên nguồn đáng tin cậy.",
+    }, { query: "AI agents small business", provider: "tavily", sources: [{ citationNumber: 1, title: "Nguồn mẫu", url: "https://example.com/source", excerpt: "Dữ liệu đã truy xuất." }] });
+    assert.match(prompt, /Dữ liệu Web Research đã truy xuất/);
+    assert.match(prompt, /\[1\] Nguồn mẫu/);
+    assert.match(prompt, /https:\/\/example.com\/source/);
+    assert.match(prompt, /Không có quyền gọi thêm Web Search/);
+  });
+
+  it("validates the model research decision instead of using task keywords", () => {
+    const task = { title: "Viết lời chào", description: "Khách mới", agentName: "Agent", agentRole: "Support", agentSystemPrompt: "" } as never;
+    const parse = Reflect.get(service(), "parseResearchDecision") as (value: string, valueTask: typeof task) => { useResearch: boolean; query: string | null; fallback: boolean };
+    assert.deepEqual(parse('{"use_web_research":true,"query":"AI agent trends 2026"}', task), { useResearch: true, query: "AI agent trends 2026", fallback: false });
+    assert.deepEqual(parse('not-json', task), { useResearch: false, query: null, fallback: true });
+  });
+
   it("sends the Agent snapshot prompt to an OpenAI-compatible provider", async () => {
     const task: PromptTask = { title: "Soạn email", description: "Chào khách mới", agentName: "CSKH", agentRole: "Support", agentSystemPrompt: "Luôn xưng em." };
     const prompt = (Reflect.get(service(), "prompt") as (value: PromptTask) => string)(task);
