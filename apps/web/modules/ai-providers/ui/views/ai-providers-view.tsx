@@ -319,7 +319,7 @@ function ModelDefaultCard({
   );
 }
 
-export function AiProvidersView() {
+export function AiProvidersView({ embedded = false }: { embedded?: boolean }) {
   const { data: organization } =
     authClient.useActiveOrganization();
 
@@ -677,7 +677,7 @@ export function AiProvidersView() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Nhà cung cấp AI & Mô hình
+            {embedded ? "Mô hình AI" : "Nhà cung cấp AI & Mô hình"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Quản lý kết nối AI và mô hình mặc định cho

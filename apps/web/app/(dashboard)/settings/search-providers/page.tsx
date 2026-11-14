@@ -1,3 +1,3 @@
-import { SearchProvidersView } from "@/modules/search-providers/ui/views/search-providers-view";
+import { redirect } from "next/navigation";
 
-export default function SearchProvidersPage() { return <SearchProvidersView />; }
+export default function SearchProvidersPage() { redirect("/settings/ai-providers?tab=search"); }

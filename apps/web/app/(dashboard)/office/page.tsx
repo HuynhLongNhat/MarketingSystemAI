@@ -718,11 +718,11 @@ export default function OfficePage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Giao nhiệm vụ cho {taskAgent?.name}</DialogTitle></DialogHeader>
           <form className="space-y-4" onSubmit={createAgentTask}>
-            <p className="text-sm text-muted-foreground">Agent dùng cấu hình đã chốt khi tạo task. Báo cáo không có Web Search hoặc tool.</p>
+            <p className="text-sm text-muted-foreground">Nhân viên sử dụng cấu hình đã chốt khi nhận việc và tự quyết định khi nào cần tham khảo nguồn công khai.</p>
             <Input autoFocus maxLength={200} value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Tiêu đề nhiệm vụ" aria-label="Tiêu đề nhiệm vụ" />
             <Textarea maxLength={12000} rows={6} value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} placeholder="Mô tả yêu cầu cần thực hiện" aria-label="Mô tả nhiệm vụ" />
             {taskError && <p role="alert" className="text-sm text-destructive">{taskError}</p>}
-            <DialogFooter><Button type="button" variant="outline" disabled={creatingTask} onClick={() => setTaskAgent(null)}>Hủy</Button><Button disabled={creatingTask}>{creatingTask ? "Đang tạo..." : "Tạo nhiệm vụ"}</Button></DialogFooter>
+            <DialogFooter><Button type="button" variant="outline" disabled={creatingTask} onClick={() => setTaskAgent(null)}>Hủy</Button><Button disabled={creatingTask}>{creatingTask ? "Đang giao việc..." : "Giao việc"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

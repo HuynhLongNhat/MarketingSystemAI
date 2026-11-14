@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Bot,
@@ -587,14 +588,27 @@ export default function WorkforcePage() {
                         <p className="break-all text-xs text-muted-foreground">
                           {departmentNames.get(agent.departmentId ?? "") ??
                             "Chưa phân phòng"}
-                          {" · "}
-                          {agent.modelId ?? "Chưa chọn model"}
                         </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <Badge variant="secondary">{agent.role}</Badge>
+                          {agent.toolConfig.enabledTools.length > 0 ? agent.toolConfig.enabledTools.map((tool) => (
+                            <Badge key={tool} variant="outline">{tool === "web_research" ? "Nghiên cứu Internet" : tool}</Badge>
+                          )) : <Badge variant="outline">Chưa có công cụ</Badge>}
+                        </div>
                       </div>
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
                      <AgentStatusBadge status={agent.status} />
+                      {agent.status === "active" ? (
+                        <Button type="button" size="sm" asChild>
+                          <Link href={`/tasks?agentId=${encodeURIComponent(agent.id)}`}>Giao việc</Link>
+                        </Button>
+                      ) : (
+                        <Button type="button" size="sm" variant="outline" disabled title="Chỉ nhân viên đang hoạt động mới nhận việc">
+                          Chưa sẵn sàng
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="edit"
