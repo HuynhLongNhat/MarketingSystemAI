@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@workspace/ui/components/button";
+import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Input } from "@workspace/ui/components/input";
 import { Textarea } from "@workspace/ui/components/textarea";
 import {
@@ -61,6 +62,7 @@ interface Form {
   connectionId: string;
   modelId: string;
   status: AgentStatus;
+  enabledTools: string[];
 }
 
 const empty: Form = {
@@ -72,6 +74,7 @@ const empty: Form = {
   connectionId: "",
   modelId: "",
   status: "draft",
+  enabledTools: [],
 };
 
 const statuses: AgentStatus[] = [
@@ -112,6 +115,7 @@ export function AgentFormDialog({
             connectionId: agent.connectionId ?? "",
             modelId: agent.modelId ?? "",
             status: agent.status,
+            enabledTools: agent.toolConfig.enabledTools,
           }
         : { ...empty },
     );
@@ -149,6 +153,17 @@ export function AgentFormDialog({
       [key]: value,
     }));
 
+  const hasWebResearch = form.enabledTools.includes("web_research");
+
+  function toggleWebResearch(enabled: boolean) {
+    setForm((current) => ({
+      ...current,
+      enabledTools: enabled
+        ? [...new Set([...current.enabledTools, "web_research"])]
+        : current.enabledTools.filter((tool) => tool !== "web_research"),
+    }));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -178,6 +193,7 @@ export function AgentFormDialog({
           connectionId: form.connectionId || null,
           modelId: form.modelId || null,
           status: form.status,
+          enabledTools: form.enabledTools,
         };
 
         await workforceApi.updateAgent(agent.id, input);
@@ -196,7 +212,7 @@ export function AgentFormDialog({
           ...(form.modelId
             ? { modelId: form.modelId }
             : {}),
-          enabledTools: [],
+          enabledTools: form.enabledTools,
         };
 
         await workforceApi.createAgent(input);
@@ -395,6 +411,17 @@ export function AgentFormDialog({
                 disabled={saving}
               />
             </div>
+
+            <section className="space-y-3 rounded-lg border bg-muted/20 p-4 text-sm sm:col-span-2" aria-labelledby="agent-tools-heading">
+              <div>
+                <h3 id="agent-tools-heading" className="font-medium">Kỹ năng &amp; Công cụ</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Chọn các công cụ nhân viên được phép sử dụng khi thực hiện công việc.</p>
+              </div>
+              <label className="flex cursor-pointer items-start gap-3 rounded-md border bg-background p-3">
+                <Checkbox checked={hasWebResearch} onCheckedChange={(checked) => toggleWebResearch(checked === true)} aria-label="Nghiên cứu Internet" />
+                <span><span className="block font-medium">Nghiên cứu Internet</span><span className="mt-1 block text-xs text-muted-foreground">Cho phép nhân viên tìm nguồn công khai khi mô hình nhận thấy nhiệm vụ cần thông tin mới.</span></span>
+              </label>
+            </section>
 
             <label className="space-y-2 text-sm sm:col-span-2">
               <span>{t.prompt} *</span>
