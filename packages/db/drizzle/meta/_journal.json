@@ -218,6 +218,13 @@
       "when": 1794704400000,
       "tag": "0031_ai_task_research",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794790800000,
+      "tag": "0032_research_source_run_task_fk",
+      "breakpoints": true
     }
   ]
 }
