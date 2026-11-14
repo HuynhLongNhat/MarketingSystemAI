@@ -133,6 +133,12 @@ export class PublicWidgetController {
     return this.service.updateSession(this.token(authorization), dto);
   }
 
+  @Post("sessions/current/revoke")
+  @ApiOperation({ summary: "Revoke the currently authenticated widget session" })
+  revokeSession(@Headers("authorization") authorization: string) {
+    return this.service.revokeSession(this.token(authorization));
+  }
+
   @Post("conversations")
   @SetMetadata(WIDGET_RATE_LIMIT_KEY, "create-conversation")
   createConversation(@Headers("authorization") authorization?: string) {

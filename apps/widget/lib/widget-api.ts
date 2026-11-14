@@ -185,6 +185,10 @@ export const widgetApi = {
     );
   },
 
+  revokeSession(token: string) {
+    return request<{ revoked: true }>("/sessions/current/revoke", { method: "POST" }, token);
+  },
+
   createConversation(token: string) {
     return request<WidgetConversation>(
       "/conversations",

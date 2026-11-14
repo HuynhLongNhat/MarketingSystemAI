@@ -8,7 +8,7 @@ import type { Request } from "express";
 import { createHash } from "node:crypto";
 
 import { contactSessions, db, widgetSettings } from "@workspace/db/node";
-import { eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 function normalizeOrigin(value: string): string | null {
   try {
@@ -76,7 +76,11 @@ export class PublicWidgetOriginGuard implements CanActivate {
         organizationId: contactSessions.organizationId,
       })
       .from(contactSessions)
-      .where(eq(contactSessions.sessionTokenHash, this.hashToken(token)))
+      .where(and(
+        eq(contactSessions.sessionTokenHash, this.hashToken(token)),
+        gt(contactSessions.expiresAt, new Date()),
+        isNull(contactSessions.revokedAt),
+      ))
       .limit(1);
 
     return session?.organizationId ?? null;

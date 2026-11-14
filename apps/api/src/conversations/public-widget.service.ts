@@ -17,7 +17,7 @@ import {
   conversationMessages,
   widgetSettings,
 } from "@workspace/db/node";
-import { and, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 
 import { PublicWidgetAiService } from "./public-widget-ai.service.js";
 import { ConversationTypingService } from "./conversation-typing.service.js";
@@ -71,11 +71,17 @@ export class PublicWidgetService {
     const [session] = await db
       .select()
       .from(contactSessions)
-      .where(eq(contactSessions.sessionTokenHash, this.hashToken(token)))
+      .where(and(
+        eq(contactSessions.sessionTokenHash, this.hashToken(token)),
+        gt(contactSessions.expiresAt, new Date()),
+        isNull(contactSessions.revokedAt),
+      ))
       .limit(1);
 
-    if (!session || session.expiresAt <= new Date()) {
-      throw new UnauthorizedException("Widget session expired or invalid");
+    if (!session) {
+      // Deliberately indistinguishable: invalid, expired and revoked tokens
+      // must not disclose which session exists.
+      throw new UnauthorizedException("Widget session is invalid or expired");
     }
 
     return session;
@@ -157,6 +163,17 @@ export class PublicWidgetService {
       phone: session.phone,
       expiresAt: session.expiresAt,
     };
+  }
+
+  /** Allows a guest to invalidate only the session authenticated by its bearer. */
+  async revokeSession(token: string) {
+    const session = await this.requireSession(token);
+    await db.update(contactSessions).set({ revokedAt: new Date(), updatedAt: new Date() }).where(and(
+      eq(contactSessions.id, session.id),
+      eq(contactSessions.organizationId, session.organizationId),
+      isNull(contactSessions.revokedAt),
+    ));
+    return { revoked: true };
   }
 
   async updateSession(token: string, details: ContactDetails) {

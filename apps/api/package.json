@@ -16,7 +16,7 @@
     "research:tavily": "pnpm run build && node dist/search-providers/tavily-search.harness.js",
     "test:security": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/security.spec.js",
     "test:security:http": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/security-http.spec.js",
-    "test:auth": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/auth/ dist-security-test/common/sms/",
+    "test:auth": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/auth/phone-number.spec.js dist-security-test/auth/otp-rate-limiter.spec.js dist-security-test/common/sms/sms-provider.spec.js",
     "test:chat": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/conversations/knowledge-ranking.spec.js dist-security-test/conversations/reply-guard.spec.js dist-security-test/conversations/playground-policy.spec.js dist-security-test/conversations/public-widget-ai.rag.spec.js dist-security-test/conversations/rag-trace.spec.js",
     "test:tasks:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/tasks/tasks.integration.spec.js",
     "test:research-schema:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/tasks/research-schema.integration.spec.js"
@@ -24,7 +24,11 @@
     ,"test:search-providers:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/search-providers.integration.spec.js"
     ,"test:search-providers:http": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/search-providers-http.spec.js"
     ,"test:agent-capabilities": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/agents/agent-capabilities.spec.js"
+    ,"test:widget-auth:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/conversations/public-widget-auth.integration.spec.js"
+    ,"test:widget-http:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/conversations/public-widget-http.integration.spec.js"
     ,"test:search-adapter": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/tavily-search.adapter.spec.js"
+    ,"test:widget-security": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/conversations/public-widget-origin.guard.spec.js dist-security-test/conversations/public-widget-rate-limit.guard.spec.js"
+    ,"test": "pnpm run test:auth && pnpm run test:security && pnpm run test:chat && pnpm run test:tasks:integration && pnpm run test:research-schema:integration && pnpm run test:search-providers && pnpm run test:search-providers:integration && pnpm run test:search-providers:http && pnpm run test:agent-capabilities && pnpm run test:widget-security && pnpm run test:widget-auth:integration"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.13",

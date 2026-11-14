@@ -229,6 +229,10 @@ export const contactSessions = pgTable(
     expiresAt: timestamp("expires_at", {
       withTimezone: true,
     }).notNull(),
+    /** Null unless the bearer credential was explicitly revoked. */
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+    }),
     metadata: jsonb("metadata").$type<ContactSessionMetadata>(),
     createdAt: timestamp("created_at", {
       withTimezone: true,
@@ -244,6 +248,7 @@ export const contactSessions = pgTable(
   (table) => [
     index("contact_sessions_org_idx").on(table.organizationId),
     index("contact_sessions_expires_idx").on(table.expiresAt),
+    index("contact_sessions_active_idx").on(table.organizationId, table.revokedAt, table.expiresAt),
     uniqueIndex("contact_sessions_id_org_unique").on(
       table.id,
       table.organizationId,
