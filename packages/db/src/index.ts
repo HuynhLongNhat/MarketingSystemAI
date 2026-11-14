@@ -178,8 +178,8 @@ export {
   WEBSITE_PROJECT_TYPES,
 } from "./website-services-schema.js";
 
-export { aiTasks, aiTaskEvents, AI_TASK_STATUSES } from "./tasks-schema.js";
-export type { } from "./tasks-schema.js";
+export { aiTasks, aiTaskEvents, aiTaskResearchRuns, aiTaskResearchSources, aiTaskReportCitations, AI_TASK_STATUSES, AI_TASK_RESEARCH_RUN_STATUSES, AI_TASK_RESEARCH_SOURCE_STATUSES } from "./tasks-schema.js";
+export type { AiTask, NewAiTask, AiTaskResearchRun, NewAiTaskResearchRun, AiTaskResearchSource, NewAiTaskResearchSource, AiTaskReportCitation, NewAiTaskReportCitation } from "./tasks-schema.js";
 
 export {
   crmContacts,

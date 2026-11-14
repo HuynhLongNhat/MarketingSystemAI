@@ -211,6 +211,13 @@
       "when": 1794618000000,
       "tag": "0030_ai_task_agent_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794704400000,
+      "tag": "0031_ai_task_research",
+      "breakpoints": true
     }
   ]
 }
