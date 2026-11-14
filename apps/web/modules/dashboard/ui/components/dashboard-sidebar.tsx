@@ -95,6 +95,7 @@ const navigation: NavigationGroup[] = [
     label: { vi: "Quản trị", en: "Administration" },
     icon: Settings2,
     items: [
+      { id: "business-profile", label: { vi: "Hồ sơ doanh nghiệp", en: "Business Profile" }, icon: Building2, href: "/settings/business-profile" },
       { id: "providers", label: { vi: "Cấu hình AI & Công cụ", en: "AI & Tools" }, icon: Settings2, href: "/settings/ai-providers" },
       { id: "members", label: { vi: "Thành viên & quyền", en: "Team & Permissions" }, icon: Users, href: "/settings/members" },
       { id: "billing", label: { vi: "Thanh toán", en: "Billing" }, icon: CircleDollarSign, href: "/billing" },

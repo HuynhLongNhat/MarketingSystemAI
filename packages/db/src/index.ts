@@ -193,6 +193,8 @@ export type { AiTask, NewAiTask, AiTaskResearchRun, NewAiTaskResearchRun, AiTask
 
 export { ceoPlans, CEO_PLAN_APPROVAL_STATUSES } from "./ceo-planning-schema.js";
 export type { CeoPlan, CeoPlanApprovalStatus } from "./ceo-planning-schema.js";
+export { businessProfiles, BUSINESS_RISK_TOLERANCES } from "./business-profile-schema.js";
+export type { BusinessProfile, BusinessRiskTolerance } from "./business-profile-schema.js";
 
 export {
   crmContacts,

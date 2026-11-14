@@ -1,0 +1,2 @@
+import { Module } from "@nestjs/common"; import { AuthGuard } from "../auth/auth.guard.js"; import { PermissionsGuard } from "../common/permissions/permissions.guard.js"; import { BusinessProfileController } from "./business-profile.controller.js"; import { BusinessProfileService } from "./business-profile.service.js";
+@Module({ controllers: [BusinessProfileController], providers: [BusinessProfileService, AuthGuard, PermissionsGuard] }) export class BusinessProfileModule {}

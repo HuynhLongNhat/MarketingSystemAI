@@ -260,6 +260,13 @@
       "when": 1795222800000,
       "tag": "0037_ceo_plan_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795309200000,
+      "tag": "0038_business_profiles",
+      "breakpoints": true
     }
   ]
 }

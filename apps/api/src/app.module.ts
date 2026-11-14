@@ -5,6 +5,7 @@ import { BullModule } from "@nestjs/bullmq";
 import { HealthController } from "./health.controller.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { WidgetSettingsModule } from "./widget-settings/widget-settings.module.js";
+import { BusinessProfileModule } from "./business-profiles/business-profile.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
 import { OrganizationsModule } from "./organizations/organizations.module.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
@@ -25,6 +26,7 @@ import { CeoPlanningModule } from "./ceo-planning/ceo-planning.module.js";
   imports: [
     DatabaseModule,
     WidgetSettingsModule,
+    BusinessProfileModule,
 
     BullModule.forRoot({
       connection: {
