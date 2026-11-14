@@ -21,6 +21,7 @@ import type {
   CreateAgentDto,
   UpdateAgentDto,
 } from "./agents.dto.js";
+import { normalizeAgentCapabilities } from "./agent-capabilities.js";
 
 function databaseErrorCode(
   error: unknown,
@@ -192,15 +193,7 @@ export class AgentsService {
       );
     }
 
-    if (
-      dto.enabledTools?.some(
-        (tool) => !tool.trim(),
-      )
-    ) {
-      throw new BadRequestException(
-        "Tool names cannot be empty",
-      );
-    }
+    const enabledTools = normalizeAgentCapabilities(dto.enabledTools);
 
     try {
       const [agent] = await db
@@ -233,7 +226,7 @@ export class AgentsService {
           status: "draft",
           toolConfig: {
             enabledTools:
-              dto.enabledTools ?? [],
+              enabledTools ?? [],
           },
         })
         .returning();
@@ -300,15 +293,7 @@ export class AgentsService {
       );
     }
 
-    if (
-      dto.enabledTools?.some(
-        (tool) => !tool.trim(),
-      )
-    ) {
-      throw new BadRequestException(
-        "Tool names cannot be empty",
-      );
-    }
+    const enabledTools = normalizeAgentCapabilities(dto.enabledTools);
 
     const changes: Partial<
       typeof aiAgents.$inferInsert
@@ -363,7 +348,7 @@ export class AgentsService {
 
     if (dto.enabledTools !== undefined) {
       changes.toolConfig = {
-        enabledTools: dto.enabledTools,
+        enabledTools: enabledTools!,
       };
     }
 

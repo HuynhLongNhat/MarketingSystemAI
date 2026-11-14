@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { aiAgents, db, searchProviderConnections, type SearchProviderConnection } from "@workspace/db/node";
 
 import type { RequestContext } from "../auth/request-context.js";
@@ -76,11 +76,17 @@ export class SearchProvidersService {
   async requireResearchPolicy(context: RequestContext, agentId: string, connectionId?: string) {
     const [agent] = await db.select().from(aiAgents).where(tenantWhere(context, aiAgents.organizationId, eq(aiAgents.id, agentId))).limit(1);
     if (!agent) throw new NotFoundException("Agent not found");
-    if (agent.status !== "active") throw new BadRequestException("Agent must be active for web research");
-    if (!agent.toolConfig.enabledTools.includes("web_research")) throw new BadRequestException("Agent is not allowed to use web research");
-    const conditions = connectionId ? eq(searchProviderConnections.id, connectionId) : eq(searchProviderConnections.provider, "tavily");
-    const [connection] = await db.select().from(searchProviderConnections).where(tenantWhere(context, searchProviderConnections.organizationId, conditions)).limit(1);
-    if (!connection || !connection.enabled) throw new BadRequestException("No enabled search provider is configured for this organization");
-    return connection;
+    if (agent.status !== "active") throw new BadRequestException({ code: "AGENT_NOT_ACTIVE", message: "Agent must be active for web research." });
+    if (!agent.toolConfig.enabledTools.includes("web_research")) throw new BadRequestException({ code: "AGENT_CAPABILITY_REQUIRED", message: "Agent is not allowed to use web research." });
+    if (connectionId) {
+      const [connection] = await db.select().from(searchProviderConnections).where(tenantWhere(context, searchProviderConnections.organizationId, and(eq(searchProviderConnections.id, connectionId), eq(searchProviderConnections.provider, "tavily")))).limit(1);
+      if (!connection) throw new NotFoundException("Search provider connection not found");
+      if (!connection.enabled) throw new BadRequestException({ code: "SEARCH_PROVIDER_DISABLED", message: "The selected search provider connection is disabled." });
+      return connection;
+    }
+    const connections = await db.select().from(searchProviderConnections).where(tenantWhere(context, searchProviderConnections.organizationId, and(eq(searchProviderConnections.provider, "tavily"), eq(searchProviderConnections.enabled, true)))).orderBy(asc(searchProviderConnections.createdAt), asc(searchProviderConnections.id)).limit(2);
+    if (connections.length === 0) throw new BadRequestException({ code: "SEARCH_PROVIDER_NOT_CONFIGURED", message: "No enabled Tavily connection is configured for this organization." });
+    if (connections.length > 1) throw new BadRequestException({ code: "SEARCH_PROVIDER_SELECTION_REQUIRED", message: "Select a Tavily connection explicitly." });
+    return connections[0]!;
   }
 }

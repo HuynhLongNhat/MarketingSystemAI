@@ -19,7 +19,10 @@
     "test:chat": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/conversations/knowledge-ranking.spec.js dist-security-test/conversations/reply-guard.spec.js dist-security-test/conversations/playground-policy.spec.js dist-security-test/conversations/public-widget-ai.rag.spec.js dist-security-test/conversations/rag-trace.spec.js",
     "test:tasks:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/tasks/tasks.integration.spec.js",
     "test:research-schema:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/tasks/research-schema.integration.spec.js"
-    ,"test:search-providers": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/search-provider-connection-test.service.spec.js"
+    ,"test:search-providers": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/search-provider-connection-test.service.spec.js dist-security-test/search-providers/search-provider-test-rate-limiter.service.spec.js"
+    ,"test:search-providers:integration": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/search-providers/search-providers.integration.spec.js"
+    ,"test:search-providers:http": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/security/search-providers-http.spec.js"
+    ,"test:agent-capabilities": "tsc -p tsconfig.security-test.json && node --import ./dist-security-test/test-env.js --test dist-security-test/agents/agent-capabilities.spec.js"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.13",
