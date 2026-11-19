@@ -5,5 +5,5 @@ import { PermissionsGuard } from "../common/permissions/permissions.guard.js";
 import { CeoPlanningController } from "./ceo-planning.controller.js";
 import { CeoPlanningService } from "./ceo-planning.service.js";
 import { CeoPlanningContextBuilder } from "./ceo-planning-context.builder.js";
-@Module({ imports: [TasksModule], controllers: [CeoPlanningController], providers: [CeoPlanningService, CeoPlanningContextBuilder, AuthGuard, PermissionsGuard] })
+@Module({ imports: [TasksModule], controllers: [CeoPlanningController], providers: [CeoPlanningService, CeoPlanningContextBuilder, AuthGuard, PermissionsGuard], exports: [CeoPlanningService] })
 export class CeoPlanningModule {}

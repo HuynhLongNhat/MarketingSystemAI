@@ -324,15 +324,82 @@
       "tag": "0046_eminent_jetstream",
       "breakpoints": true
     },
-    { "idx": 47, "version": "7", "when": 1794740000000, "tag": "0047_market_intelligence", "breakpoints": true },
-    { "idx": 48, "version": "7", "when": 1794741000000, "tag": "0048_department_workflows", "breakpoints": true },
-    { "idx": 49, "version": "7", "when": 1795827600000, "tag": "0049_repair_department_workflows", "breakpoints": true },
-    { "idx": 50, "version": "7", "when": 1795914000000, "tag": "0050_repair_market_intelligence_progress", "breakpoints": true },
-    { "idx": 51, "version": "7", "when": 1796000400000, "tag": "0051_market_intelligence_research_engine", "breakpoints": true },
-    { "idx": 52, "version": "7", "when": 1796086800000, "tag": "0052_hybrid_search_providers", "breakpoints": true },
-    { "idx": 53, "version": "7", "when": 1796173200000, "tag": "0053_research_checkpoints", "breakpoints": true },
-    { "idx": 54, "version": "7", "when": 1796259600000, "tag": "0054_personal_assistant", "breakpoints": true },
-    { "idx": 55, "version": "7", "when": 1796346000000, "tag": "0055_assistant_task_links", "breakpoints": true },
-    { "idx": 56, "version": "7", "when": 1796432400000, "tag": "0056_agent_fallback_models", "breakpoints": true }
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794740000000,
+      "tag": "0047_market_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794741000000,
+      "tag": "0048_department_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795827600000,
+      "tag": "0049_repair_department_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795914000000,
+      "tag": "0050_repair_market_intelligence_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1796000400000,
+      "tag": "0051_market_intelligence_research_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1796086800000,
+      "tag": "0052_hybrid_search_providers",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1796173200000,
+      "tag": "0053_research_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1796259600000,
+      "tag": "0054_personal_assistant",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1796346000000,
+      "tag": "0055_assistant_task_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1796432400000,
+      "tag": "0056_agent_fallback_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1796518800000,
+      "tag": "0057_external_ai_plan_intake",
+      "breakpoints": true
+    }
   ]
 }

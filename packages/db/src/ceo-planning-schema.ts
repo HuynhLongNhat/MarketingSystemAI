@@ -10,8 +10,8 @@ export const ceoPlans = pgTable("ceo_plans", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   createdBy: text("created_by").notNull().references(() => user.id, { onDelete: "restrict" }),
-  ceoAgentId: text("ceo_agent_id").notNull().references(() => aiAgents.id, { onDelete: "restrict" }),
-  taskId: text("task_id").notNull().references(() => aiTasks.id, { onDelete: "restrict" }),
+  ceoAgentId: text("ceo_agent_id").references(() => aiAgents.id, { onDelete: "restrict" }),
+  taskId: text("task_id").references(() => aiTasks.id, { onDelete: "restrict" }),
   title: varchar("title", { length: 200 }).notNull(),
   objective: text("objective").notNull(),
   /** Per-plan reference data; it never modifies the organization's profile. */

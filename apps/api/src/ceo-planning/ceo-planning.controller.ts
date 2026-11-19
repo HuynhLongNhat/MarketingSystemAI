@@ -12,6 +12,7 @@ export class CeoPlanningController {
   constructor(private readonly plans: CeoPlanningService) {}
   @Get() @RequirePermissions(PERMISSIONS.AGENT_READ) list(@CurrentContext() ctx: RequestContext) { return this.plans.list(ctx); }
   @Get(":id") @RequirePermissions(PERMISSIONS.AGENT_READ) get(@CurrentContext() ctx: RequestContext, @Param("id") id: string) { return this.plans.get(ctx, id); }
+  @Post("import") @RequirePermissions(PERMISSIONS.AGENT_MANAGE) importExternal(@CurrentContext() ctx: RequestContext, @Body() body: unknown) { return this.plans.importExternal(ctx, body as import("./ceo-planning.dto.js").ImportExternalPlanInput); }
   @Post() @RequirePermissions(PERMISSIONS.AGENT_MANAGE) create(@CurrentContext() ctx: RequestContext, @Body() dto: CreateCeoPlanDto) { return this.plans.create(ctx, dto); }
   @Post(":id/retry") @RequirePermissions(PERMISSIONS.AGENT_MANAGE) retry(@CurrentContext() ctx: RequestContext, @Param("id") id: string) { return this.plans.retry(ctx, id); }
   @Post(":id/decision") @RequirePermissions(PERMISSIONS.AGENT_MANAGE) decide(@CurrentContext() ctx: RequestContext, @Param("id") id: string, @Body() dto: DecideCeoPlanDto) { return this.plans.decide(ctx, id, dto); }
